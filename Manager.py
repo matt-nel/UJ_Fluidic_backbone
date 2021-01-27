@@ -7,7 +7,7 @@ from Modules.selectorValve import SelectorValve
 
 
 class Manager:
-    def __init__(self, simulation=False):
+    def __init__(self, gui_main, simulation=False):
         self.script_dir = os.path.dirname(__file__)  # get absolute directory of script
         cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
         self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
@@ -15,13 +15,15 @@ class Manager:
         # module_info = {module_name:device_dict}
         # device dict = {device_name: {"cmd_id": "cmid", "config":{}}
         self.connections = self.json_loader("Configs/module_connections.json")
-        # connections = {valve_name : { 1: conn_module/reagent, 2: conn_module/reagent, ..}
+        # connections = {valve_name : { 'inlet': 'syringe_name', 1: conn_module/reagent, 2: conn_module/reagent, ..}
+        self.gui_main = gui_main
         self.valves = {}
         self.syringes = {}
         self.reactors = {}
         self.modules = []
         # list of all connected modules
         self.populate_modules()
+        self.check_connections()
 
     def populate_modules(self):
         for module_name in self.module_info.keys():
@@ -32,6 +34,11 @@ class Manager:
             elif "reactor" in module_name:
                 self.add_reactor(module_name)
         self.modules = list(self.valves.keys()) + list(self.syringes.keys()) + list(self.reactors.keys())
+
+    def check_connections(self):
+        for key in self.connections.keys():
+            if key not in self.valves.keys():
+                self.gui_main.write_message(f'{key} is not present in the manager configuration')
 
     def add_valve(self, valve_name):
         valve_info = self.module_info[valve_name]
@@ -52,9 +59,8 @@ class Manager:
         except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
             raise FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
-    def command_module(self, gui, command_dict):
+    def command_module(self, command_dict):
         """
-        :param gui: the GUI calling this function
         :param command_dict:dictionary containing module type, module name, command, and other module specific
                 parameters
         :return: Boolean - successful/unsuccessful
@@ -62,35 +68,43 @@ class Manager:
         try:
             mod_type, name = command_dict['module_type'], command_dict['module_name']
         except KeyError:
-            gui.write_message("Missing parameters: module type, name")
+            self.gui_main.write_message("Missing parameters: module type, name")
             return False
         if name not in self.modules:
-            gui.write_message(f"{name} is not present in the Manager")
+            self.gui_main.write_message(f"{name} is not present in the Manager")
             return False
         if mod_type == 'syringe':
-            self.command_syringe(gui, command_dict)
+            self.command_syringe(command_dict)
         elif mod_type == 'valve':
-            self.command_valve(gui, command_dict)
+            self.command_valve(command_dict)
         else:
-            gui.write_message(f'{mod_type} is not recognised')
+            self.gui_main.write_message(f'{mod_type} is not recognised')
 
-    def command_syringe(self, gui, command_dict, name):
+    def command_syringe(self, command_dict):
         try:
-            command, vol, flow = command_dict['command'], command_dict['volume'], command_dict['flow_rate']
+            name, command = command_dict['module_name'], command_dict['command']
+            vol, flow = command_dict['volume'], command_dict['flow_rate']
         except KeyError:
-            gui.write_message("Required parameters not present, required: command, volume, flow rate")
+            self.gui_main.write_message("Required parameters not present, required: command, volume, flow rate")
             return False
         if command == 'aspirate':
             return self.syringes[name].move_syringe(vol, flow, True)
         elif command == 'withdraw':
             return self.syringes[name].move_syringe(vol, flow, False)
+        elif command == 'home':
+            return self.syringes[name].home()
         else:
-            gui.write_message(f"Command {command} is not recognised")
+            self.gui_main.write_message(f"Command {command} is not recognised")
             return False
 
-    def command_valve(self, gui, command_dict, name, command):
+    def command_valve(self, command_dict):
+        try:
+            name, command = command_dict['module_name'], command_dict['command']
+        except KeyError:
+            self.gui_main.write_message("Required parameters not present, required: module name, command")
+            return False
         if type(command) is not int or command < 0 or command > 9:
-            gui.write_message(f"{command} is not a valid port")
+            self.gui_main.write_message(f"{command} is not a valid port")
             return False
         if command == 0:
             self.valves[name].home_valve()

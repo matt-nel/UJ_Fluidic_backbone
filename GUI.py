@@ -11,7 +11,7 @@ class GUI:
         :param nr_valves: number of attached valves
         :param nr_syringes: number of attached syringes
         """
-        self.manager = Manager(simulation)
+        self.manager = Manager(self, simulation)
         self.primary = primary
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background='SteelBlue2')
@@ -104,6 +104,11 @@ class GUI:
         # Append list of ports corresponding to valve_no to valves_buttons
         self.valves_buttons.append(ports)
 
+    def v_button_colour(self, port_no):
+        for item in self.valves_buttons:
+            item.configure(bg='teal')
+        self.valves_buttons[port_no].configure(bg='OrangeRed2')
+
     def asp_with(self, syringe_name, syringe_print_name, direction):
         """
         Menu to control syringe pumps
@@ -119,8 +124,8 @@ class GUI:
             command_dict = {'module_type': 'syringe', 'module_name': syr_name, 'print_name': syringe_print_name,
                             'command': command, 'volume': gui_obj.volume[syr_name],
                             'flow_rate': gui_obj.flow_rate[syr_name]}
+            gui_obj.send_command(command_dict)
             asp_menu.destroy()
-            self.send_command(command_dict)
 
         if direction:
             button_text = menu_title = "Aspirate"
@@ -155,8 +160,22 @@ class GUI:
 
     def home_syringe(self, syringe_name, syringe_print_name):
         command_dict = {'module_type': 'syringe', 'module_name': syringe_name, 'print_name': syringe_print_name,
-                        'command': 'home'}
-        self.send_command(command_dict)
+                        'command': 'home', 'volume': 0.0, 'flow_rate': 4500}
+
+        def home_command(gui_obj):
+            gui_obj.send_command(command_dict)
+            home_popup.destroy()
+
+        home_popup = tkinter.Toplevel(self.primary)
+        home_popup.title('Home ' + syringe_print_name)
+        warning_label = tkinter.Label(home_popup, text='Homing the syringe will empty its contents, are you sure?')
+        yes_button = tkinter.Button(home_popup, text='Home', font=self.fonts['default'], bg='teal', fg='white',
+                                    command=lambda: home_command(self))
+        no_button = tkinter.Button(home_popup, text='Cancel', font=self.fonts['default'], bg='tomato2', fg='white',
+                                   command= home_popup.destroy)
+        warning_label.grid(row=0, column=1, columnspan=5)
+        yes_button.grid(row=2, column=1)
+        no_button.grid(row=2, column=5)
 
     def move_valve(self, valve_name, valve_print_name, port_no):
         command_dict = {'module_type': 'valve', 'module_name': valve_name, 'print_name': valve_print_name,
@@ -175,8 +194,9 @@ class GUI:
 
     def send_command(self, command_dict):
         if command_dict['module_type'] == 'valve':
-            if self.manager.command_module(self, command_dict):
+            if self.manager.command_module(command_dict):
                 message = command_dict['print_name'] + ' is indexing to position ' + str(command_dict['command'])
+                self.v_button_colour(command_dict['command'])
             else:
                 message = command_dict['print_name'] + ' failed to index to position ' + str(command_dict['command'])
             self.write_message(message)
@@ -184,12 +204,12 @@ class GUI:
             message1 = command_dict['command'].capitalize() + ' ' + command_dict['print_name'] + ':'
             self.write_message(message1)
             if command_dict['command'] == 'home':
-                if self.manager.command_module(self, command_dict):
+                if self.manager.command_module(command_dict):
                     self.write_message("Homing")
                 else:
                     self.write_message("Failed")
             else:
-                if self.manager.command_module(self, command_dict):
+                if self.manager.command_module(command_dict):
                     message2 = str(command_dict['volume']) + 'ml at flow rate: ' + str(command_dict['flow_rate']) + '\u03BCL/min'
                     self.write_message(message2)
                 else:

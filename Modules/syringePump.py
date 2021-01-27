@@ -9,7 +9,8 @@ class SyringePump(Module):
     """
     # TODO tracking of whether syringe currently contains reagents
     cor_fact = 0.993  # correction factor for dispensed volume
-    syr_lengths = {58: 1, 2: 2, 4: 42, 5: 5, 10: 58, 20: 20, 60: 90}
+    # {volume: length in mm}
+    syr_lengths = {58: 1000, 2000: 2, 4000: 42, 5000: 5, 10000: 58, 20000: 20, 60000: 90}
 
     def __init__(self, name, module_info, manager_obj):
         """
