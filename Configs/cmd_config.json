@@ -1,0 +1,81 @@
+{
+  "ios": [
+    {
+      "port": "/dev/tty.usbmodem1411"
+    },
+    {
+      "port": "/dev/ttyACM0"
+    },
+    {
+      "port": "/dev/ttyACM1"
+    },
+    {
+      "port": "/dev/ttyACM2"
+    },
+    {
+      "port": "COM6"
+    }
+  ],
+  "devices": {
+    "stepper1": {
+        "command_id": "stp1",
+        "config": {
+            "enabled_acceleration": true,
+            "speed": 1000,
+            "max_speed": 10000,
+            "acceleration": 1000
+        }
+    },
+    "en1":{
+        "command_id": "en1"
+    },
+    "es1": {
+        "command_id": "es1"
+    },
+    "stepper2":{
+        "command_id": "stp2",
+      "config": {
+        "enabled_acceleration": true,
+        "speed": 1000,
+        "max_speed": 10000,
+        "acceleration": 1000
+      }
+    },
+    "en2":{
+        "command_id": "en2"
+    },
+    "es2":{
+        "command_id":"es2"
+    },
+    "stepper3": {
+      "command_id": "stp3",
+      "config": {
+        "enabled_acceleration":true,
+        "speed":1000,
+        "max_speed":10000,
+        "acceleration":1000
+      }
+    },
+    "en3": {
+      "command_id": "en3"
+    },
+    "he1": {
+      "command_id": "he1"
+    },
+    "stepper4": {
+      "command_id": "stp4",
+      "config": {
+        "enabled_acceleration":true,
+        "speed":1000,
+        "max_speed":10000,
+        "acceleration":1000
+      }
+    },
+    "en4": {
+      "command_id": "en4"
+    },
+    "he2": {
+      "command_id": "he2"
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "syringe1": {
+    "mod_config": {
+      "volume": 5,
+      "screw_pitch": 8
+    },
+    "devices": {
+      "stepper": {
+        "name": "stepper1",
+        "cmd_id": "stp1",
+        "enable_pin": "en1",
+        "device_config": {
+          "steps_per_rev": 3200,
+          "enabled_acceleration": false,
+          "speed": 1000,
+          "max_speed": 10000,
+          "acceleration": 1000
+        }
+      },
+      "endstop": {
+        "name": "endstop1",
+        "cmd_id": "es1",
+        "device_config": {
+        }
+      }
+    }
+  },
+  "syringe2": {
+    "mod_config": {
+      "volume": 5,
+      "screw_pitch": 8
+    },
+    "devices": {
+      "stepper": {
+        "name": "stepper2",
+        "cmd_id": "stp2",
+        "enable_pin": "en2",
+        "device_config": {
+          "steps_per_rev": 3200,
+          "enabled_acceleration": false,
+          "speed": 1000,
+          "max_speed": 10000,
+          "acceleration": 1000
+        }
+      },
+      "endstop": {
+        "name": "endstop2",
+        "cmd_id": "es2",
+        "device_config": {
+
+        }
+      }
+    }
+  },
+    "valve1": {
+      "mod_config": {
+        "ports": 10
+      },
+      "devices": {
+        "stepper": {
+          "name": "stepper3",
+          "cmd_id": "stp3",
+          "enable_pin": "en3",
+          "device_config": {
+            "steps_per_rev": 3200,
+            "enabled_acceleration": false,
+            "speed": 1000,
+            "max_speed": 10000,
+            "acceleration": 1000
+          }
+        },
+        "he_sens": {
+          "name": "he_sens1",
+          "cmd_id": "he1",
+          "device_config": {
+          }
+        }
+      }
+    },
+    "valve2": {
+      "mod_config": {
+        "ports": 10
+      },
+      "devices": {
+        "stepper": {
+          "name": "stepper4",
+          "cmd_id": "stp4",
+          "enable_pin": "en4",
+          "device_config": {
+            "steps_per_rev": 3200,
+            "enabled_acceleration": false,
+            "speed": 1000,
+            "max_speed": 10000,
+            "acceleration": 1000
+          }
+        },
+        "he_sens2": {
+          "name": "he_sens2",
+          "cmd_id": "he2",
+          "device_config": {
+          }
+        }
+      }
+    }
+}
