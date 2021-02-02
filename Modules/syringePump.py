@@ -12,27 +12,26 @@ class SyringePump(Module):
     # {volume: length in mm}
     syr_lengths = {58: 1000, 2000: 2, 4000: 42, 5000: 5, 10000: 58, 20000: 20, 60000: 90}
 
-    def __init__(self, name, module_info, manager_obj):
+    def __init__(self, name, module_info, cmduino, manager):
         """
         :param name: syringe pump name
         :param module_info: Dictionary containing IDs of attached devices and their configuration information
-        :param manager_obj: commanduino command manager object
+        :param cmduino: commanduino command manager object
         """
         # initialises devices connected to module
         self.name = name
-        super(SyringePump, self).__init__(module_info, manager_obj)
         module_config = module_info["mod_config"]
         # volume of syringe in ul
         self.syr_vol = module_config["volume"] * 1000
         self.syr_length = self.syr_lengths[self.syr_vol]
-        # TODO list of syringe lengths given volume? - find standard syringe sizes
-        self.steps_per_rev = self.steppers[0].steps_per_rev
         self.screw_pitch = module_config["screw_pitch"]
+        self.position = 0.0
         self.syr_contents = {}
         self.contents_list = []
         self.set_contents("Empty", 0.0)
-        self.position = 0.0
         self.aspirate = True
+        super(SyringePump, self).__init__(module_info, cmduino, manager)
+        self.steps_per_rev = self.steppers[0].steps_per_rev
 
     def set_contents(self, substance, volume):
         # Todo set up logger with tracking of volumes dispensed and timestamps
@@ -57,6 +56,7 @@ class SyringePump(Module):
         current_vol = self.syr_contents[self.contents_list[-1]]
         new_vol = self.change_volume(travel)
         if 0.0 < current_vol - new_vol < self.syr_vol:
+            self.steppers[0].en_motor(True)
             self.steppers[0].move_steps(steps)
             Thread(target=self.watch_move, args=(0, 0)).start()
             return True
@@ -64,11 +64,8 @@ class SyringePump(Module):
             return False
 
     def home(self):
-        # move until endstop hit
-        self.steppers[0].move_steps(64000)
-        Thread(target=self.watch_move, args=(0, 0)).start()
-        while not self.steppers[0].stopped:
-            time.sleep(0.1)
+        self.steppers[0].en_motor(True)
+        Thread(target=self.steppers[0].home, args=(True,)).start()
         self.position = 0.0
 
     def watch_move(self, stepper_num, endstop_num=None):
@@ -77,6 +74,7 @@ class SyringePump(Module):
         move or once endstop hit. Once motor finished moving, toggles enable pin LOW.
         :param stepper_num: the number of the stepper in list steppers
         :param endstop_num: Optional. The number of the endstop in list endstops
+        :param home: Boolean, True: homing, false: normal move
         :return: None.
         """
         prev_position = (self.steppers[stepper_num].get_current_pos()/self.steps_per_rev) * self.screw_pitch
@@ -84,11 +82,12 @@ class SyringePump(Module):
             while self.steppers[stepper_num].is_moving:
                 if self.endstops[endstop_num].digital_read() != 1:
                     self.steppers[stepper_num].stop()
+                time.sleep(0.1)
         else:
             while self.steppers[stepper_num].is_moving:
                 time.sleep(0.1)
         self.steppers[stepper_num].en_motor()
-        self.position = (self.steppers[stepper_num].get_current_pos()/self.steps_per_rev)*self.screw_pitch
+        self.position = (self.steppers[stepper_num].get_current_position()/self.steps_per_rev)*self.screw_pitch
         travel = abs(self.position - prev_position)
         self.syr_contents[self.contents_list[-1]] += self.change_volume(travel)
 

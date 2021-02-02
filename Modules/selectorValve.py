@@ -1,26 +1,25 @@
 from Modules.Module import Module
+from threading import Thread
 
 
 class SelectorValve(Module):
-    def __init__(self, name, module_info, manager_obj):
+    def __init__(self, name, module_info, cmduino):
         self.name = name
         module_config = module_info["mod_config"]
         self.ports = module_config["ports"]
-        super(SelectorValve, self).__init__(module_info, manager_obj)
+        super(SelectorValve, self).__init__(module_info, cmduino, manager)
         # todo add ability to accommodate variable number of ports
         self.pos_dict = {0: 0, 1: 320, 2: 640, 3: 960, 4: 1280, 5: 1600, 6: 1920, 7: 2240, 8: 2560, 9: 2880}
-        if self.steppers[0].steps_per_rev is not 3200:
-            position = 0
-            while position < 11:
+        if self.steppers[0].steps_per_rev != 3200:
+            for position in range(10):
                 self.pos_dict[position] = (self.steppers[0].steps_per_rev/10)*position
-                position += 1
 
     def home_valve(self):
         # todo add logging of information
         stepper = self.steppers[0]
         he_sens = self.he_sensors[0]
         home_positions, chk_pos = [], []
-        stepper.set_current_pos(0)
+        stepper.set_current_position(0)
         spr = stepper.steps_per_rev
         # get rough positions
         for i in range(1, 41):
@@ -40,14 +39,14 @@ class SelectorValve(Module):
         home_pos = stepper.get_current_position() - 100 + (chk_pos.index(min(chk_pos))*(spr/16))
         stepper.move_steps(home_pos)
         stepper.set_current_position(0)
-        print("Honey, I'm home")
+        stepper.en_motor()
 
     def move_to_pos(self, position):
         stepper = self.steppers[0]
         he_sens = self.he_sensors[0]
         chk_pos = []
         # check for true position within ~14 degree window
-        cur_pos = stepper.get_current_pos()
+        cur_pos = stepper.get_current_position()
         if cur_pos > self.pos_dict[position]:
             target_steps = cur_pos - self.pos_dict[position] + 60
             stepper.move_steps(-target_steps)
@@ -58,8 +57,15 @@ class SelectorValve(Module):
             stepper.move_steps(20)
             chk_pos.append(he_sens.analog_read())
         if position == 0:
-            new_pos = stepper.get_current_pos() - 120 + (chk_pos.index(min(chk_pos)) * 20)
+            new_pos = stepper.get_current_position() - 120 + (chk_pos.index(min(chk_pos)) * 20)
         else:
-            new_pos = stepper.get_current_pos() - 120 + (chk_pos.index(max(chk_pos)) * 20)
+            new_pos = stepper.get_current_position() - 120 + (chk_pos.index(max(chk_pos)) * 20)
         stepper.move_steps(-new_pos)
-        self.pos_dict[position] = stepper.get_current_pos()
+        self.pos_dict[position] = stepper.get_current_position()
+
+    def watch_move(self, position):
+        if position == 0:
+            Thread(target=self.home_valve).start()
+        else:
+            Thread(target=self.move_to_pos, args=(position,)).start()
+

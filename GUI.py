@@ -4,12 +4,10 @@ from Manager import Manager
 
 
 class GUI:
-    def __init__(self, primary, simulation, nr_valves, nr_syringes):
+    def __init__(self, primary, simulation):
         """
         :param primary: root TK window object
         :param simulation: Bool to run the software in simulation mode
-        :param nr_valves: number of attached valves
-        :param nr_syringes: number of attached syringes
         """
         self.manager = Manager(self, simulation)
         self.primary = primary
@@ -24,22 +22,20 @@ class GUI:
 
         self.button_frame = tkinter.Frame(self.primary, borderwidth=5)
 
-        self.nr_syringes = nr_syringes
         self.syringe_labels = []
         self.syringe_buttons = []
         # list of syringe buttons, eg: syringe_buttons[0][0] is aspirate button for syringe 1
         # syringe_buttons[0][1] is withdraw button for syringe 1
-        for syringe_no in range(0, self.nr_syringes):
-            self.populate_syringes(syringe_no)
+        for syringe in self.manager.syringes.keys():
+            self.populate_syringes(syringe)
 
-        self.nr_valves = nr_valves
         self.valves_labels = []
         self.valves_buttons = []
         # valves_buttons[valve_no][port_no]
         # list valves_buttons contains buttons corresponding to each valve port starting from 1, with zero corresponding
         # to homing button. valves_buttons[0][0] is home button of valve 1, valves_buttons[3][2] is port 2 of valve 4
-        for valve_no in range(0, self.nr_valves):
-            self.populate_valves(valve_no)
+        for valve in self.manager.valves.keys():
+            self.populate_valves(valve)
 
         self.log_frame = tkinter.Frame(self.primary)
         self.log = tkinter.Text(self.log_frame, state='disabled', width=80, height=24, wrap='none', borderwidth=5)
@@ -49,15 +45,15 @@ class GUI:
         self.log.grid(row=14, column=0)
         self.fonts = {'buttons': ('Verdana', 16), 'labels': ('Verdana', 16), 'default': ('Verdana', 16)}
 
-    def populate_syringes(self, syringe_no):
+    def populate_syringes(self, syringe_name):
         """
         Populates the buttons for syringe
-        :param syringe_no: number of syringe
+        :param syringe_name: name of syringe from config file
         :return:
         """
         buttons = []
-        syringe_print_name = "Syringe " + str(syringe_no+1)
-        syringe_name = 'syringe' + str(syringe_no+1)
+        syringe_no = int(syringe_name[-1]) - 1
+        syringe_print_name = "Syringe " + str(syringe_no + 1)
         self.syringe_labels.append(tkinter.Label(self.button_frame, text=syringe_print_name, font=self.fonts['default'],
                                                  bg='white'))
         self.syringe_labels[syringe_no].grid(row=0, column=syringe_no+1, columnspan=1)
@@ -78,15 +74,15 @@ class GUI:
 
         self.syringe_buttons.append(buttons)
 
-    def populate_valves(self, valve_no):
+    def populate_valves(self, valve_name):
         """
         Populates the buttons for valve
-        :param valve_no: number of valve
+        :param valve_name: number of valve
         :return:
         """
         ports = []
+        valve_no = int(valve_name[-1]) - 1
         valve_print_name = "Valve " + str(valve_no+1)
-        valve_name = "valve" + str(valve_no + 1)
         self.valves_labels.append(tkinter.Label(self.button_frame, text=valve_print_name, font=self.fonts['default'],
                                                 bg='white'))
         self.valves_labels[valve_no].grid(row=4, column=valve_no+1, columnspan=1)
@@ -104,10 +100,12 @@ class GUI:
         # Append list of ports corresponding to valve_no to valves_buttons
         self.valves_buttons.append(ports)
 
-    def v_button_colour(self, port_no):
+    def v_button_colour(self, command_dict):
+        port_no = command_dict["command"]
+        valve = int(command_dict["module_name"][-1]) - 1
         for item in self.valves_buttons:
-            item.configure(bg='teal')
-        self.valves_buttons[port_no].configure(bg='OrangeRed2')
+            item[port_no].configure(bg='teal')
+        self.valves_buttons[valve][port_no].configure(bg='OrangeRed2')
 
     def asp_with(self, syringe_name, syringe_print_name, direction):
         """
@@ -196,7 +194,7 @@ class GUI:
         if command_dict['module_type'] == 'valve':
             if self.manager.command_module(command_dict):
                 message = command_dict['print_name'] + ' is indexing to position ' + str(command_dict['command'])
-                self.v_button_colour(command_dict['command'])
+                self.v_button_colour(command_dict)
             else:
                 message = command_dict['print_name'] + ' failed to index to position ' + str(command_dict['command'])
             self.write_message(message)

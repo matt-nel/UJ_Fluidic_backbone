@@ -1,5 +1,6 @@
 import os
 import json
+import threading
 from fbexceptions import *
 from commanduino import CommandManager
 from Modules.syringePump import SyringePump
@@ -24,6 +25,7 @@ class Manager:
         # list of all connected modules
         self.populate_modules()
         self.check_connections()
+        self.serial_lock = threading.Lock()
 
     def populate_modules(self):
         for module_name in self.module_info.keys():
@@ -42,11 +44,11 @@ class Manager:
 
     def add_valve(self, valve_name):
         valve_info = self.module_info[valve_name]
-        self.valves[valve_name] = SelectorValve(valve_name, valve_info, self.cmd_mng)
+        self.valves[valve_name] = SelectorValve(valve_name, valve_info, self.cmd_mng, self)
 
     def add_syringe(self, syringe_name):
         syr_info = self.module_info[syringe_name]
-        self.syringes[syringe_name] = SyringePump(syringe_name, syr_info, self.cmd_mng)
+        self.syringes[syringe_name] = SyringePump(syringe_name, syr_info, self.cmd_mng, self)
 
     def add_reactor(self, reactor):
         pass
@@ -74,9 +76,9 @@ class Manager:
             self.gui_main.write_message(f"{name} is not present in the Manager")
             return False
         if mod_type == 'syringe':
-            self.command_syringe(command_dict)
+            return self.command_syringe(command_dict)
         elif mod_type == 'valve':
-            self.command_valve(command_dict)
+            return self.command_valve(command_dict)
         else:
             self.gui_main.write_message(f'{mod_type} is not recognised')
 
@@ -106,10 +108,7 @@ class Manager:
         if type(command) is not int or command < 0 or command > 9:
             self.gui_main.write_message(f"{command} is not a valid port")
             return False
-        if command == 0:
-            self.valves[name].home_valve()
-            return True
         else:
-            self.valves[name].move_to_pos(command)
+            self.valves[name].watch_move(command)
             return True
 

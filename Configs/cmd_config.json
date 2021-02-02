@@ -17,8 +17,8 @@
     }
   ],
   "devices": {
-    "stepper1": {
-        "command_id": "stp1",
+    "stepperX": {
+        "command_id": "STPX",
         "config": {
             "enabled_acceleration": true,
             "speed": 1000,
@@ -26,14 +26,11 @@
             "acceleration": 1000
         }
     },
-    "en1":{
-        "command_id": "en1"
+    "ENX":{
+        "command_id": "ENX"
     },
-    "es1": {
-        "command_id": "es1"
-    },
-    "stepper2":{
-        "command_id": "stp2",
+    "stepperY":{
+        "command_id": "STPY",
       "config": {
         "enabled_acceleration": true,
         "speed": 1000,
@@ -41,14 +38,11 @@
         "acceleration": 1000
       }
     },
-    "en2":{
-        "command_id": "en2"
+    "ENY":{
+        "command_id": "ENY"
     },
-    "es2":{
-        "command_id":"es2"
-    },
-    "stepper3": {
-      "command_id": "stp3",
+    "stepperZ": {
+      "command_id": "STPZ",
       "config": {
         "enabled_acceleration":true,
         "speed":1000,
@@ -56,14 +50,14 @@
         "acceleration":1000
       }
     },
-    "en3": {
-      "command_id": "en3"
+    "ENZ": {
+      "command_id": "ENZ"
     },
-    "he1": {
-      "command_id": "he1"
+    "AR1": {
+      "command_id": "AR1"
     },
-    "stepper4": {
-      "command_id": "stp4",
+    "stepperE0": {
+      "command_id": "STPE0",
       "config": {
         "enabled_acceleration":true,
         "speed":1000,
@@ -71,11 +65,11 @@
         "acceleration":1000
       }
     },
-    "en4": {
-      "command_id": "en4"
+    "EN0": {
+      "command_id": "ENE0"
     },
-    "he2": {
-      "command_id": "he2"
+    "AR2": {
+      "command_id": "AR2"
     }
   }
 }
