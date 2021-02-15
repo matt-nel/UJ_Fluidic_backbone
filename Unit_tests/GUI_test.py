@@ -1,6 +1,6 @@
-from GUI import GUI
+from Fluidic_backbone_GUI import FLuidicBackboneUI
 import tkinter
 
 root = tkinter.Tk()
-my_gui = GUI(root, False)
+my_gui = FLuidicBackboneUI(root, False)
 root.mainloop()

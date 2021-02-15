@@ -1,5 +1,6 @@
 from Devices.stepperMotor import StepperMotor, LinearStepperMotor
 from Devices.device import Device
+from threading import Lock
 
 
 class Module:
@@ -17,7 +18,9 @@ class Module:
         self.steppers = []
         self.endstops = []
         self.he_sensors = []
+        self.manager = manager
         self.serial_lock = manager.serial_lock
+        self.lock = Lock()
         for item in assoc_devices.keys():
             if 'stepper' in item:
                 # stepper dict: {..."stepper" : [ "cmd_stepper", "cmd_enabler"]...}

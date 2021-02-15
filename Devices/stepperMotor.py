@@ -14,8 +14,12 @@ class StepperMotor(Device):
         super(StepperMotor, self).__init__(motor_en_obj, serial_lock)
         self.cmd_stepper = stepper_obj
         self.steps_per_rev = device_config['steps_per_rev']
+        self.enabled_acceleration = device_config['enabled_acceleration']
+        self.running_speed = device_config['speed']
+        self.max_speed = device_config['max_speed']
+        self.acceleration = device_config["acceleration"]
+        self.homing_params = {"running_speed": 6000, "enabled_acceleration": True, "acceleration": 2000}
         self.position = 0
-        self.acceleration = 0.0
         self.stopped = False
         self.en_motor()
 
@@ -29,8 +33,10 @@ class StepperMotor(Device):
         self.serial_lock.acquire()
         if enable:
             self.cmd_stepper.enable_acceleration()
+            self.enabled_acceleration = True
         else:
             self.cmd_stepper.disable_acceleration()
+            self.enabled_acceleration = False
         self.serial_lock.release()
 
     def set_acceleration(self, acceleration):
@@ -38,6 +44,7 @@ class StepperMotor(Device):
             self.serial_lock.acquire()
             self.cmd_stepper.set_acceleration(acceleration)
             self.serial_lock.release()
+            self.acceleration = acceleration
             return True
         else:
             print("That is not a valid acceleration")
@@ -48,6 +55,7 @@ class StepperMotor(Device):
             self.serial_lock.acquire()
             self.cmd_stepper.set_running_speed(speed)
             self.serial_lock.release()
+            self.running_speed = speed
             return True
         else:
             print("That is not a valid running speed")
@@ -58,6 +66,7 @@ class StepperMotor(Device):
             self.serial_lock.acquire()
             self.cmd_stepper.set_max_speed(speed)
             self.serial_lock.release()
+            self.max_speed = speed
             return True
         else:
             print("That is not a valid max speed")
@@ -74,12 +83,12 @@ class StepperMotor(Device):
 
     def get_current_position(self):
         self.serial_lock.acquire()
-        current_pos = self.cmd_stepper.get_current_position()
+        self.position = self.cmd_stepper.get_current_position()
         self.serial_lock.release()
-        return current_pos
+        return self.position
 
     def set_current_position(self, position):
-        if position is int:
+        if type(position) is int:
             if position > self.steps_per_rev:
                 position %= self.steps_per_rev
             elif position < 0:
@@ -88,6 +97,7 @@ class StepperMotor(Device):
             self.serial_lock.acquire()
             self.cmd_stepper.set_current_position(position)
             self.serial_lock.release()
+            self.position = position
 
     def move_steps(self, steps):
         self.stopped = False
@@ -113,14 +123,21 @@ class StepperMotor(Device):
 class LinearStepperMotor(StepperMotor):
     def __init__(self, stepper_obj, motor_en_obj, device_config, serial_lock):
         super(LinearStepperMotor, self).__init__(stepper_obj, motor_en_obj, device_config, serial_lock)
+        self.switch_state = 1
 
     def check_endstop(self):
-        self.serial_lock.acquire()
-        switch_state = self.cmd_stepper.get_switch_state()
-        self.serial_lock.release()
-        return switch_state
+        with self.serial_lock:
+            self.switch_state = self.cmd_stepper.get_switch_state()
+        return self.switch_state
 
     def home(self, wait=False):
-        self.serial_lock.acquire()
-        self.cmd_stepper.home(wait)
-        self.serial_lock.release()
+        original_params = {"running_speed": self.running_speed, "enabled_acceleration": self.enabled_acceleration,
+                           "acceleration": self.acceleration}
+        with self.serial_lock:
+            self.enable_acceleration(self.homing_params["enabled_acceleration"])
+            self.set_running_speed(self.homing_params["running_speed"])
+            self.set_acceleration(self.homing_params["acceleration"])
+            self.cmd_stepper.home(wait)
+            self.enable_acceleration(original_params["enabled_acceleration"])
+            self.set_running_speed(original_params["running_speed"])
+            self.set_acceleration(original_params["acceleration"])

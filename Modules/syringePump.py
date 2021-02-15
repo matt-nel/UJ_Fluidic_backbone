@@ -10,7 +10,7 @@ class SyringePump(Module):
     # TODO tracking of whether syringe currently contains reagents
     cor_fact = 0.993  # correction factor for dispensed volume
     # {volume: length in mm}
-    syr_lengths = {58: 1000, 2000: 2, 4000: 42, 5000: 5, 10000: 58, 20000: 20, 60000: 90}
+    syr_lengths = {0: 0, 1000: 58, 2000: 2, 4000: 42, 5000: 5, 10000: 58, 20000: 20, 60000: 90}
 
     def __init__(self, name, module_info, cmduino, manager):
         """
@@ -38,7 +38,7 @@ class SyringePump(Module):
         self.syr_contents[substance] = volume
         self.contents_list.append(substance)
 
-    def move_syringe(self, volume, flow_rate, aspirate):
+    def move_syringe(self, volume, flow_rate, aspirate, watch=True):
         """
         Determines the number of steps to send to the manager function for addressing stepper drivers
         :param aspirate: True - aspirate syringe. False - withdraw syringe
@@ -48,7 +48,7 @@ class SyringePump(Module):
         """
         self.aspirate = aspirate
         speed = (flow_rate * self.steps_per_rev * self.syr_length) / (self.screw_pitch * self.syr_vol)
-        self.steppers[0].set_running_speed(speed)
+        self.steppers[0].set_running_speed(round(speed))
         self.steppers[0].revert_direction(aspirate)
         # calculate number of steps to send to motor
         steps = (volume * self.syr_length * self.steps_per_rev) / (self.syr_vol * self.screw_pitch)
@@ -57,15 +57,16 @@ class SyringePump(Module):
         new_vol = self.change_volume(travel)
         if 0.0 < current_vol - new_vol < self.syr_vol:
             self.steppers[0].en_motor(True)
-            self.steppers[0].move_steps(steps)
-            Thread(target=self.watch_move, args=(0, 0)).start()
+            with self.lock:
+                self.steppers[0].move_steps(steps)
+                Thread(target=self.watch_move, name='watch_'+self.name, args=(0, 0)).start()
             return True
         else:
             return False
 
     def home(self):
         self.steppers[0].en_motor(True)
-        Thread(target=self.steppers[0].home, args=(True,)).start()
+        self.steppers[0].home(True)
         self.position = 0.0
 
     def watch_move(self, stepper_num, endstop_num=None):
@@ -77,7 +78,7 @@ class SyringePump(Module):
         :param home: Boolean, True: homing, false: normal move
         :return: None.
         """
-        prev_position = (self.steppers[stepper_num].get_current_pos()/self.steps_per_rev) * self.screw_pitch
+        prev_position = (self.steppers[stepper_num].get_current_position()/self.steps_per_rev) * self.screw_pitch
         if self.aspirate:
             while self.steppers[stepper_num].is_moving:
                 if self.endstops[endstop_num].digital_read() != 1:

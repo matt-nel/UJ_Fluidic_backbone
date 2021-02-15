@@ -3,7 +3,7 @@ from threading import Thread
 
 
 class SelectorValve(Module):
-    def __init__(self, name, module_info, cmduino):
+    def __init__(self, name, module_info, cmduino, manager):
         self.name = name
         module_config = module_info["mod_config"]
         self.ports = module_config["ports"]
@@ -13,6 +13,31 @@ class SelectorValve(Module):
         if self.steppers[0].steps_per_rev != 3200:
             for position in range(10):
                 self.pos_dict[position] = (self.steppers[0].steps_per_rev/10)*position
+
+    def move_to_pos(self, position):
+        if position == 0:
+            self.home_valve()
+        else:
+            stepper = self.steppers[0]
+            he_sens = self.he_sensors[0]
+            chk_pos = []
+            # check for true position within ~14 degree window
+            cur_pos = stepper.get_current_position()
+            if cur_pos > self.pos_dict[position]:
+                target_steps = cur_pos - self.pos_dict[position] + 60
+                stepper.move_steps(-target_steps)
+            else:
+                target_steps = self.pos_dict[position] - cur_pos - 60
+                stepper.move_steps(target_steps)
+            for i in range(0, 7):
+                stepper.move_steps(20)
+                chk_pos.append(he_sens.analog_read())
+            if position == 0:
+                new_pos = stepper.get_current_position() - 120 + (chk_pos.index(min(chk_pos)) * 20)
+            else:
+                new_pos = stepper.get_current_position() - 120 + (chk_pos.index(max(chk_pos)) * 20)
+            stepper.move_steps(-new_pos)
+            self.pos_dict[position] = stepper.get_current_position()
 
     def home_valve(self):
         # todo add logging of information
@@ -40,28 +65,6 @@ class SelectorValve(Module):
         stepper.move_steps(home_pos)
         stepper.set_current_position(0)
         stepper.en_motor()
-
-    def move_to_pos(self, position):
-        stepper = self.steppers[0]
-        he_sens = self.he_sensors[0]
-        chk_pos = []
-        # check for true position within ~14 degree window
-        cur_pos = stepper.get_current_position()
-        if cur_pos > self.pos_dict[position]:
-            target_steps = cur_pos - self.pos_dict[position] + 60
-            stepper.move_steps(-target_steps)
-        else:
-            target_steps = self.pos_dict[position] - cur_pos - 60
-            stepper.move_steps(target_steps)
-        for i in range(0, 7):
-            stepper.move_steps(20)
-            chk_pos.append(he_sens.analog_read())
-        if position == 0:
-            new_pos = stepper.get_current_position() - 120 + (chk_pos.index(min(chk_pos)) * 20)
-        else:
-            new_pos = stepper.get_current_position() - 120 + (chk_pos.index(max(chk_pos)) * 20)
-        stepper.move_steps(-new_pos)
-        self.pos_dict[position] = stepper.get_current_position()
 
     def watch_move(self, position):
         if position == 0:
