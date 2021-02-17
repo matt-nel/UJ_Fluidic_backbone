@@ -4,7 +4,7 @@ import time
 from Manager import Manager
 
 
-class FLuidicBackboneUI:
+class FluidicBackboneUI:
     def __init__(self, primary, simulation):
         """
         :param primary: root TK window object
@@ -52,28 +52,29 @@ class FLuidicBackboneUI:
         :param syringe_name: name of syringe from config file
         :return:
         """
-        buttons = []
         syringe_no = int(syringe_name[-1]) - 1
         syringe_print_name = "Syringe " + str(syringe_no + 1)
         self.syringe_labels.append(tkinter.Label(self.button_frame, text=syringe_print_name, font=self.fonts['default'],
                                                  bg='white'))
-        self.syringe_labels[syringe_no].grid(row=0, column=syringe_no+1, columnspan=1)
+        self.syringe_labels[syringe_no].grid(row=0, column=syringe_no+1)
 
-        buttons.append(tkinter.Button(self.button_frame, text='Home Syringe', font=self.fonts['default'], padx=5,
+        home_button = tkinter.Button(self.button_frame, text='Home Syringe', font=self.fonts['default'], padx=5,
                                       bg='teal', fg='white',
-                                      command=lambda: self.home_syringe(syringe_name, syringe_print_name)))
-        buttons[0].grid(row=1, column=syringe_no+1, columnspan=1)
+                                      command=lambda: self.home_syringe(syringe_name, syringe_print_name))
+        jog_button = tkinter.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='teal', fg='white',
+                                    command=lambda: self.jog_syringe(syringe_name, syringe_print_name))
 
-        buttons.append(tkinter.Button(self.button_frame, text='Aspirate', font=self.fonts['default'], padx=5, bg='teal',
-                                      fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, True)))
-        buttons[1].grid(row=2, column=syringe_no+1, columnspan=1)
+        home_button.grid(row=1, column=syringe_no+1)
+        jog_button.grid(row=2, column=syringe_no + 1)
 
-        buttons.append(tkinter.Button(self.button_frame, text='Withdraw', font=self.fonts['default'], padx=5, bg='teal',
+        asp_button = tkinter.Button(self.button_frame, text='Aspirate', font=self.fonts['default'], padx=5, bg='teal',
+                                      fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, True))
+        asp_button.grid(row=3, column=syringe_no+1, columnspan=1)
+
+        with_button = tkinter.Button(self.button_frame, text='Withdraw', font=self.fonts['default'], padx=5, bg='teal',
                                       fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, False)
-                                      ))
-        buttons[2].grid(row=3, column=syringe_no+1, columnspan=1)
-
-        self.syringe_buttons.append(buttons)
+                                      )
+        with_button.grid(row=4, column=syringe_no+1)
 
     def populate_valves(self, valve_name):
         """
@@ -86,17 +87,17 @@ class FLuidicBackboneUI:
         valve_print_name = "Valve " + str(valve_no+1)
         self.valves_labels.append(tkinter.Label(self.button_frame, text=valve_print_name, font=self.fonts['default'],
                                                 bg='white'))
-        self.valves_labels[valve_no].grid(row=4, column=valve_no+1, columnspan=1)
+        self.valves_labels[valve_no].grid(row=5, column=valve_no+1, columnspan=1)
 
         ports.append(tkinter.Button(self.button_frame, text='Home', font=self.fonts['default'], padx=5, bg='green',
                                     fg='white', command=lambda: self.move_valve(valve_name, 0)))
-        ports[0].grid(row=5, column=valve_no+1, columnspan=1)
+        ports[0].grid(row=6, column=valve_no+1, columnspan=1)
 
         for port_no in range(1, 10):
             ports.append(tkinter.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5,
                                         bg='teal', fg='white',
                                         command=lambda i=port_no: self.move_valve(valve_name, i)))
-            ports[port_no].grid(row=6+port_no, column=valve_no+1, columnspan=1)
+            ports[port_no].grid(row=7+port_no, column=valve_no+1, columnspan=1)
 
         # Append list of ports corresponding to valve_no to valves_buttons
         self.valves_buttons.append(ports)
@@ -156,7 +157,7 @@ class FLuidicBackboneUI:
 
     def home_syringe(self, syringe_name, syringe_print_name):
         command_dict = {'module_type': 'syringe', 'module_name': syringe_name, 'command': 'home',
-                        "parameters": {'volume': 0.0, 'flow_rate': 4500}}
+                        "parameters": {'volume': 0.0, 'flow_rate': 9999}}
 
         def home_command(fb_gui):
             home_popup.destroy()
@@ -168,10 +169,43 @@ class FLuidicBackboneUI:
         yes_button = tkinter.Button(home_popup, text='Home', font=self.fonts['default'], bg='teal', fg='white',
                                     command=lambda: home_command(self))
         no_button = tkinter.Button(home_popup, text='Cancel', font=self.fonts['default'], bg='tomato2', fg='white',
-                                   command= home_popup.destroy)
+                                   command=home_popup.destroy)
         warning_label.grid(row=0, column=1, columnspan=5)
         yes_button.grid(row=2, column=1)
         no_button.grid(row=2, column=5)
+
+    def jog_syringe(self, syringe_name, syringe_print_name):
+        command_dict = {'module_type': 'syringe', 'module_name': syringe_name, 'command': 'jog',
+                        "parameters": {'volume': 0.0, 'flow_rate': 9999, 'steps': 0, 'direction': 'aspirate'}}
+        # todo: add jog speed setting
+
+        def change_steps(steps):
+            command_dict['parameters']['steps'] = steps
+
+        def change_direction(direction):
+            if direction:
+                command_dict["parameters"]['direction'] = 'aspirate'
+            else:
+                command_dict["parameters"]['direction'] = 'withdraw'
+
+        jog_popup = tkinter.Toplevel(self.primary)
+        jog_popup.title('Jog' + syringe_print_name)
+        fh_button = tkinter.Button(jog_popup, text='500 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(500))
+        single_rev_button = tkinter.Button(jog_popup, text='3200 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(3200))
+        db_rev_button = tkinter.Button(jog_popup, text='6400 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(6400))
+        fwd_button = tkinter.Button(jog_popup, text='Direction: Aspirate', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_direction(True))
+        rev_button = tkinter.Button(jog_popup, text='Direction: Withdraw', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_direction(False))
+        jog_button = tkinter.Button(jog_popup, text='Go', font=self.fonts['default'], bg='teal', fg='white', command=lambda: self.send_command(command_dict))
+        close_button = tkinter.Button(jog_popup, text='Close', font=self.fonts['default'], bg='tomato2', fg='white', command=jog_popup.destroy)
+
+        fh_button.grid(row=0, column=0)
+        single_rev_button.grid(row=1, column=0)
+        db_rev_button.grid(row=2, column=0)
+        fwd_button.grid(row=3, column=0)
+        rev_button.grid(row=4, column=0)
+        jog_button.grid(row=5, column=1)
+        close_button.grid(row=5, column=2)
+
 
     def move_valve(self, valve_name, port_no):
         command_dict = {'module_type': 'valve', 'module_name': valve_name, 'command': port_no, 'parameters': {}}
@@ -188,6 +222,8 @@ class FLuidicBackboneUI:
             self.write_message(f'Sent command to move {message_list[1]} to port {message_list[2]}')
         elif message_list[0] == 'syringe':
             if message_list[2] == 'home':
+                message = f'Sent command to {message_list[1]} to {message_list[2]}'
+            if message_list[2] == 'jog':
                 message = f'Sent command to {message_list[1]} to {message_list[2]}'
             else:
                 vol, flow = message_list[3].values()
@@ -206,6 +242,16 @@ class FLuidicBackboneUI:
 
     def send_message(self, parameters):
         pass
+
+    def send_interrupt(self, parameters):
+        command_dict = {'module_type': 'manager', 'module_name': self.manager.name, 'command': 'interrupt',
+                        'parameters': parameters}
+        self.send_command(command_dict)
+
+    def end_program(self):
+        parameters = {'exit': True}
+        self.send_interrupt(parameters)
+        self.primary.destroy()
 
     def validate_vol(self, new_num):
         if not new_num:  # field is being cleared
@@ -228,3 +274,11 @@ class FLuidicBackboneUI:
         except ValueError:
             self.write_message("Incorrect value for flow rate")
             return False
+
+
+if __name__ == '__main__':
+    simulation = False
+    primary = tkinter.Tk()
+    fb_gui = FluidicBackboneUI(primary, simulation)
+    primary.protocol('WM_DELETE_WINDOW', fb_gui.end_program)
+    primary.mainloop()

@@ -25,12 +25,13 @@ class Manager(Thread):
         self.command_dict = {}
         self.input_buffer_lock = Lock()
         self.interrupt = False
+        self.exit = False
         # list of threads for purposes of stopping all
         self.threads = []
         self.valves = {}
         self.syringes = {}
         self.reactors = {}
-        self.modules = []
+        self.modules = ['Manager']
         # list of all connected modules
         self.populate_modules()
         self.check_connections()
@@ -53,7 +54,8 @@ class Manager(Thread):
                 self.syringes[module_name] = SyringePump(module_name, syr_info, self.cmd_mng, self)
             elif "reactor" in module_name:
                 pass
-        self.modules = list(self.valves.keys()) + list(self.syringes.keys()) + list(self.reactors.keys())
+        all_modules = list(self.valves.keys()) + list(self.syringes.keys()) + list(self.reactors.keys())
+        self.modules += all_modules
 
     def check_connections(self):
         for key in self.connections.keys():
@@ -75,8 +77,10 @@ class Manager(Thread):
             for thread in self.threads:
                 if not thread.is_alive():
                     self.threads.pop(self.threads.index(thread))
-        for thread in self.threads:
-            thread.join()
+        if self.exit:
+            for thread in self.threads:
+                thread.join()
+            self.cmd_mng.commandhandlers[0].stop()
 
     def read_input_buffer(self):
         with self.input_buffer_lock:
@@ -114,6 +118,11 @@ class Manager(Thread):
             return self.command_valve(name, command, parameters)
         elif mod_type == 'gui':
             return self.command_gui(command, parameters)
+        elif mod_type == 'manager':
+            if command == 'interrupt':
+                self.interrupt = True
+                if parameters['exit']:
+                    self.exit = True
         else:
             self.gui_main.write_message(f'{mod_type} is not recognised')
             return False
@@ -129,12 +138,12 @@ class Manager(Thread):
             self.gui_main.write_message("Required parameters not present, required: volume, flow rate")
             return False
         if command == 'aspirate':
-            asp_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(vol, flow, True))
+            asp_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(vol, flow, False))
             asp_thread.start()
             self.threads.append(asp_thread)
             return True
         elif command == 'withdraw':
-            with_thread = Thread(target = self.syringes[name].move_syringe, name=name, args=(vol, flow, False))
+            with_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(vol, flow, True))
             with_thread.start()
             self.threads.append(with_thread)
             return True
@@ -142,6 +151,16 @@ class Manager(Thread):
             home_thread = Thread(target=self.syringes[name].home, name=name, args=())
             home_thread.start()
             self.threads.append(home_thread)
+            return True
+        elif command == 'jog':
+            steps = parameters['steps']
+            if parameters['direction'] == 'aspirate':
+                direction = False
+            else:
+                direction = True
+            jog_thread = Thread(target=self.syringes[name].jog, name=name, args=(steps, direction))
+            jog_thread.start()
+            self.threads.append(jog_thread)
             return True
         else:
             self.gui_main.write_message(f"Command {command} is not recognised")

@@ -19,7 +19,6 @@ class Module:
         self.endstops = []
         self.he_sensors = []
         self.manager = manager
-        self.serial_lock = manager.serial_lock
         self.lock = Lock()
         for item in assoc_devices.keys():
             if 'stepper' in item:
@@ -28,13 +27,13 @@ class Module:
                 enable_pin = getattr(cmduino, assoc_devices[item]["enable_pin"])
                 if module_info["mod_config"]["linear_stepper"]:
                     self.steppers.append(LinearStepperMotor(stepper, enable_pin, assoc_devices[item]["device_config"],
-                                                            self.serial_lock))
+                                                            manager.serial_lock))
                 else:
                     self.steppers.append(StepperMotor(stepper, enable_pin, assoc_devices[item]["device_config"],
-                                                      self.serial_lock))
+                                                      manager.serial_lock))
             if 'endstop' in item:
                 endstop = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                self.endstops.append(Device(endstop, self.serial_lock))
+                self.endstops.append(Device(endstop, manager.serial_lock))
             if 'he_sens' in item:
                 he_sens = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                self.he_sensors.append(Device(he_sens, self.serial_lock))
+                self.he_sensors.append(Device(he_sens, manager.serial_lock))
