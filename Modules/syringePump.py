@@ -1,6 +1,4 @@
 from Modules.Module import Module
-from threading import Thread
-import time
 
 
 class SyringePump(Module):
@@ -71,7 +69,6 @@ class SyringePump(Module):
                 prev_step_pos = self.steppers[0].get_current_position()
                 prev_position = (prev_step_pos/self.steps_per_rev) * self.screw_pitch
                 self.steppers[0].move_steps(steps)
-                self.watch_move(0)
                 cur_step_pos = self.steppers[0].get_current_position()
                 self.position = (cur_step_pos / self.steps_per_rev) * self.screw_pitch
                 travel = abs(self.position - prev_position)
@@ -90,18 +87,6 @@ class SyringePump(Module):
             self.steppers[0].en_motor(True)
             self.steppers[0].revert_direction(direction)
             self.steppers[0].move_steps(steps)
-
-    def watch_move(self, stepper_num):
-        """
-        Watches steppers while they move. If endstop is hit will stop motor. Updates the position of the pump after
-        move or once endstop hit. Once motor finished moving, toggles enable pin LOW.
-        :param stepper_num: the number of the stepper in list steppers
-        :return: None.
-        """
-
-        while self.steppers[stepper_num].is_moving:
-            time.sleep(0.5)
-        self.steppers[stepper_num].en_motor()
 
     def change_volume(self, travel):
         vol_change = ((travel / self.syr_length) * self.syr_vol)

@@ -1,4 +1,5 @@
 from Devices.device import Device
+import time
 
 
 class StepperMotor(Device):
@@ -97,11 +98,27 @@ class StepperMotor(Device):
         self.en_motor(True)
         with self.serial_lock:
             self.cmd_stepper.move(steps)
+        self.watch_move()
+
+    def move_to(self, position):
+        self.stopped = False
+        self.en_motor(True)
+        with self.serial_lock:
+            self.cmd_stepper.move(position)
+        self.watch_move()
 
     def stop(self):
         with self.serial_lock:
             self.cmd_stepper.stop()
             self.stopped = True
+
+    def watch_move(self):
+        moving = True
+        while moving:
+            if not self.is_moving:
+                moving = False
+            time.sleep(1)
+        self.en_motor()
 
     @property
     def is_moving(self):
@@ -120,8 +137,9 @@ class LinearStepperMotor(StepperMotor):
             self.switch_state = self.cmd_stepper.get_switch_state()
         return self.switch_state
 
-    def home(self, wait=False):
+    def home(self):
         self.cmd_stepper.set_homing_speed(6400)
         with self.serial_lock:
-            self.cmd_stepper.home(wait)
+            self.cmd_stepper.home(False)
+        self.watch_move()
         self.set_running_speed(self.running_speed)
