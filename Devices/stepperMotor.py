@@ -99,13 +99,15 @@ class StepperMotor(Device):
         with self.serial_lock:
             self.cmd_stepper.move(steps)
         self.watch_move()
+        return True
 
     def move_to(self, position):
         self.stopped = False
         self.en_motor(True)
         with self.serial_lock:
-            self.cmd_stepper.move(position)
+            self.cmd_stepper.move_to(position)
         self.watch_move()
+        return True
 
     def stop(self):
         with self.serial_lock:
@@ -130,7 +132,7 @@ class StepperMotor(Device):
 class LinearStepperMotor(StepperMotor):
     def __init__(self, stepper_obj, motor_en_obj, device_config, s_lock):
         super(LinearStepperMotor, self).__init__(stepper_obj, motor_en_obj, device_config, s_lock)
-        self.switch_state = 1
+        self.switch_state = 0
 
     def check_endstop(self):
         with self.serial_lock:

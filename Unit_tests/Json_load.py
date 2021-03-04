@@ -1,9 +1,14 @@
-import os
-import json
 
 
-script_dir = os.path.dirname(__file__)  # get absolute directory of script
-cm_config = os.path.join(script_dir, "data.json")
-with open(cm_config) as file:
-    data = json.load(file)
-print("waiting")
+class dummy:
+    def __init__(self, name, location, sex, age):
+        self.name = name
+        self.location = location
+        self.sex = sex
+        self.age = age
+
+
+person = {'name': 'Fillibuster McPants', 'location': 'Mars', 'sex': "yeah baby", 'age': 69}
+
+my_class = dummy(**person)
+print(my_class.name, my_class.age, my_class.location, my_class.sex)

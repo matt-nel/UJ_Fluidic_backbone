@@ -47,6 +47,7 @@ class SyringePump(Module):
         :param volume: micro litres required to deliver
         :return:
         """
+        self.ready = False
         self.withdraw = withdraw
         speed = (flow_rate * self.steps_per_rev * self.syr_length) / (self.screw_pitch * self.syr_vol * 60)
         # calculate number of steps to send to motor
@@ -73,20 +74,25 @@ class SyringePump(Module):
                 self.position = (cur_step_pos / self.steps_per_rev) * self.screw_pitch
                 travel = abs(self.position - prev_position)
                 self.syr_contents[self.contents_list[-1]] += self.change_volume(travel)
+            self.ready = True
             return True
-        else:
-            return False
+        self.ready = True
+        return False
 
     def home(self):
+        self.ready = False
         self.steppers[0].en_motor(True)
-        self.steppers[0].home(True)
+        self.steppers[0].home()
         self.position = 0.0
+        self.ready = True
 
     def jog(self, steps, direction):
+        self.ready = False
         with self.lock:
             self.steppers[0].en_motor(True)
             self.steppers[0].revert_direction(direction)
             self.steppers[0].move_steps(steps)
+        self.ready = True
 
     def change_volume(self, travel):
         vol_change = ((travel / self.syr_length) * self.syr_vol)

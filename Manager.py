@@ -1,10 +1,20 @@
 import os
 import json
+import networkx as nx
+import time
+from networkx.readwrite.json_graph import node_link_graph
+from queue import Queue
 from threading import Thread, Lock
-from fbexceptions import *
 from commanduino import CommandManager
 from Modules.syringePump import SyringePump
 from Modules.selectorValve import SelectorValve
+from Modules.Module import FBFlask
+from fbexceptions import *
+
+
+def load_graph(graph_config):
+    graph = node_link_graph(graph_config, directed=True, multigraph=True)
+    return graph
 
 
 class Manager(Thread):
@@ -18,12 +28,10 @@ class Manager(Thread):
         self.module_info = self.json_loader("Configs/module_info.json")
         # module_info = {module_name:device_dict}
         # device dict = {device_name: {"cmd_id": "cmid", "config":{}}
-        self.connections = self.json_loader("Configs/module_connections.json")
+        graph_config = self.json_loader("Configs/module_connections.json")
         # connections = {valve_name : { 'inlet': 'syringe_name', 1: conn_module/reagent, 2: conn_module/reagent, ..}
+        self.q = Queue()
         self.serial_lock = Lock()
-        self.input_buffer = {}
-        self.command_dict = {}
-        self.input_buffer_lock = Lock()
         self.interrupt = False
         self.exit = False
         # list of threads for purposes of stopping all
@@ -31,9 +39,11 @@ class Manager(Thread):
         self.valves = {}
         self.syringes = {}
         self.reactors = {}
+        self.flasks = {}
         self.modules = ['Manager']
         # list of all connected modules
         self.populate_modules()
+        self.graph = load_graph(graph_config)
         self.check_connections()
 
     def json_loader(self, fp):
@@ -46,55 +56,121 @@ class Manager(Thread):
 
     def populate_modules(self):
         for module_name in self.module_info.keys():
-            if "valve" in module_name:
+            module_type = self.module_info[module_name]['mod_type']
+            if module_type == "valve":
                 valve_info = self.module_info[module_name]
                 self.valves[module_name] = SelectorValve(module_name, valve_info, self.cmd_mng, self)
-            elif "syringe" in module_name:
+            elif module_type == "syringe":
                 syr_info = self.module_info[module_name]
                 self.syringes[module_name] = SyringePump(module_name, syr_info, self.cmd_mng, self)
-            elif "reactor" in module_name:
+            elif module_type == "reactor":
                 pass
+
         all_modules = list(self.valves.keys()) + list(self.syringes.keys()) + list(self.reactors.keys())
         self.modules += all_modules
 
     def check_connections(self):
-        for key in self.connections.keys():
-            if key not in self.valves.keys():
-                self.gui_main.write_message(f'{key} is not present in the manager configuration')
+        g = self.graph
+        for n in list(g.nodes):
+            if g.degree[n] < 1:
+                self.gui_main.write_message(f'Node {n} is not connected to the system!')
+            else:
+                name = g.nodes[n]['name']
+                mod_type = g.nodes[n]['type']
+                if 'syringe' in mod_type:
+                    g.nodes[n]['obj'] = self.syringes[name]
+                elif 'valve' in mod_type:
+                    g.nodes[n]['obj'] = self.valves[name]
+                elif 'flask' in mod_type:
+                    config_dict = dict(g.nodes[n].items())
+                    self.flasks[name] = FBFlask(config_dict)
+                    g.nodes[n]['obj'] = self.flasks[name]
+                elif 'reactor' in mod_type:
+                    g.nodes[n]['obj'] = self.reactors[name]
 
     def run(self):
         while not self.interrupt:
-            self.read_input_buffer()
-            if self.command_dict:
-                if self.command_module(self.command_dict):
+            if self.q.empty():
+                time.sleep(0.1)
+            else:
+                command_dict = self.q.get()
+                if self.command_module(command_dict):
                     # todo add log of sent command
                     pass
                 else:
                     pass
                     # log failed command
-
-                self.command_dict = {}
-            for thread in self.threads:
-                if not thread.is_alive():
-                    self.threads.pop(self.threads.index(thread))
+                for thread in self.threads:
+                    if not thread.is_alive():
+                        self.threads.pop(self.threads.index(thread))
         if self.exit:
             for thread in self.threads:
                 thread.join()
             self.cmd_mng.commandhandlers[0].stop()
 
-    def read_input_buffer(self):
-        with self.input_buffer_lock:
-            if self.input_buffer:
-                self.command_dict = self.input_buffer
-                self.input_buffer = {}
+    def add_to_queue(self, commands):
+        for command in commands:
+            self.q.put(command)
 
-    def write_input_buffer(self, command_dict):
-        with self.input_buffer_lock:
-            if self.input_buffer:
-                return False
-            else:
-                self.input_buffer = command_dict
-                return True
+    def move_liquid(self, source, target, volume, flow_rate):
+        # currently a single path will be returned containing at least 1 syringe
+        g = self.graph
+        pipelined_steps = []
+        path = self.find_path(source, target)
+        if len(path) == 0:
+            return False
+        syr_index = None
+        index = 0
+        step_groups = []
+        for index, step in enumerate(path):
+            if 'syringe' in step:
+                syr_index = index
+        if index > syr_index:
+            step_groups.append(path[0:syr_index+1])
+            step_groups.append(path[syr_index:])
+        else:
+            step_groups = path
+        while volume > 0:
+            vol_to_move = 0
+            for num, step_group in enumerate(step_groups):
+                group_source = step_group[0]
+                group_target = step_group[-1]
+                if g.nodes[group_source]['type'] == 'syringe':
+                    syr_command_dict = dict(g.nodes[group_source])
+                    syr_command_dict['command'] = 'aspirate'
+                    syr_command_dict['parameters']['target'] = group_target
+                else:
+                    syr_command_dict = dict(g.nodes[group_target])
+                    syr_command_dict['command'] = 'withdraw'
+                    syr_command_dict['parameters']['target'] = group_source
+                for i, step in enumerate(step_group[1:-1]):
+                    prev_node = step_group[i-1]
+                    follow_node = step_group[i+1]
+                    req_port = g.edges[prev_node, follow_node]['port'][1]
+                    valve_command_dict = dict(g.nodes[step])
+                    valve_command_dict['command'] = req_port
+                    valve_command_dict['parameters'] = {'wait': True}
+                    pipelined_steps.append(valve_command_dict)
+                if volume > syr_command_dict['Maximum volume']:
+                    vol_to_move = syr_command_dict['Maximum volume']
+                else:
+                    vol_to_move = volume
+                syr_command_dict['flow_rate'] = flow_rate
+                pipelined_steps.append(syr_command_dict)
+            volume -= vol_to_move
+        self.add_to_queue(pipelined_steps)
+        return True
+
+    def find_path(self, source, target):
+        paths = nx.algorithms.all_simple_paths(self.graph, source, target)
+        pathlist = [p for p in paths]
+        valid_paths = []
+        for p in pathlist:
+            for step in p:
+                if 'syringe' in step:
+                    valid_paths.append(p)
+                    break
+        return valid_paths
 
     def command_module(self, command_dict):
         """
@@ -103,7 +179,7 @@ class Manager(Thread):
         :return: Boolean - successful/unsuccessful
         """
         try:
-            mod_type, name = command_dict['module_type'], command_dict['module_name']
+            mod_type, name = command_dict['mod_type'], command_dict['module_name']
             command, parameters = command_dict["command"], command_dict["parameters"]
         except KeyError:
             # todo: change this to a log message
@@ -141,17 +217,14 @@ class Manager(Thread):
             asp_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(vol, flow, False))
             asp_thread.start()
             self.threads.append(asp_thread)
-            return True
         elif command == 'withdraw':
             with_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(vol, flow, True))
             with_thread.start()
             self.threads.append(with_thread)
-            return True
         elif command == 'home':
             home_thread = Thread(target=self.syringes[name].home, name=name, args=())
             home_thread.start()
             self.threads.append(home_thread)
-            return True
         elif command == 'jog':
             steps = parameters['steps']
             if parameters['direction'] == 'aspirate':
@@ -161,16 +234,22 @@ class Manager(Thread):
             jog_thread = Thread(target=self.syringes[name].jog, name=name, args=(steps, direction))
             jog_thread.start()
             self.threads.append(jog_thread)
-            return True
         else:
             self.gui_main.write_message(f"Command {command} is not recognised")
             return False
+        if parameters['wait']:
+            if not self.syringes[name].ready:
+                time.sleep(0.2)
+        return True
 
     def command_valve(self, name, command, parameters):
         if type(command) is int and 0 <= command < 9:
             valve_thread = Thread(target=self.valves[name].move_to_pos, name=name, args=(command,))
             valve_thread.start()
             self.threads.append(valve_thread)
+            if parameters['wait']:
+                if not self.valves[name].ready:
+                    time.sleep(0.2)
             return True
         else:
             self.gui_main.write_message(f"{command} is not a valid port")

@@ -1,1 +1,106 @@
-{"syringe1": {"mod_config": {"volume": 5000, "screw_pitch": 8, "linear_stepper": true}, "devices": {"stepper": {"cmd_id": "STPX", "enable_pin": "ENX", "device_config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}, "name": "stepperX"}}}, "syringe2": {"mod_config": {"volume": 5000, "screw_pitch": 8, "linear_stepper": true}, "devices": {"stepper": {"cmd_id": "STPY", "enable_pin": "ENY", "device_config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}, "name": "stepperY"}}}, "valve1": {"mod_config": {"ports": 10, "linear_stepper": false}, "devices": {"stepper": {"cmd_id": "STPZ", "enable_pin": "ENZ", "device_config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}, "name": "stepperZ"}, "he_sens": {"name": "he_sens1", "cmd_id": "AR1", "device_config": {}}}}, "valve2": {"mod_config": {"ports": 10, "linear_stepper": false}, "devices": {"stepper": {"cmd_id": "STPE0", "enable_pin": "ENE0", "device_config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}, "name": "stepperE0"}, "he_sens": {"name": "he_sens2", "cmd_id": "AR2", "device_config": {}}}}}
+{
+    "syringe1": {
+        "class_type": "SyringePump",
+        "devices": {
+            "stepper": {
+                "cmd_id": "STPX",
+                "device_config": {
+                    "acceleration": 1000,
+                    "enabled_acceleration": false,
+                    "max_speed": 10000,
+                    "speed": 1000,
+                    "steps_per_rev": 3200
+                },
+                "enable_pin": "ENX",
+                "name": "stepperX"
+            }
+        },
+        "mod_config": {
+            "linear_stepper": true,
+            "screw_pitch": 8,
+            "volume": 5000
+        },
+        "mod_type": "syringe",
+        "name": "syringe1"
+    },
+    "syringe2": {
+        "class_type": "SyringePump",
+        "devices": {
+            "stepper": {
+                "cmd_id": "STPY",
+                "device_config": {
+                    "acceleration": 1000,
+                    "enabled_acceleration": false,
+                    "max_speed": 10000,
+                    "speed": 1000,
+                    "steps_per_rev": 3200
+                },
+                "enable_pin": "ENY",
+                "name": "stepperY"
+            }
+        },
+        "mod_config": {
+            "linear_stepper": true,
+            "screw_pitch": 8,
+            "volume": 5000
+        },
+        "mod_type": "syringe",
+        "name": "syringe2"
+    },
+    "valve1": {
+        "class_type": "SelectorValve",
+        "devices": {
+            "he_sens": {
+                "cmd_id": "AR1",
+                "device_config": {},
+                "name": "he_sens1"
+            },
+            "stepper": {
+                "cmd_id": "STPZ",
+                "device_config": {
+                    "acceleration": 1000,
+                    "enabled_acceleration": false,
+                    "max_speed": 10000,
+                    "speed": 1000,
+                    "steps_per_rev": 3200
+                },
+                "enable_pin": "ENZ",
+                "name": "stepperZ"
+            }
+        },
+        "mod_config": {
+            "linear_stepper": false,
+            "ports": 10
+        },
+        "mod_type": "valve",
+        "name": "valve1"
+    },
+    "valve2": {
+        "class_type": "SelectorValve",
+        "devices": {
+            "he_sens": {
+                "cmd_id": "AR2",
+                "device_config": {},
+                "name": "he_sens2"
+            },
+            "stepper": {
+                "cmd_id": "STPE0",
+                "device_config": {
+                    "acceleration": 1000,
+                    "enabled_acceleration": false,
+                    "max_speed": 10000,
+                    "speed": 1000,
+                    "steps_per_rev": 3200
+                },
+                "enable_pin": "ENE0",
+                "name": "stepperE0"
+            }
+        },
+        "mod_config": {
+            "linear_stepper": false,
+            "ports": 10
+        },
+        "mod_type": "valve",
+        "name": "valve2"
+    }
+}

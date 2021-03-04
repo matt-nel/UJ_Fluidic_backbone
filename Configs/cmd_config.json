@@ -1,1 +1,67 @@
-{"ios": [{"port": "COM6"}], "devices": {"stepperX": {"command_id": "STPX", "config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}}, "ENX": {"command_id": "ENX"}, "stepperY": {"command_id": "STPY", "config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}}, "ENY": {"command_id": "ENY"}, "stepperZ": {"command_id": "STPZ", "config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}}, "ENZ": {"command_id": "ENZ"}, "AR1": {"command_id": "AR1"}, "stepperE0": {"command_id": "STPE0", "config": {"steps_per_rev": 3200, "enabled_acceleration": false, "speed": 1000, "max_speed": 10000, "acceleration": 1000}}, "ENE0": {"command_id": "ENE0"}, "AR2": {"command_id": "AR2"}}}
+{
+    "devices": {
+        "AR1": {
+            "command_id": "AR1"
+        },
+        "AR2": {
+            "command_id": "AR2"
+        },
+        "ENE0": {
+            "command_id": "ENE0"
+        },
+        "ENX": {
+            "command_id": "ENX"
+        },
+        "ENY": {
+            "command_id": "ENY"
+        },
+        "ENZ": {
+            "command_id": "ENZ"
+        },
+        "stepperE0": {
+            "command_id": "STPE0",
+            "config": {
+                "acceleration": 1000,
+                "enabled_acceleration": false,
+                "max_speed": 10000,
+                "speed": 1000,
+                "steps_per_rev": 3200
+            }
+        },
+        "stepperX": {
+            "command_id": "STPX",
+            "config": {
+                "acceleration": 1000,
+                "enabled_acceleration": false,
+                "max_speed": 10000,
+                "speed": 1000,
+                "steps_per_rev": 3200
+            }
+        },
+        "stepperY": {
+            "command_id": "STPY",
+            "config": {
+                "acceleration": 1000,
+                "enabled_acceleration": false,
+                "max_speed": 10000,
+                "speed": 1000,
+                "steps_per_rev": 3200
+            }
+        },
+        "stepperZ": {
+            "command_id": "STPZ",
+            "config": {
+                "acceleration": 1000,
+                "enabled_acceleration": false,
+                "max_speed": 10000,
+                "speed": 1000,
+                "steps_per_rev": 3200
+            }
+        }
+    },
+    "ios": [
+        {
+            "port": "COM6"
+        }
+    ]
+}

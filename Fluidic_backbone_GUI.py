@@ -1,6 +1,5 @@
 import os
 import tkinter
-import time
 from Manager import Manager
 
 
@@ -18,7 +17,7 @@ class FluidicBackboneUI:
         self.fonts = {'default': ('Verdana', 16)}
 
         icon = tkinter.PhotoImage(file=os.path.join(os.path.dirname(__file__), 'Syringe.png'))
-        self.primary.tk.call('wm', 'iconphoto', self.primary._w, icon)
+        self.primary.iconphoto(True, icon)
 
         self.button_frame = tkinter.Frame(self.primary, borderwidth=5)
 
@@ -119,8 +118,8 @@ class FluidicBackboneUI:
         """
 
         def asp_command(fb_gui, syr_name):
-            command_dict = {'module_type': 'syringe', 'module_name': syr_name, 'command': command,
-                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp}}
+            command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': command,
+                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp, 'wait': False}}
             asp_menu.destroy()
             fb_gui.send_command(command_dict)
 
@@ -156,8 +155,8 @@ class FluidicBackboneUI:
         cancel_button.grid(row=5, column=6)
 
     def home_syringe(self, syringe_name, syringe_print_name):
-        command_dict = {'module_type': 'syringe', 'module_name': syringe_name, 'command': 'home',
-                        "parameters": {'volume': 0.0, 'flow_rate': 9999}}
+        command_dict = {'mod_type': 'syringe', 'module_name': syringe_name, 'command': 'home',
+                        "parameters": {'volume': 0.0, 'flow_rate': 9999, 'wait': False}}
 
         def home_command(fb_gui):
             home_popup.destroy()
@@ -175,8 +174,8 @@ class FluidicBackboneUI:
         no_button.grid(row=2, column=5)
 
     def jog_syringe(self, syringe_name, syringe_print_name):
-        command_dict = {'module_type': 'syringe', 'module_name': syringe_name, 'command': 'jog',
-                        "parameters": {'volume': 0.0, 'flow_rate': 9999, 'steps': 0, 'direction': 'aspirate'}}
+        command_dict = {'mod_type': 'syringe', 'module_name': syringe_name, 'command': 'jog',
+                        "parameters": {'volume': 0.0, 'flow_rate': 9999, 'steps': 0, 'direction': 'aspirate', 'wait': False}}
         # todo: add jog speed setting
 
         def change_steps(steps):
@@ -206,28 +205,25 @@ class FluidicBackboneUI:
         jog_button.grid(row=5, column=1)
         close_button.grid(row=5, column=2)
 
+    # todo add jog valve menu
 
     def move_valve(self, valve_name, port_no):
-        command_dict = {'module_type': 'valve', 'module_name': valve_name, 'command': port_no, 'parameters': {}}
+        command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': port_no, 'parameters': {'wait': False}}
         self.send_command(command_dict)
 
     def send_command(self, command_dict):
-        while not self.manager.write_input_buffer(command_dict):
-            self.write_message("Busy")
-            time.sleep(0.2)
-        message_list = []
-        for v in command_dict.values():
-            message_list.append(v)
-        if message_list[0] == 'valve':
-            self.write_message(f'Sent command to move {message_list[1]} to port {message_list[2]}')
-        elif message_list[0] == 'syringe':
-            if message_list[2] == 'home':
-                message = f'Sent command to {message_list[1]} to {message_list[2]}'
-            if message_list[2] == 'jog':
-                message = f'Sent command to {message_list[1]} to {message_list[2]}'
+        self.manager.q.put(command_dict)
+        name, command = command_dict['module_name'], command_dict['command']
+        if command_dict['mod_type'] == 'valve':
+            self.write_message(f'Sent command to move {name} to port {command}')
+        elif name == 'syringe':
+            if command == 'home':
+                message = f'Sent command to {name} to {command}'
+            if command == 'jog':
+                message = f'Sent command to {name} to {command}'
             else:
-                vol, flow = message_list[3].values()
-                message = f'Sent command to {message_list[1]} to {message_list[2]} {vol}ml at {flow} \u03BCL/min'
+                vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
+                message = f'Sent command to {name} to {command} {vol}ml at {flow} \u03BCL/min'
             self.write_message(message)
 
     def write_message(self, message):
@@ -244,7 +240,7 @@ class FluidicBackboneUI:
         pass
 
     def send_interrupt(self, parameters):
-        command_dict = {'module_type': 'manager', 'module_name': self.manager.name, 'command': 'interrupt',
+        command_dict = {'mod_type': 'manager', 'module_name': self.manager.name, 'command': 'interrupt',
                         'parameters': parameters}
         self.send_command(command_dict)
 
