@@ -90,13 +90,15 @@ class FluidicBackboneUI:
 
         ports.append(tkinter.Button(self.button_frame, text='Home', font=self.fonts['default'], padx=5, bg='green',
                                     fg='white', command=lambda: self.move_valve(valve_name, 0)))
-        ports[0].grid(row=6, column=valve_no+1, columnspan=1)
+        ports[0].grid(row=7, column=valve_no+1)
+        self.valves_buttons.append(tkinter.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.jog_valve(valve_name, valve_print_name)))
+        self.valves_buttons[-1].grid(row=6, column=valve_no+1)
 
         for port_no in range(1, 10):
             ports.append(tkinter.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5,
                                         bg='teal', fg='white',
                                         command=lambda i=port_no: self.move_valve(valve_name, i)))
-            ports[port_no].grid(row=7+port_no, column=valve_no+1, columnspan=1)
+            ports[port_no].grid(row=8+port_no, column=valve_no+1, columnspan=1)
 
         # Append list of ports corresponding to valve_no to valves_buttons
         self.valves_buttons.append(ports)
@@ -211,15 +213,57 @@ class FluidicBackboneUI:
         command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': port_no, 'parameters': {'wait': False}}
         self.send_command(command_dict)
 
+    def jog_valve(self, valve_name, valve_print_name):
+        command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
+                        "parameters": {'steps': 0, 'direction': 'cw', 'wait': False}}
+
+        def change_steps(steps):
+            command_dict['parameters']['steps'] = steps
+
+        def change_direction(direction):
+            if direction:
+                command_dict["parameters"]['direction'] = 'cw'
+            else:
+                command_dict["parameters"]['direction'] = 'cc'
+
+        def zero_command():
+            zero_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'zero',
+                            "parameters": {'wait': False}}
+            self.send_command(zero_dict)
+
+        b_font = self.fonts['default']
+        jog_popup = tkinter.Toplevel(self.primary)
+        jog_popup.title('Jog ' + valve_print_name)
+        five_butt = tkinter.Button(jog_popup, text='5 steps', font=b_font, bg='teal', fg='white', command=lambda: change_steps(5))
+        ft_butt = tkinter.Button(jog_popup, text='40 steps', font=b_font, bg='teal', fg='white',
+                                   command=lambda: change_steps(40))
+        p_butt = tkinter.Button(jog_popup, text='320 steps', font=b_font, bg='teal', fg='white', command=lambda: change_steps(320))
+        cw_butt = tkinter.Button(jog_popup, text='Direction: CW', font=b_font, bg='teal', fg='white', command=lambda: change_direction(True))
+        cc_butt = tkinter.Button(jog_popup, text='Direction: CC', font=b_font, bg='teal', fg='white', command=lambda: change_direction(False))
+        zero_butt = tkinter.Button(jog_popup, text='Set pos 0', font=b_font, bg='teal', fg='white',
+                                   command=zero_command)
+        jog_butt = tkinter.Button(jog_popup, text='Go', font=b_font, bg='teal', fg='white', command=lambda: self.send_command(command_dict))
+        close_button = tkinter.Button(jog_popup, text='Close', font=b_font, bg='tomato2', fg='white', command=jog_popup.destroy)
+
+        five_butt.grid(row=0)
+        ft_butt.grid(row=1)
+        p_butt.grid(row=2)
+        cw_butt.grid(row=3, column=0)
+        cc_butt.grid(row=3, column=1)
+        zero_butt.grid(row=4)
+        jog_butt.grid(row=5, column=0)
+        close_button.grid(row=5, column=1)
+
     def send_command(self, command_dict):
         self.manager.q.put(command_dict)
         name, command = command_dict['module_name'], command_dict['command']
         if command_dict['mod_type'] == 'valve':
-            self.write_message(f'Sent command to move {name} to port {command}')
+            if command == 'zero':
+                self.write_message(f'Sent command to zero {name}')
+            else:
+                self.write_message(f'Sent command to move {name} to port {command}')
         elif name == 'syringe':
-            if command == 'home':
-                message = f'Sent command to {name} to {command}'
-            if command == 'jog':
+            if command == 'home' or command == 'jog':
                 message = f'Sent command to {name} to {command}'
             else:
                 vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
