@@ -248,10 +248,28 @@ class Manager(Thread):
             valve_thread.start()
             self.threads.append(valve_thread)
             if parameters['wait']:
-                if not self.valves[name].ready:
-                    time.sleep(0.2)
+                self.wait_until_ready(self.valves[name])
             return True
+        elif command == 'zero':
+            valve_thread = Thread(target=self.valves[name].zero, name=name, args=())
+            valve_thread.start()
+            self.threads.append(valve_thread)
+            if parameters['wait']:
+                self.wait_until_ready(self.valves[name])
+        elif command == 'jog':
+            direction = parameters['direction']
+            steps = parameters['steps']
+            valve_thread=Thread(target=self.valves[name].jog, name=name, args=(steps, direction))
+            valve_thread.start()
+            self.threads.append(valve_thread)
+            if parameters['wait']:
+                self.wait_until_ready(self.valves[name])
         else:
             self.gui_main.write_message(f"{command} is not a valid port")
             return False
+
+    @staticmethod
+    def wait_until_ready(self, obj):
+        if not obj.ready:
+            time.sleep(0.2)
 

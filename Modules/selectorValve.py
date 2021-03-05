@@ -27,13 +27,19 @@ class SelectorValve(Module):
             stepper = self.steppers[0]
             he_sens = self.he_sensors[0]
             # check for true position within ~14 degree window
-            cur_pos = stepper.get_current_position()
             stepper.move_to(self.pos_dict[position])
-            self.check_pos(5, True)
+            # self.check_pos(5, True)
             cur_pos = stepper.get_current_position()
             if cur_pos != self.pos_dict[position]:
                 self.pos_dict[position] = cur_pos
             self.ready = True
+
+    def jog(self, steps, direction):
+        self.ready = False
+        if direction == 'cc':
+            steps = -steps
+        self.steppers[0].move_steps(steps)
+        self.ready = True
 
     def home_valve(self):
         # todo add logging of information
@@ -82,3 +88,6 @@ class SelectorValve(Module):
             target_pos = chk_pos[1].index(min(chk_pos[1]))
         stepper.move_to(chk_pos[0][target_pos])
         stepper.set_running_speed(prev_speed)
+
+    def zero(self):
+        self.steppers[0].set_current_position(0)
