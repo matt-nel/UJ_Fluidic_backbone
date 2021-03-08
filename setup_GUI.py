@@ -311,6 +311,7 @@ class SetupGUI:
             motor_cxn = motor_connector.get()
             try:
                 pin = hall_connector.get()
+                gear = geared_motor.get()
                 hall_sensor = self.pins[pin]
             except KeyError:
                 self.write_message('Please select a pin for the hall-effect sensor')
@@ -331,7 +332,9 @@ class SetupGUI:
                         module.name = valve_name
                         module.mod_type = 'valve'
                         module.class_type = 'SelectorValve'
-                        module.mod_config = {'ports': 10, "linear_stepper": False}
+                        if gear == '':
+                            gear = 'Direct drive'
+                        module.mod_config = {'ports': 10, "linear_stepper": False, 'gear': gear}
                         self.setup_motor(valve_name, stepper_name, motor_cxn)
                         module.devices['he_sens'] = {'name': he_sens_name, 'cmd_id': hall_sensor, 'device_config': {}}
                         self.cmd_devices.devices[hall_sensor] = {'command_id': hall_sensor}
@@ -343,6 +346,7 @@ class SetupGUI:
         font = self.fonts['default']
         motor_connector = tkinter.StringVar(valve_setup)
         hall_connector = tkinter.StringVar(valve_setup)
+        geared_motor = tkinter.StringVar(valve_setup)
         motor_text = 'Which motor connector is used for this valve?'
         motor_connection_label = tkinter.Label(valve_setup, text=motor_text, font=font)
         i = 1
@@ -361,13 +365,22 @@ class SetupGUI:
         if pin_to_remove is not None:
             hall_options.pop(pin_to_remove)
         hall_sensor_selector = tkinter.OptionMenu(valve_setup, hall_connector, *hall_options)
+
+        gear_options = ['Direct drive', '1.5:1', '2:1', '3:1']
+        geared_motor.set('')
+        gear_label = tkinter.Label(valve_setup, text='Gear options:', font=font)
+        gear_selector = tkinter.OptionMenu(valve_setup, geared_motor, *gear_options)
+
         accept_button = tkinter.Button(valve_setup, text='Accept', fg='black', bg='lawn green',
                                        command=accept)
         cancel_button = tkinter.Button(valve_setup, text='Cancel', fg='black', bg='tomato2',
                                        command=valve_setup.destroy)
+
         motor_connection_label.grid(row=0, column=0)
         hall_sensor_label.grid(row=7, column=0)
         hall_sensor_selector.grid(row=8, column=0)
+        gear_label.grid(row=9)
+        gear_selector.grid(row=10)
         accept_button.grid(row=16, column=0)
         cancel_button.grid(row=16, column=1)
 

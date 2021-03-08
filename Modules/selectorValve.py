@@ -14,7 +14,11 @@ class SelectorValve(Module):
         self.pos_threshold = 0
         self.neg_threshold = 0
         self.pos_he = []
+        geared = module_config['gear']
         self.spr = self.steppers[0].steps_per_rev
+        if geared[1] != 'D':
+            gear_ratio = float(geared.split(':'))
+            self.spr *= gear_ratio
         if self.spr != 3200:
             for position in range(10):
                 self.pos_dict[position] = (self.spr/10)*position
@@ -25,10 +29,9 @@ class SelectorValve(Module):
         else:
             self.ready = False
             stepper = self.steppers[0]
-            he_sens = self.he_sensors[0]
             # check for true position within ~14 degree window
             stepper.move_to(self.pos_dict[position])
-            # self.check_pos(5, True)
+            self.check_pos(5, True)
             cur_pos = stepper.get_current_position()
             if cur_pos != self.pos_dict[position]:
                 self.pos_dict[position] = cur_pos
