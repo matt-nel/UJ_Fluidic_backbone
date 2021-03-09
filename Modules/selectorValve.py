@@ -1,4 +1,5 @@
 from Modules.Module import Module
+import time
 
 
 class SelectorValve(Module):
@@ -17,8 +18,12 @@ class SelectorValve(Module):
         geared = module_config['gear']
         self.spr = self.steppers[0].steps_per_rev
         if geared[1] != 'D':
-            gear_ratio = float(geared.split(':'))
+            gear_ratio = float(geared.split(':')[0])
             self.spr *= gear_ratio
+            self.steppers[0].revert_direction(True)
+            self.geared = True
+        else:
+            self.geared = False
         if self.spr != 3200:
             for position in range(10):
                 self.pos_dict[position] = (self.spr/10)*position
@@ -31,7 +36,9 @@ class SelectorValve(Module):
             stepper = self.steppers[0]
             # check for true position within ~14 degree window
             stepper.move_to(self.pos_dict[position])
-            self.check_pos(5, True)
+            #self.check_pos(5, True)
+            if self.geared:
+                time.sleep(0.5)
             cur_pos = stepper.get_current_position()
             if cur_pos != self.pos_dict[position]:
                 self.pos_dict[position] = cur_pos
@@ -51,20 +58,27 @@ class SelectorValve(Module):
         he_sens = self.he_sensors[0]
         prev_speed = self.steppers[0].running_speed
         stepper.set_running_speed(self.homing_spd)
-        home_positions, chk_pos = [[], []], [[], []]
-        home_positions[0].append(stepper.get_current_position())
-        home_positions[1].append(he_sens.analog_read())
-        spr = stepper.steps_per_rev
-        # get rough positions
-        for i in range(0, 20):
-            stepper.move_steps(spr/20)
+        home_positions = [[], []]
+        if not self.geared:
             home_positions[0].append(stepper.get_current_position())
             home_positions[1].append(he_sens.analog_read())
-        min_pos = home_positions[1].index(min(home_positions[1]))
-        # index to 60 steps away from min pos
-        stepper.move_to(home_positions[0][min_pos] - 60)
-        # check for true min within 13.5 degree window
-        self.check_pos(8, False)
+            spr = stepper.steps_per_rev
+            # get rough positions
+            for i in range(0, 20):
+                stepper.move_steps(spr/20)
+                home_positions[0].append(stepper.get_current_position())
+                home_positions[1].append(he_sens.analog_read())
+            min_pos = home_positions[1].index(min(home_positions[1]))
+            # index to 60 steps away from min pos
+            stepper.move_to(home_positions[0][min_pos] - 60)
+            # check for true min within 13.5 degree window
+            #self.check_pos(8, False)
+        else:
+            for i in range(10):
+                stepper.move_steps(self.spr/10)
+                time.sleep(0.5)
+                home_positions[0].append(stepper.get_current_position())
+                home_positions[1].append(he_sens.analog_read())
         stepper.set_current_position(0)
         stepper.en_motor()
         stepper.set_running_speed(prev_speed)
@@ -94,3 +108,8 @@ class SelectorValve(Module):
 
     def zero(self):
         self.steppers[0].set_current_position(0)
+
+    def he_read(self):
+        reading = self.he_sensors[0].analog_read()
+        message = f'{self.name} he sensor reading is {reading}'
+        self.write_to_gui(message)

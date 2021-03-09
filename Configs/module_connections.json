@@ -1,191 +1,48 @@
 {
     "links": [
         {
-            "id": 10,
+            "id": 3,
+            "port": [
+                0,
+                0
+            ],
+            "source": "valve1",
+            "sourceInternal": 0,
+            "target": "flask1",
+            "targetInternal": 1
+        },
+        {
+            "id": 4,
+            "port": [
+                0,
+                0
+            ],
+            "source": "flask1",
+            "sourceInternal": 1,
+            "target": "valve1",
+            "targetInternal": 0
+        },
+        {
+            "id": 5,
             "port": [
                 0,
                 1
             ],
             "source": "valve1",
             "sourceInternal": 0,
-            "target": "reactants1",
+            "target": "flask2",
             "targetInternal": 2
         },
         {
-            "id": 11,
+            "id": 6,
             "port": [
                 0,
                 1
             ],
-            "source": "reactants1",
+            "source": "flask2",
             "sourceInternal": 2,
             "target": "valve1",
             "targetInternal": 0
-        },
-        {
-            "id": 12,
-            "port": [
-                0,
-                2
-            ],
-            "source": "valve1",
-            "sourceInternal": 0,
-            "target": "reactants2",
-            "targetInternal": 3
-        },
-        {
-            "id": 13,
-            "port": [
-                0,
-                2
-            ],
-            "source": "reactants2",
-            "sourceInternal": 3,
-            "target": "valve1",
-            "targetInternal": 0
-        },
-        {
-            "id": 14,
-            "port": [
-                0,
-                3
-            ],
-            "source": "valve1",
-            "sourceInternal": 0,
-            "target": "solvent1",
-            "targetInternal": 4
-        },
-        {
-            "id": 15,
-            "port": [
-                0,
-                3
-            ],
-            "source": "solvent1",
-            "sourceInternal": 4,
-            "target": "valve1",
-            "targetInternal": 0
-        },
-        {
-            "id": 16,
-            "port": [
-                0,
-                4
-            ],
-            "source": "valve1",
-            "sourceInternal": 0,
-            "target": "waste1",
-            "targetInternal": 5
-        },
-        {
-            "id": 17,
-            "port": [
-                0,
-                -1
-            ],
-            "source": "valve1",
-            "sourceInternal": 0,
-            "target": "syringe1",
-            "targetInternal": 6
-        },
-        {
-            "id": 18,
-            "port": [
-                0,
-                -1
-            ],
-            "source": "syringe1",
-            "sourceInternal": 6,
-            "target": "valve1",
-            "targetInternal": 0
-        },
-        {
-            "id": 19,
-            "port": [
-                0,
-                6
-            ],
-            "source": "valve1",
-            "sourceInternal": 0,
-            "target": "valve2",
-            "targetInternal": 1
-        },
-        {
-            "id": 20,
-            "port": [
-                1,
-                5
-            ],
-            "source": "valve2",
-            "sourceInternal": 1,
-            "target": "valve1",
-            "targetInternal": 0
-        },
-        {
-            "id": 21,
-            "port": [
-                1,
-                -1
-            ],
-            "source": "valve2",
-            "sourceInternal": 1,
-            "target": "syringe2",
-            "targetInternal": 7
-        },
-        {
-            "id": 22,
-            "port": [
-                1,
-                -1
-            ],
-            "source": "syringe2",
-            "sourceInternal": 7,
-            "target": "valve2",
-            "targetInternal": 1
-        },
-        {
-            "id": 23,
-            "port": [
-                1,
-                0
-            ],
-            "source": "valve2",
-            "sourceInternal": 1,
-            "target": "intermediate1",
-            "targetInternal": 8
-        },
-        {
-            "id": 24,
-            "port": [
-                1,
-                0
-            ],
-            "source": "intermediate1",
-            "sourceInternal": 8,
-            "target": "valve2",
-            "targetInternal": 1
-        },
-        {
-            "id": 25,
-            "port": [
-                1,
-                1
-            ],
-            "source": "valve2",
-            "sourceInternal": 1,
-            "target": "products1",
-            "targetInternal": 9
-        },
-        {
-            "id": 26,
-            "port": [
-                1,
-                1
-            ],
-            "source": "products1",
-            "sourceInternal": 9,
-            "target": "valve2",
-            "targetInternal": 1
         }
     ],
     "nodes": [
@@ -197,93 +54,25 @@
             "type": "valve"
         },
         {
-            "class": "SelectorValve",
-            "id": "valve2",
+            "Contents": "empty",
+            "Current volume": "0",
+            "Maximum volume": "250",
+            "Name": "flask1",
+            "class": "FBFlask",
+            "id": "flask1",
             "internalId": 1,
-            "name": "valve2",
-            "type": "valve"
+            "name": "flask1",
+            "type": "flask"
         },
         {
-            "Contents": "DCM",
-            "Current volume": "50",
-            "Maximum volume": "100",
-            "Name": "reactants1",
+            "Contents": "empty",
+            "Current volume": "0",
+            "Maximum volume": "400",
+            "Name": "flask2",
             "class": "FBFlask",
-            "id": "reactants1",
+            "id": "flask2",
             "internalId": 2,
-            "name": "reactants1",
-            "type": "flask"
-        },
-        {
-            "Contents": "HCL",
-            "Current volume": "25",
-            "Maximum volume": "100",
-            "Name": "reactants2",
-            "class": "FBFlask",
-            "id": "reactants2",
-            "internalId": 3,
-            "name": "reactants2",
-            "type": "flask"
-        },
-        {
-            "Contents": "Water",
-            "Current volume": "50",
-            "Maximum volume": "100",
-            "Name": "solvent1",
-            "class": "FBFlask",
-            "id": "solvent1",
-            "internalId": 4,
-            "name": "solvent1",
-            "type": "flask"
-        },
-        {
-            "Current volume": "0",
-            "Maximum volume": "100",
-            "Name": "waste1",
-            "class": "FBFlask",
-            "id": "waste1",
-            "internalId": 5,
-            "name": "waste1",
-            "type": "waste"
-        },
-        {
-            "Current volume": "0",
-            "Maximum volume": "10",
-            "class": "SyringePump",
-            "id": "syringe1",
-            "internalId": 6,
-            "name": "syringe1",
-            "type": "syringe"
-        },
-        {
-            "Current volume": "0",
-            "Maximum volume": "10",
-            "class": "SyringePump",
-            "id": "syringe2",
-            "internalId": 7,
-            "name": "syringe2",
-            "type": "syringe"
-        },
-        {
-            "Contents": "empty",
-            "Current volume": "0",
-            "Maximum volume": "100",
-            "Name": "intermediate1",
-            "class": "FBFlask",
-            "id": "intermediate1",
-            "internalId": 8,
-            "name": "intermediate1",
-            "type": "flask"
-        },
-        {
-            "Contents": "empty",
-            "Current volume": "0",
-            "Maximum volume": "100",
-            "Name": "products1",
-            "class": "FBFlask",
-            "id": "products1",
-            "internalId": 9,
-            "name": "products1",
+            "name": "flask2",
             "type": "flask"
         }
     ]

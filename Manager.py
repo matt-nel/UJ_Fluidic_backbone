@@ -40,7 +40,7 @@ class Manager(Thread):
         self.syringes = {}
         self.reactors = {}
         self.flasks = {}
-        self.modules = ['Manager']
+        self.modules = ['Manager', 'gui']
         # list of all connected modules
         self.populate_modules()
         self.graph = load_graph(graph_config)
@@ -205,7 +205,7 @@ class Manager(Thread):
 
     def command_gui(self, command, parameters):
         if command == "write":
-            self.gui_main.write_message(parameters)
+            self.gui_main.write_message(parameters['message'])
 
     def command_syringe(self, name, command, parameters):
         try:
@@ -247,26 +247,26 @@ class Manager(Thread):
             valve_thread = Thread(target=self.valves[name].move_to_pos, name=name, args=(command,))
             valve_thread.start()
             self.threads.append(valve_thread)
-            if parameters['wait']:
-                self.wait_until_ready(self.valves[name])
-            return True
         elif command == 'zero':
             valve_thread = Thread(target=self.valves[name].zero, name=name, args=())
             valve_thread.start()
             self.threads.append(valve_thread)
-            if parameters['wait']:
-                self.wait_until_ready(self.valves[name])
         elif command == 'jog':
             direction = parameters['direction']
             steps = parameters['steps']
-            valve_thread=Thread(target=self.valves[name].jog, name=name, args=(steps, direction))
+            valve_thread = Thread(target=self.valves[name].jog, name=name, args=(steps, direction))
             valve_thread.start()
             self.threads.append(valve_thread)
-            if parameters['wait']:
-                self.wait_until_ready(self.valves[name])
+        elif command == 'he_sens':
+            valve_thread = Thread(target=self.valves[name].he_read, name=name)
+            valve_thread.start()
+            self.threads.append(valve_thread)
         else:
-            self.gui_main.write_message(f"{command} is not a valid port")
+            self.gui_main.write_message(f"{command} is not a valid command")
             return False
+        if parameters['wait']:
+            self.wait_until_ready(self.valves[name])
+        return True
 
     @staticmethod
     def wait_until_ready(self, obj):

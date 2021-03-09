@@ -14,7 +14,8 @@ class FluidicBackboneUI:
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background='SteelBlue2')
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
-        self.fonts = {'default': ('Verdana', 16)}
+        self.direct_flag = True
+        self.fonts = {'buttons': ('Verdana', 16), 'labels': ('Verdana', 16), 'default': ('Verdana', 16)}
 
         icon = tkinter.PhotoImage(file=os.path.join(os.path.dirname(__file__), 'Syringe.png'))
         self.primary.iconphoto(True, icon)
@@ -42,7 +43,6 @@ class FluidicBackboneUI:
         self.log_frame.grid(row=0, column=3, padx=5, pady=10)
         self.button_frame.grid(row=0, column=0, padx=5, pady=10)
         self.log.grid(row=14, column=0)
-        self.fonts = {'buttons': ('Verdana', 16), 'labels': ('Verdana', 16), 'default': ('Verdana', 16)}
         self.manager.start()
 
     def populate_syringes(self, syringe_name):
@@ -207,52 +207,69 @@ class FluidicBackboneUI:
         jog_button.grid(row=5, column=1)
         close_button.grid(row=5, column=2)
 
-    # todo add jog valve menu
-
     def move_valve(self, valve_name, port_no):
         command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': port_no, 'parameters': {'wait': False}}
         self.send_command(command_dict)
 
     def jog_valve(self, valve_name, valve_print_name):
-        command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
-                        "parameters": {'steps': 0, 'direction': 'cw', 'wait': False}}
-
-        def change_steps(steps):
-            command_dict['parameters']['steps'] = steps
+        def check_direction():
+            if self.direct_flag:
+                dir_str = 'cw'
+            else:
+                dir_str = 'cc'
+            return dir_str
 
         def change_direction(direction):
             if direction:
-                command_dict["parameters"]['direction'] = 'cw'
+                self.direct_flag = True
             else:
-                command_dict["parameters"]['direction'] = 'cc'
+                self.direct_flag = False
 
         def zero_command():
             zero_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'zero',
                             "parameters": {'wait': False}}
             self.send_command(zero_dict)
 
+        def read_sens():
+            read_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'he_sens',
+                            "parameters": {'wait': False}}
+            self.send_command(read_dict)
+
+        def move(custom, steps):
+            if custom:
+                nr_steps = int(steps_entry.get())
+                cust_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
+                             "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
+                self.send_command(cust_dict)
+            else:
+                nr_steps = steps
+                command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
+                                "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
+                self.send_command(command_dict)
+
         b_font = self.fonts['default']
         jog_popup = tkinter.Toplevel(self.primary)
         jog_popup.title('Jog ' + valve_print_name)
-        five_butt = tkinter.Button(jog_popup, text='5 steps', font=b_font, bg='teal', fg='white', command=lambda: change_steps(5))
-        ft_butt = tkinter.Button(jog_popup, text='40 steps', font=b_font, bg='teal', fg='white',
-                                   command=lambda: change_steps(40))
-        p_butt = tkinter.Button(jog_popup, text='320 steps', font=b_font, bg='teal', fg='white', command=lambda: change_steps(320))
+        steps_label = tkinter.Label(jog_popup, text='Steps to move:')
+        steps_entry = tkinter.Entry(jog_popup)
+        cust_move_butt = tkinter.Button(jog_popup, text='Custom move', font=b_font, bg='teal', fg='white', command= lambda: move(True, 0))
+        p_butt = tkinter.Button(jog_popup, text='320 steps', font=b_font, bg='teal', fg='white', command=lambda: move(False, 700))
         cw_butt = tkinter.Button(jog_popup, text='Direction: CW', font=b_font, bg='teal', fg='white', command=lambda: change_direction(True))
         cc_butt = tkinter.Button(jog_popup, text='Direction: CC', font=b_font, bg='teal', fg='white', command=lambda: change_direction(False))
         zero_butt = tkinter.Button(jog_popup, text='Set pos 0', font=b_font, bg='teal', fg='white',
                                    command=zero_command)
-        jog_butt = tkinter.Button(jog_popup, text='Go', font=b_font, bg='teal', fg='white', command=lambda: self.send_command(command_dict))
+        he_butt = tkinter.Button(jog_popup, text='Read HE sensor', font=b_font, bg='teal', fg='white', command= read_sens)
         close_button = tkinter.Button(jog_popup, text='Close', font=b_font, bg='tomato2', fg='white', command=jog_popup.destroy)
 
-        five_butt.grid(row=0)
-        ft_butt.grid(row=1)
+        steps_label.grid(row=0)
+        steps_entry.grid(row=1)
+        cust_move_butt.grid(row=1, column=1)
         p_butt.grid(row=2)
         cw_butt.grid(row=3, column=0)
         cc_butt.grid(row=3, column=1)
         zero_butt.grid(row=4)
-        jog_butt.grid(row=5, column=0)
-        close_button.grid(row=5, column=1)
+        he_butt.grid(row=5)
+        close_button.grid(row=6, column=1)
 
     def send_command(self, command_dict):
         self.manager.q.put(command_dict)

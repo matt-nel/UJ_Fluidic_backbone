@@ -3,30 +3,11 @@
         "AR1": {
             "command_id": "AR1"
         },
-        "AR2": {
-            "command_id": "AR2"
-        },
-        "ENE0": {
-            "command_id": "ENE0"
-        },
         "ENX": {
             "command_id": "ENX"
         },
         "ENY": {
             "command_id": "ENY"
-        },
-        "ENZ": {
-            "command_id": "ENZ"
-        },
-        "stepperE0": {
-            "command_id": "STPE0",
-            "config": {
-                "acceleration": 1000,
-                "enabled_acceleration": false,
-                "max_speed": 10000,
-                "speed": 100,
-                "steps_per_rev": 3200
-            }
         },
         "stepperX": {
             "command_id": "STPX",
@@ -45,16 +26,6 @@
                 "enabled_acceleration": false,
                 "max_speed": 10000,
                 "speed": 1000,
-                "steps_per_rev": 3200
-            }
-        },
-        "stepperZ": {
-            "command_id": "STPZ",
-            "config": {
-                "acceleration": 1000,
-                "enabled_acceleration": false,
-                "max_speed": 10000,
-                "speed": 100,
                 "steps_per_rev": 3200
             }
         }

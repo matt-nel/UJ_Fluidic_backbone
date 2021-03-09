@@ -39,6 +39,10 @@ class Module:
                 he_sens = getattr(cmduino, assoc_devices[item]["cmd_id"])
                 self.he_sensors.append(Device(he_sens, manager.serial_lock))
 
+    def write_to_gui(self, message):
+        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'parameters': {'message': message}}
+        self.manager.q.put(command_dict)
+
 
 class FBFlask:
     """
