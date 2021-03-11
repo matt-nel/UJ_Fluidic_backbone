@@ -20,6 +20,7 @@ class StepperMotor(Device):
         self.running_speed = device_config['speed']
         self.max_speed = device_config['max_speed']
         self.acceleration = device_config["acceleration"]
+        self.reversed_direction = False
         self.position = 0
         self.stopped = False
         self.en_motor()
@@ -69,13 +70,15 @@ class StepperMotor(Device):
             print("That is not a valid max speed")
             return False
 
-    def revert_direction(self, direction):
+    def reverse_direction(self, reverse):
         """
-        :param direction: True - clockwise, False, anticlockwise
+        :param reverse: True - clockwise, False, anticlockwise
         :return:
         """
-        with self.serial_lock:
-            self.cmd_stepper.revert_direction(direction)
+        if reverse != self.reversed_direction:
+            with self.serial_lock:
+                self.cmd_stepper.revert_direction(reverse)
+            self.reversed_direction = reverse
 
     def get_current_position(self):
         with self.serial_lock:

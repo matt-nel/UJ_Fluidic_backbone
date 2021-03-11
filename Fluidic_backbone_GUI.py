@@ -1,26 +1,26 @@
 import os
-import tkinter
+import tkinter as tk
 from Manager import Manager
 
 
 class FluidicBackboneUI:
-    def __init__(self, primary, simulation):
+    def __init__(self, tk_root, simulation):
         """
-        :param primary: root TK window object
+        :param tk_root: root TK window object
         :param simulation: Bool to run the software in simulation mode
         """
         self.manager = Manager(self, simulation)
-        self.primary = primary
+        self.primary = tk_root
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background='SteelBlue2')
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
         self.direct_flag = True
         self.fonts = {'buttons': ('Verdana', 16), 'labels': ('Verdana', 16), 'default': ('Verdana', 16)}
 
-        icon = tkinter.PhotoImage(file=os.path.join(os.path.dirname(__file__), 'Syringe.png'))
+        icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), 'Syringe.png'))
         self.primary.iconphoto(True, icon)
 
-        self.button_frame = tkinter.Frame(self.primary, borderwidth=5)
+        self.button_frame = tk.Frame(self.primary, borderwidth=5)
 
         self.syringe_labels = []
         self.syringe_buttons = []
@@ -37,8 +37,8 @@ class FluidicBackboneUI:
         for valve in self.manager.valves.keys():
             self.populate_valves(valve)
 
-        self.log_frame = tkinter.Frame(self.primary)
-        self.log = tkinter.Text(self.log_frame, state='disabled', width=80, height=24, wrap='none', borderwidth=5)
+        self.log_frame = tk.Frame(self.primary)
+        self.log = tk.Text(self.log_frame, state='disabled', width=80, height=24, wrap='none', borderwidth=5)
 
         self.log_frame.grid(row=0, column=3, padx=5, pady=10)
         self.button_frame.grid(row=0, column=0, padx=5, pady=10)
@@ -53,26 +53,20 @@ class FluidicBackboneUI:
         """
         syringe_no = int(syringe_name[-1]) - 1
         syringe_print_name = "Syringe " + str(syringe_no + 1)
-        self.syringe_labels.append(tkinter.Label(self.button_frame, text=syringe_print_name, font=self.fonts['default'],
+        self.syringe_labels.append(tk.Label(self.button_frame, text=syringe_print_name, font=self.fonts['default'],
                                                  bg='white'))
         self.syringe_labels[syringe_no].grid(row=0, column=syringe_no+1)
 
-        home_button = tkinter.Button(self.button_frame, text='Home Syringe', font=self.fonts['default'], padx=5,
-                                      bg='teal', fg='white',
-                                      command=lambda: self.home_syringe(syringe_name, syringe_print_name))
-        jog_button = tkinter.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='teal', fg='white',
-                                    command=lambda: self.jog_syringe(syringe_name, syringe_print_name))
+        home_button = tk.Button(self.button_frame, text='Home Syringe', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.home_syringe(syringe_name, syringe_print_name))
+        jog_button = tk.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.jog_syringe(syringe_name, syringe_print_name))
 
         home_button.grid(row=1, column=syringe_no+1)
         jog_button.grid(row=2, column=syringe_no + 1)
 
-        asp_button = tkinter.Button(self.button_frame, text='Aspirate', font=self.fonts['default'], padx=5, bg='teal',
-                                      fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, True))
+        asp_button = tk.Button(self.button_frame, text='Aspirate', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, True))
         asp_button.grid(row=3, column=syringe_no+1, columnspan=1)
 
-        with_button = tkinter.Button(self.button_frame, text='Withdraw', font=self.fonts['default'], padx=5, bg='teal',
-                                      fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, False)
-                                      )
+        with_button = tk.Button(self.button_frame, text='Withdraw', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, False))
         with_button.grid(row=4, column=syringe_no+1)
 
     def populate_valves(self, valve_name):
@@ -84,20 +78,17 @@ class FluidicBackboneUI:
         ports = []
         valve_no = int(valve_name[-1]) - 1
         valve_print_name = "Valve " + str(valve_no+1)
-        self.valves_labels.append(tkinter.Label(self.button_frame, text=valve_print_name, font=self.fonts['default'],
+        self.valves_labels.append(tk.Label(self.button_frame, text=valve_print_name, font=self.fonts['default'],
                                                 bg='white'))
         self.valves_labels[valve_no].grid(row=5, column=valve_no+1, columnspan=1)
 
-        ports.append(tkinter.Button(self.button_frame, text='Home', font=self.fonts['default'], padx=5, bg='green',
-                                    fg='white', command=lambda: self.move_valve(valve_name, 0)))
+        ports.append(tk.Button(self.button_frame, text='Home', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.move_valve(valve_name, 0)))
         ports[0].grid(row=7, column=valve_no+1)
-        self.valves_buttons.append(tkinter.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.jog_valve(valve_name, valve_print_name)))
+        self.valves_buttons.append(tk.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.jog_valve(valve_name, valve_print_name)))
         self.valves_buttons[-1].grid(row=6, column=valve_no+1)
 
         for port_no in range(1, 10):
-            ports.append(tkinter.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5,
-                                        bg='teal', fg='white',
-                                        command=lambda i=port_no: self.move_valve(valve_name, i)))
+            ports.append(tk.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda i=port_no: self.move_valve(valve_name, i)))
             ports[port_no].grid(row=8+port_no, column=valve_no+1, columnspan=1)
 
         # Append list of ports corresponding to valve_no to valves_buttons
@@ -110,44 +101,41 @@ class FluidicBackboneUI:
             item[port_no].configure(bg='teal')
         self.valves_buttons[valve][port_no].configure(bg='OrangeRed2')
 
-    def asp_with(self, syringe_name, syringe_print_name, direction):
+    def asp_with(self, syringe_name, syringe_print_name, withdraw):
         """
         Menu to control syringe pumps
         :param syringe_print_name: name to print in messages and logs
         :param syringe_name: syringe to be addressed
-        :param direction: boolean, True if aspirating syringe, False if withdrawing syringe
+        :param withdraw: boolean, True if aspirating syringe, False if withdrawing syringe
         :return: None
         """
 
-        def asp_command(fb_gui, syr_name):
-            command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': command,
-                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp, 'wait': False}}
+        def asp_command(syr_name, direction):
+            command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move',
+                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp, 'withdraw': direction, 'wait': False}}
             asp_menu.destroy()
-            fb_gui.send_command(command_dict)
+            self.send_command(command_dict)
 
-        if direction:
+        if withdraw:
             button_text = menu_title = "Aspirate"
-            command = "aspirate"
+            wd = True
         else:
             button_text = menu_title = "Withdraw"
-            command = "withdraw"
-        asp_menu = tkinter.Toplevel(self.primary)
+            wd = False
+
+        asp_menu = tk.Toplevel(self.primary)
         asp_menu.title(menu_title + ' ' + syringe_print_name)
         val_vol = self.primary.register(self.validate_vol)
         val_flow = self.primary.register(self.validate_flow)
 
-        vol_label = tkinter.Label(asp_menu, text='Volume to ' + command + ':')
-        vol_entry = tkinter.Entry(asp_menu, validate='key', validatecommand=(val_vol, '%P'), fg='black', bg='white',
-                                  width=50)
+        vol_label = tk.Label(asp_menu, text='Volume to ' + button_text.lower() + ':')
+        vol_entry = tk.Entry(asp_menu, validate='key', validatecommand=(val_vol, '%P'), fg='black', bg='white', width=50)
 
-        flow_label = tkinter.Label(asp_menu, text='Flow rate in \u03BCL/min:')
-        flow_entry = tkinter.Entry(asp_menu, validate='key', validatecommand=(val_flow, '%P'), fg='black', bg='white',
-                                   width=50)
+        flow_label = tk.Label(asp_menu, text='Flow rate in \u03BCL/min:')
+        flow_entry = tk.Entry(asp_menu, validate='key', validatecommand=(val_flow, '%P'), fg='black', bg='white', width=50)
 
-        go_button = tkinter.Button(asp_menu, text=button_text, font=self.fonts['default'], bg='teal', fg='white',
-                                   command=lambda: asp_command(self, syringe_name))
-        cancel_button = tkinter.Button(asp_menu, text='Cancel', font=self.fonts['default'], bg='tomato2',
-                                       fg='white', command=asp_menu.destroy)
+        go_button = tk.Button(asp_menu, text=button_text, font=self.fonts['default'], bg='teal', fg='white', command=lambda: asp_command(syringe_name, wd))
+        cancel_button = tk.Button(asp_menu, text='Cancel', font=self.fonts['default'], bg='tomato2', fg='white', command=asp_menu.destroy)
 
         vol_label.grid(row=0, column=1)
         vol_entry.grid(row=0, column=5)
@@ -164,48 +152,58 @@ class FluidicBackboneUI:
             home_popup.destroy()
             fb_gui.send_command(command_dict)
 
-        home_popup = tkinter.Toplevel(self.primary)
+        home_popup = tk.Toplevel(self.primary)
         home_popup.title('Home ' + syringe_print_name)
-        warning_label = tkinter.Label(home_popup, text='Homing the syringe will empty its contents, are you sure?')
-        yes_button = tkinter.Button(home_popup, text='Home', font=self.fonts['default'], bg='teal', fg='white',
-                                    command=lambda: home_command(self))
-        no_button = tkinter.Button(home_popup, text='Cancel', font=self.fonts['default'], bg='tomato2', fg='white',
-                                   command=home_popup.destroy)
+        warning_label = tk.Label(home_popup, text='Homing the syringe will empty its contents, are you sure?')
+        yes_button = tk.Button(home_popup, text='Home', font=self.fonts['default'], bg='teal', fg='white', command=lambda: home_command(self))
+        no_button = tk.Button(home_popup, text='Cancel', font=self.fonts['default'], bg='tomato2', fg='white', command=home_popup.destroy)
         warning_label.grid(row=0, column=1, columnspan=5)
         yes_button.grid(row=2, column=1)
         no_button.grid(row=2, column=5)
 
     def jog_syringe(self, syringe_name, syringe_print_name):
         command_dict = {'mod_type': 'syringe', 'module_name': syringe_name, 'command': 'jog',
-                        "parameters": {'volume': 0.0, 'flow_rate': 9999, 'steps': 0, 'direction': 'aspirate', 'wait': False}}
+                        "parameters": {'volume': 0.0, 'flow_rate': 9999, 'steps': 0, 'withdraw': False, 'wait': False}}
         # todo: add jog speed setting
 
         def change_steps(steps):
             command_dict['parameters']['steps'] = steps
 
-        def change_direction(direction):
-            if direction:
-                command_dict["parameters"]['direction'] = 'aspirate'
-            else:
-                command_dict["parameters"]['direction'] = 'withdraw'
+        def setpos():
+            new_pos = set_pos.get()
+            zero_dict = {'mod_type': 'syringe', 'module_name': syringe_name, 'command': 'setpos',
+                         "parameters": {'volume': 0.0, 'flow_rate': 9999, 'pos': new_pos, 'wait': False}}
+            self.send_command(zero_dict)
 
-        jog_popup = tkinter.Toplevel(self.primary)
+        def change_direction(withdraw):
+            if withdraw:
+                command_dict["parameters"]['withdraw'] = True
+            else:
+                command_dict["parameters"]['withdraw'] = False
+
+        jog_popup = tk.Toplevel(self.primary)
         jog_popup.title('Jog' + syringe_print_name)
-        fh_button = tkinter.Button(jog_popup, text='500 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(500))
-        single_rev_button = tkinter.Button(jog_popup, text='3200 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(3200))
-        db_rev_button = tkinter.Button(jog_popup, text='6400 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(6400))
-        fwd_button = tkinter.Button(jog_popup, text='Direction: Aspirate', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_direction(True))
-        rev_button = tkinter.Button(jog_popup, text='Direction: Withdraw', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_direction(False))
-        jog_button = tkinter.Button(jog_popup, text='Go', font=self.fonts['default'], bg='teal', fg='white', command=lambda: self.send_command(command_dict))
-        close_button = tkinter.Button(jog_popup, text='Close', font=self.fonts['default'], bg='tomato2', fg='white', command=jog_popup.destroy)
+        fh_button = tk.Button(jog_popup, text='500 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(500))
+        single_rev_button = tk.Button(jog_popup, text='3200 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(3200))
+        db_rev_button = tk.Button(jog_popup, text='6400 Steps', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_steps(6400))
+        set_pos_label = tk.Label(jog_popup, text='Set syringe position in ml')
+        set_pos = tk.Entry(jog_popup)
+        set_pos_butt = tk.Button(jog_popup, text='set current position', command=setpos)
+        fwd_button = tk.Button(jog_popup, text='Direction: Aspirate', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_direction(False))
+        rev_button = tk.Button(jog_popup, text='Direction: Withdraw', font=self.fonts['default'], bg='teal', fg='white', command=lambda: change_direction(True))
+        jog_button = tk.Button(jog_popup, text='Go', font=self.fonts['default'], bg='teal', fg='white', command=lambda: self.send_command(command_dict))
+        close_button = tk.Button(jog_popup, text='Close', font=self.fonts['default'], bg='tomato2', fg='white', command=jog_popup.destroy)
 
         fh_button.grid(row=0, column=0)
         single_rev_button.grid(row=1, column=0)
         db_rev_button.grid(row=2, column=0)
         fwd_button.grid(row=3, column=0)
         rev_button.grid(row=4, column=0)
-        jog_button.grid(row=5, column=1)
-        close_button.grid(row=5, column=2)
+        set_pos_label.grid(row=5, column=0)
+        set_pos.grid(row=5, column=1)
+        set_pos_butt.grid(row=6)
+        jog_button.grid(row=7, column=1)
+        close_button.grid(row=7, column=2)
 
     def move_valve(self, valve_name, port_no):
         command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': port_no, 'parameters': {'wait': False}}
@@ -232,34 +230,33 @@ class FluidicBackboneUI:
 
         def read_sens():
             read_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'he_sens',
-                            "parameters": {'wait': False}}
+                         "parameters": {'wait': False}}
             self.send_command(read_dict)
 
         def move(custom, steps):
             if custom:
                 nr_steps = int(steps_entry.get())
-                cust_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
-                             "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
-                self.send_command(cust_dict)
+                command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
+                                "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
             else:
                 nr_steps = steps
                 command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
                                 "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
-                self.send_command(command_dict)
+            self.send_command(command_dict)
 
         b_font = self.fonts['default']
-        jog_popup = tkinter.Toplevel(self.primary)
+        jog_popup = tk.Toplevel(self.primary)
         jog_popup.title('Jog ' + valve_print_name)
-        steps_label = tkinter.Label(jog_popup, text='Steps to move:')
-        steps_entry = tkinter.Entry(jog_popup)
-        cust_move_butt = tkinter.Button(jog_popup, text='Custom move', font=b_font, bg='teal', fg='white', command= lambda: move(True, 0))
-        p_butt = tkinter.Button(jog_popup, text='320 steps', font=b_font, bg='teal', fg='white', command=lambda: move(False, 700))
-        cw_butt = tkinter.Button(jog_popup, text='Direction: CW', font=b_font, bg='teal', fg='white', command=lambda: change_direction(True))
-        cc_butt = tkinter.Button(jog_popup, text='Direction: CC', font=b_font, bg='teal', fg='white', command=lambda: change_direction(False))
-        zero_butt = tkinter.Button(jog_popup, text='Set pos 0', font=b_font, bg='teal', fg='white',
+        steps_label = tk.Label(jog_popup, text='Steps to move:')
+        steps_entry = tk.Entry(jog_popup)
+        cust_move_butt = tk.Button(jog_popup, text='Custom move', font=b_font, bg='teal', fg='white', command= lambda: move(True, 0))
+        p_butt = tk.Button(jog_popup, text='1 port', font=b_font, bg='teal', fg='white', command=lambda: move(False, 640))
+        cw_butt = tk.Button(jog_popup, text='Direction: CW', font=b_font, bg='teal', fg='white', command=lambda: change_direction(True))
+        cc_butt = tk.Button(jog_popup, text='Direction: CC', font=b_font, bg='teal', fg='white', command=lambda: change_direction(False))
+        zero_butt = tk.Button(jog_popup, text='Set pos 0', font=b_font, bg='teal', fg='white',
                                    command=zero_command)
-        he_butt = tkinter.Button(jog_popup, text='Read HE sensor', font=b_font, bg='teal', fg='white', command= read_sens)
-        close_button = tkinter.Button(jog_popup, text='Close', font=b_font, bg='tomato2', fg='white', command=jog_popup.destroy)
+        he_butt = tk.Button(jog_popup, text='Read HE sensor', font=b_font, bg='teal', fg='white', command= read_sens)
+        close_button = tk.Button(jog_popup, text='Close', font=b_font, bg='tomato2', fg='white', command=jog_popup.destroy)
 
         steps_label.grid(row=0)
         steps_entry.grid(row=1)
@@ -334,8 +331,8 @@ class FluidicBackboneUI:
 
 
 if __name__ == '__main__':
-    simulation = False
-    primary = tkinter.Tk()
-    fb_gui = FluidicBackboneUI(primary, simulation)
+    sim = False
+    primary = tk.Tk()
+    fb_gui = FluidicBackboneUI(primary, sim)
     primary.protocol('WM_DELETE_WINDOW', fb_gui.end_program)
     primary.mainloop()

@@ -18,7 +18,7 @@
         "mod_config": {
             "linear_stepper": true,
             "screw_pitch": 8,
-            "volume": 5000
+            "volume": 10000
         },
         "mod_type": "syringe",
         "name": "syringe1"

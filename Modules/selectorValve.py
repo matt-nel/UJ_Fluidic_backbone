@@ -20,7 +20,7 @@ class SelectorValve(Module):
         if geared[1] != 'D':
             gear_ratio = float(geared.split(':')[0])
             self.spr *= gear_ratio
-            self.steppers[0].revert_direction(True)
+            self.steppers[0].reverse_direction(True)
             self.geared = True
         else:
             self.geared = False
@@ -79,6 +79,10 @@ class SelectorValve(Module):
                 time.sleep(0.5)
                 home_positions[0].append(stepper.get_current_position())
                 home_positions[1].append(he_sens.analog_read())
+            max_pos = home_positions[1].index(max(home_positions[1]))
+            stepper.move_to(max_pos)
+            stepper.move_steps(3200)
+            stepper.set_current_position(0)
         stepper.set_current_position(0)
         stepper.en_motor()
         stepper.set_running_speed(prev_speed)

@@ -40,7 +40,7 @@ class Module:
                 self.he_sensors.append(Device(he_sens, manager.serial_lock))
 
     def write_to_gui(self, message):
-        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'parameters': {'message': message}}
+        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'message': message, 'parameters': {}}
         self.manager.q.put(command_dict)
 
 
@@ -48,38 +48,36 @@ class FBFlask:
     """
     Class to represent flasks in the fluidic backbone.
     """
-    def __init__(self, module_info):
+    def __init__(self, manager, module_info):
         self.name = module_info['Name']
+        self.manager = manager
         self.contents = module_info['Contents']
         self.contents_hist = []
         self.cur_vol = int(module_info['Current volume'])
         self.max_vol = int(module_info['Maximum volume'])
 
     def change_vol(self, vol):
-        valid, msg = self.check_vol(vol)
-        if valid:
+        if self.check_vol(vol):
             self.cur_vol += vol
             if self.cur_vol == 0:
                 self.contents = 'empty'
-            return True, ''
-        else:
-            return False, msg
+            return True
+        return False
 
     def check_vol(self, vol):
         if self.cur_vol + vol > self.max_vol:
-            return False, f'Max volume of {self.name} would be exceeded'
+            self.write_to_gui(f'Max volume of {self.name} would be exceeded')
+            return False
         elif self.cur_vol + vol < 0:
-            return False, f'{self.contents} in {self.name} would be exhausted'
-        else:
-            return True, ''
+            self.write_to_gui(f'Insufficient {self.contents} in {self.name}')
+            return False
+        return True
 
-    def change_contents(self, new_contents, vol, add_vol=True):
-        self.contents_hist.append(self.contents)
-        self.contents = new_contents
-        if add_vol:
-            valid, msg = self.change_vol(vol)
-            if not valid:
-                return valid, msg
+    def change_contents(self, new_contents, vol):
+        if self.change_vol(vol):
+            self.contents_hist.append(self.contents)
+            self.contents = new_contents
 
-
-
+    def write_to_gui(self, message):
+        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'parameters': {'message': message}}
+        self.manager.q.put(command_dict)
