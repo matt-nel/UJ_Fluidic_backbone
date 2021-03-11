@@ -19,36 +19,31 @@ class SyringePump(Module):
         :param module_info: Dictionary containing IDs of attached devices and their configuration information
         :param cmd_mng: commanduino command manager object
         """
-        # initialises devices connected to module
         self.name = name
         module_config = module_info["mod_config"]
-        # volume of syringe in ul
         self.syr_vol = module_config["volume"]
         self.syr_length = self.syr_lengths[self.syr_vol]
         self.screw_pitch = module_config["screw_pitch"]
         self.position = 0
-        self.syr_contents = {}
-        self.contents_list = []
-        self.set_contents("Empty", 5000)
-        self.withdraw = True
+        self.contents = ['empty', 0]
+        self.contents_history = []
         super(SyringePump, self).__init__(module_info, cmd_mng, manager)
         self.steps_per_rev = self.steppers[0].steps_per_rev
 
-    def set_contents(self, substance, volume):
+    def change_contents(self, substance, vol):
         # Todo set up logger with tracking of volumes dispensed and timestamps
-        self.syr_contents[substance] = volume
-        self.contents_list.append(substance)
+        self.contents = [substance, vol]
+        self.contents_history.append((substance, vol))
 
-    def move_syringe(self, volume, flow_rate, withdraw):
+    def move_syringe(self, parameters):
         """
         Determines the number of steps to send to the manager function for addressing stepper drivers
-        :param withdraw: False - aspirate syringe. True - withdraw syringe
-        :param flow_rate: flow rate in uL/min
-        :param volume: micro litres required to deliver
+        :param : parameters{volume: int, flow_rate: int, withdraw: boolean, target: FBflask, wait: boolean}
         :return:
         """
+        volume, flow_rate, withdraw = parameters['volume'], parameters['flow_rate'], parameters['withdraw']
+        target = parameters['target']
         self.ready = False
-        self.withdraw = withdraw
         speed = (flow_rate * self.steps_per_rev * self.syr_length) / (self.screw_pitch * self.syr_vol * 60)
         # calculate number of steps to send to motor
         volume *= 1000
@@ -57,6 +52,7 @@ class SyringePump(Module):
         move_flag = True
         if withdraw:
             travel = -travel
+            steps = -steps
             if self.position + travel < 0:
                 move_flag = False
         else:
@@ -66,14 +62,18 @@ class SyringePump(Module):
             with self.lock:
                 self.steppers[0].en_motor(True)
                 self.steppers[0].set_running_speed(round(speed))
-                self.steppers[0].revert_direction(withdraw)
                 prev_step_pos = self.steppers[0].get_current_position()
                 prev_position = (prev_step_pos/self.steps_per_rev) * self.screw_pitch
                 self.steppers[0].move_steps(steps)
                 cur_step_pos = self.steppers[0].get_current_position()
                 self.position = (cur_step_pos / self.steps_per_rev) * self.screw_pitch
                 travel = abs(self.position - prev_position)
-                self.syr_contents[self.contents_list[-1]] += self.change_volume(travel)
+                if withdraw and target.contents != self.contents:
+                    self.change_contents(target.contents, self.change_volume(travel, target))
+                else:
+                    self.contents[1] += self.change_volume(travel, target)
+                if self.contents[1] == 0:
+                    self.change_contents('empty', 0)
             self.ready = True
             return True
         self.ready = True
@@ -86,16 +86,20 @@ class SyringePump(Module):
         self.position = 0.0
         self.ready = True
 
-    def jog(self, steps, direction):
+    def jog(self, steps, withdraw):
         self.ready = False
+        if withdraw:
+            steps = -steps
         with self.lock:
             self.steppers[0].en_motor(True)
-            self.steppers[0].revert_direction(direction)
             self.steppers[0].move_steps(steps)
         self.ready = True
 
-    def change_volume(self, travel):
+    def change_volume(self, travel, target):
         vol_change = ((travel / self.syr_length) * self.syr_vol)
-        if self.withdraw:
-            vol_change = -vol_change
+        target.change_volume(vol_change)
         return vol_change
+
+    def set_pos(self, position):
+        # todo add conversion to mm
+        self.position = int(position)

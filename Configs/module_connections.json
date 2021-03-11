@@ -1,7 +1,7 @@
 {
     "links": [
         {
-            "id": 3,
+            "id": 4,
             "port": [
                 0,
                 0
@@ -12,7 +12,7 @@
             "targetInternal": 1
         },
         {
-            "id": 4,
+            "id": 5,
             "port": [
                 0,
                 0
@@ -23,7 +23,7 @@
             "targetInternal": 0
         },
         {
-            "id": 5,
+            "id": 6,
             "port": [
                 0,
                 1
@@ -34,13 +34,35 @@
             "targetInternal": 2
         },
         {
-            "id": 6,
+            "id": 7,
             "port": [
                 0,
                 1
             ],
             "source": "flask2",
             "sourceInternal": 2,
+            "target": "valve1",
+            "targetInternal": 0
+        },
+        {
+            "id": 8,
+            "port": [
+                0,
+                -1
+            ],
+            "source": "valve1",
+            "sourceInternal": 0,
+            "target": "syringe1",
+            "targetInternal": 3
+        },
+        {
+            "id": 9,
+            "port": [
+                0,
+                -1
+            ],
+            "source": "syringe1",
+            "sourceInternal": 3,
             "target": "valve1",
             "targetInternal": 0
         }
@@ -54,9 +76,9 @@
             "type": "valve"
         },
         {
-            "Contents": "empty",
-            "Current volume": "0",
-            "Maximum volume": "250",
+            "Contents": "water",
+            "Current volume": "200",
+            "Maximum volume": "400",
             "Name": "flask1",
             "class": "FBFlask",
             "id": "flask1",
@@ -74,6 +96,16 @@
             "internalId": 2,
             "name": "flask2",
             "type": "flask"
+        },
+        {
+            "Contents": "empty",
+            "Current volume": "0",
+            "Maximum volume": "10",
+            "class": "SyringePump",
+            "id": "syringe1",
+            "internalId": 3,
+            "name": "syringe1",
+            "type": "syringe"
         }
     ]
 }

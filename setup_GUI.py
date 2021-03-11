@@ -294,13 +294,13 @@ class SetupGUI:
             tkinter.Radiobutton(syringe_setup, text=option, variable=endstop_connector, value=option).grid(row=i, column=0)
             i += 1
         endstop_connector.set(self.find_unselected(options, selected))
-        volume_label = tkinter.Label(syringe_setup, text='What volume of syringe is currently used? (select 0 for empty)', font=font)
+        volume_label = tkinter.Label(syringe_setup, text='What volume of syringe is currently used?', font=font)
         volume_label.grid(row=i, column=0)
         i += 1
         for volume in self.syringe_volumes:
             tkinter.Radiobutton(syringe_setup, text=str(volume), variable=syringe_volume, value=volume).grid(row=i, column=0)
             i += 1
-        syringe_volume.set('5')
+        syringe_volume.set('10')
         accept_button = tkinter.Button(syringe_setup, text='Accept', fg='black', bg='lawn green', command=accept)
         cancel_button = tkinter.Button(syringe_setup, text='Cancel', fg='black', bg='tomato2', command=syringe_setup.destroy)
         accept_button.grid(row=i, column=0)
@@ -473,6 +473,7 @@ class SetupGUI:
                     node_config.name = variable
                     node_config.mod_type = 'syringe'
                     node_config.class_type = 'SyringePump'
+                    fields += ['Contents']
                     node_config.dual = True
                 elif 'valve' in variable:
                     node_config.name = variable
