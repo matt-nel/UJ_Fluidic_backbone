@@ -102,4 +102,5 @@ class SyringePump(Module):
 
     def set_pos(self, position):
         # todo add conversion to mm
-        self.position = int(position)
+        vol = float(position)*1000
+        self.position = self.syr_length - (vol/self.syr_vol)*self.syr_length

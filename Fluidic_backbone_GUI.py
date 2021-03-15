@@ -276,7 +276,7 @@ class FluidicBackboneUI:
                 self.write_message(f'Sent command to zero {name}')
             else:
                 self.write_message(f'Sent command to move {name} to port {command}')
-        elif name == 'syringe':
+        elif command_dict['mod_type'] == 'syringe':
             if command == 'home' or command == 'jog':
                 message = f'Sent command to {name} to {command}'
             else:

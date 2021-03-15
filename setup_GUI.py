@@ -473,7 +473,7 @@ class SetupGUI:
                     node_config.name = variable
                     node_config.mod_type = 'syringe'
                     node_config.class_type = 'SyringePump'
-                    fields += ['Contents']
+                    fields += ['Minimum volume', 'Contents']
                     node_config.dual = True
                 elif 'valve' in variable:
                     node_config.name = variable

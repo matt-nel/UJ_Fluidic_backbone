@@ -10,6 +10,7 @@ class SelectorValve(Module):
         super(SelectorValve, self).__init__(module_info, cmduino, manager)
         # todo add ability to accommodate variable number of ports
         self.pos_dict = {0: 0, 1: 320, 2: 640, 3: 960, 4: 1280, 5: 1600, 6: 1920, 7: 2240, 8: 2560, 9: 2880}
+        self.current_port = None
         self.homing_spd = 5000
         self.check_spd = 3000
         self.pos_threshold = 0
@@ -29,6 +30,7 @@ class SelectorValve(Module):
                 self.pos_dict[position] = (self.spr/10)*position
 
     def move_to_pos(self, position):
+        # todo add separate home and 0 commands
         if position == 0:
             self.home_valve()
         else:
@@ -42,6 +44,7 @@ class SelectorValve(Module):
             cur_pos = stepper.get_current_position()
             if cur_pos != self.pos_dict[position]:
                 self.pos_dict[position] = cur_pos
+            self.current_port = position
             self.ready = True
 
     def jog(self, steps, direction):
@@ -63,7 +66,6 @@ class SelectorValve(Module):
             home_positions[0].append(stepper.get_current_position())
             home_positions[1].append(he_sens.analog_read())
             spr = stepper.steps_per_rev
-            # get rough positions
             for i in range(0, 20):
                 stepper.move_steps(spr/20)
                 home_positions[0].append(stepper.get_current_position())
@@ -72,16 +74,26 @@ class SelectorValve(Module):
             # index to 60 steps away from min pos
             stepper.move_to(home_positions[0][min_pos] - 60)
             # check for true min within 13.5 degree window
-            #self.check_pos(8, False)
+            self.check_pos(8, False)
         else:
             for i in range(10):
                 stepper.move_steps(self.spr/10)
                 time.sleep(0.5)
                 home_positions[0].append(stepper.get_current_position())
                 home_positions[1].append(he_sens.analog_read())
-            max_pos = home_positions[1].index(max(home_positions[1]))
+            max_reading = max(home_positions[1])
+            while max_reading < 600:
+                home_positions = [[], []]
+                stepper.move_steps(self.spr/20)
+                for i in range(10):
+                    stepper.move_steps(self.spr/10)
+                    time.sleep(0.5)
+                    home_positions[0].append(stepper.get_current_position())
+                    home_positions[1].append(he_sens.analog_read())
+                max_reading = max(home_positions[1])
+            max_pos = home_positions[1].index(max_reading)
             stepper.move_to(max_pos)
-            stepper.move_steps(3200)
+            stepper.move_to(self.pos_dict[5])
             stepper.set_current_position(0)
         stepper.set_current_position(0)
         stepper.en_motor()
