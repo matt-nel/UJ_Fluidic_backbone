@@ -32,7 +32,7 @@ class SyringePump(Module):
 
     def change_contents(self, substance, vol):
         # Todo set up logger with tracking of volumes dispensed and timestamps
-        self.contents = [substance, vol]
+        self.contents = [substance, float(vol)]
         self.contents_history.append((substance, vol))
 
     def move_syringe(self, parameters):
@@ -101,6 +101,5 @@ class SyringePump(Module):
         return vol_change
 
     def set_pos(self, position):
-        # todo add conversion to mm
         vol = float(position)*1000
         self.position = self.syr_length - (vol/self.syr_vol)*self.syr_length

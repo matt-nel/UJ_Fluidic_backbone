@@ -63,10 +63,10 @@ class FluidicBackboneUI:
         home_button.grid(row=1, column=syringe_no+1)
         jog_button.grid(row=2, column=syringe_no + 1)
 
-        asp_button = tk.Button(self.button_frame, text='Aspirate', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, True))
+        asp_button = tk.Button(self.button_frame, text='Aspirate', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, False))
         asp_button.grid(row=3, column=syringe_no+1, columnspan=1)
 
-        with_button = tk.Button(self.button_frame, text='Withdraw', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, False))
+        with_button = tk.Button(self.button_frame, text='Withdraw', font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda: self.asp_with(syringe_name, syringe_print_name, True))
         with_button.grid(row=4, column=syringe_no+1)
 
     def populate_valves(self, valve_name):
@@ -82,12 +82,12 @@ class FluidicBackboneUI:
                                                 bg='white'))
         self.valves_labels[valve_no].grid(row=5, column=valve_no+1, columnspan=1)
 
-        ports.append(tk.Button(self.button_frame, text='Home', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.move_valve(valve_name, 0)))
+        ports.append(tk.Button(self.button_frame, text='Home', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.move_valve(valve_name, 'home')))
         ports[0].grid(row=7, column=valve_no+1)
         self.valves_buttons.append(tk.Button(self.button_frame, text='Jog', font=self.fonts['default'], padx=5, bg='green', fg='white', command=lambda: self.jog_valve(valve_name, valve_print_name)))
         self.valves_buttons[-1].grid(row=6, column=valve_no+1)
 
-        for port_no in range(1, 10):
+        for port_no in range(1, 11):
             ports.append(tk.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5, bg='teal', fg='white', command=lambda i=port_no: self.move_valve(valve_name, i)))
             ports[port_no].grid(row=8+port_no, column=valve_no+1, columnspan=1)
 
@@ -112,15 +112,15 @@ class FluidicBackboneUI:
 
         def asp_command(syr_name, direction):
             command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move',
-                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp, 'withdraw': direction, 'wait': False}}
+                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp, 'withdraw': direction, 'wait': False, 'target': None}}
             asp_menu.destroy()
             self.send_command(command_dict)
 
         if withdraw:
-            button_text = menu_title = "Aspirate"
+            button_text = menu_title = "Withdraw"
             wd = True
         else:
-            button_text = menu_title = "Withdraw"
+            button_text = menu_title = "Aspirate"
             wd = False
 
         asp_menu = tk.Toplevel(self.primary)
@@ -128,7 +128,7 @@ class FluidicBackboneUI:
         val_vol = self.primary.register(self.validate_vol)
         val_flow = self.primary.register(self.validate_flow)
 
-        vol_label = tk.Label(asp_menu, text='Volume to ' + button_text.lower() + ':')
+        vol_label = tk.Label(asp_menu, text='Volume to ' + button_text.lower() + 'in ml:')
         vol_entry = tk.Entry(asp_menu, validate='key', validatecommand=(val_vol, '%P'), fg='black', bg='white', width=50)
 
         flow_label = tk.Label(asp_menu, text='Flow rate in \u03BCL/min:')
@@ -271,17 +271,25 @@ class FluidicBackboneUI:
     def send_command(self, command_dict):
         self.manager.q.put(command_dict)
         name, command = command_dict['module_name'], command_dict['command']
+        params = command_dict['parameters']
         if command_dict['mod_type'] == 'valve':
             if command == 'zero':
                 self.write_message(f'Sent command to zero {name}')
-            else:
-                self.write_message(f'Sent command to move {name} to port {command}')
+            elif command == 'home':
+                self.write_message(f'Sent command to home {name}')
         elif command_dict['mod_type'] == 'syringe':
             if command == 'home' or command == 'jog':
                 message = f'Sent command to {name} to {command}'
-            else:
+            elif command == 'move':
                 vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
-                message = f'Sent command to {name} to {command} {vol}ml at {flow} \u03BCL/min'
+                if params['withdraw']:
+                    message = f'Sent command to {name} to withdraw {vol}ml at {flow} \u03BCL/min'
+                else:
+                    message = f'Sent command to {name} to aspirate {vol}ml at {flow} \u03BCL/min'
+            elif command == 'setpos':
+                message = f"Sent command to {name} to set position to {params['pos']}"
+            else:
+                message = f'Unrecognised command: {command}'
             self.write_message(message)
 
     def write_message(self, message):

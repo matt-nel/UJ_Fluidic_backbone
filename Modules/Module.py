@@ -56,7 +56,7 @@ class FBFlask:
         self.cur_vol = int(module_info['Current volume'])
         self.max_vol = int(module_info['Maximum volume'])
 
-    def change_vol(self, vol):
+    def change_volume(self, vol):
         if self.check_vol(vol):
             self.cur_vol += vol
             if self.cur_vol == 0:
