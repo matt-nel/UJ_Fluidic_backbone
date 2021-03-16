@@ -453,7 +453,7 @@ class SetupGUI:
             variable = p_var.get()
             if variable != '':
                 node_config = NodeConfig()
-                fields = ["Current volume", "Maximum volume"]
+                fields = ["Current volume in ml", "Maximum volume in ml"]
                 if variable == 'flask':
                     node_config.mod_type = 'flask'
                     node_config.class_type = 'FBFlask'
@@ -467,13 +467,13 @@ class SetupGUI:
                 elif variable == 'filter':
                     node_config.mod_type = 'filter'
                     node_config.class_type = 'FBFlask'
-                    fields = ['Name'] + fields + ["Dead volume"]
+                    fields = ['Name'] + fields + ["Dead volumem in ml"]
                     node_config.dual = False
                 elif 'syringe' in variable:
                     node_config.name = variable
                     node_config.mod_type = 'syringe'
                     node_config.class_type = 'SyringePump'
-                    fields += ['Contents']
+                    fields += ['Minimum volume in ml', 'Contents']
                     node_config.dual = True
                 elif 'valve' in variable:
                     node_config.name = variable

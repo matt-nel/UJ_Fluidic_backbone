@@ -30,11 +30,14 @@ def filter_invalid_paths(paths):
 gp = "module_connections.json"
 graph = load_graph(gp)
 print(graph.nodes)
-path_gen = nx.algorithms.all_simple_paths(graph, "reactants1", "products1")
+path_gen = nx.algorithms.all_simple_paths(graph, "flask1", "flask2")
 glist = [p for p in path_gen]
-glist = filter_invalid_paths(list)
+glist = filter_invalid_paths(glist)
 print(list)
 print(graph.nodes['syringe1']['class'])
+print(graph.adj['syringe1'])
+print(graph.adj['syringe1']['port'])
+print(graph.edges['valve1'])
 
 
 

@@ -84,16 +84,27 @@ class Manager(Thread):
                 name = g.nodes[n]['name']
                 mod_type = g.nodes[n]['type']
                 if 'syringe' in mod_type:
-                    g.nodes[n]['obj'] = self.syringes[name]
-                    self.syringes[name].change_contents(g.nodes[n]['Contents'], g.nodes[n]['Current volume'])
+                    node = g.nodes[n]
+                    node['object'] = self.syringes[name]
+                    self.syringes[name].change_contents(node['Contents'], float(node['Current volume'])*1000)
+                    self.syringes[name].set_pos(node['Current volume'])
                 elif 'valve' in mod_type:
-                    g.nodes[n]['obj'] = self.valves[name]
+                    g.nodes[n]['object'] = self.valves[name]
+                    for item in g.adj[n]:
+                        port = g.adj[n][item][0]['port'][1]
+                        self.valves[name].port_names[port] = item
+                        self.valves[name].used_ports.append(port)
                 elif 'flask' in mod_type:
                     config_dict = dict(g.nodes[n].items())
                     self.flasks[name] = FBFlask(self, config_dict)
-                    g.nodes[n]['obj'] = self.flasks[name]
+                    g.nodes[n]['object'] = self.flasks[name]
                 elif 'reactor' in mod_type:
-                    g.nodes[n]['obj'] = self.reactors[name]
+                    g.nodes[n]['object'] = self.reactors[name]
+        for valve_name in self.valves:
+            valve = self.valves[valve_name]
+            for port in valve.used_ports:
+                port_name = valve.port_names[port]
+                valve.port_objects[port] = g.nodes[port_name]['object']
 
     def run(self):
         while not self.interrupt:
@@ -121,6 +132,7 @@ class Manager(Thread):
 
     def move_liquid(self, source, target, volume, flow_rate):
         # currently a single path will be returned containing at least 1 syringe
+        volume *= 1000
         g = self.graph
         pipelined_steps = []
         path = self.find_path(source, target)
@@ -145,26 +157,40 @@ class Manager(Thread):
                 if g.nodes[group_source]['type'] == 'syringe':
                     syr_name = group_source
                     withdraw = False
+                    syr_source = True
+                    syr_target = g.nodes[group_target]['object']
                 else:
                     syr_name = g.nodes[group_target]['name']
                     withdraw = True
-                syringe_target = g.nodes[syr_name]['obj']
-                syringe_max_vol = g.nodes[syr_name]['Maximum volume']
-                syr_command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move', 'max_vol': syringe_max_vol, 'parameters': {}}
-                for i, step in enumerate(step_group[1:-1]):
-                    prev_node = step_group[i-1]
-                    follow_node = step_group[i+1]
-                    req_port = g.edges[prev_node, follow_node]['port'][1]
-                    valve_command_dict = dict(g.nodes[step])
-                    valve_command_dict['command'] = req_port
-                    valve_command_dict['parameters'] = {'wait': True}
-                    pipelined_steps.append(valve_command_dict)
-                if volume > syr_command_dict['max_vol']:
-                    vol_to_move = syr_command_dict['max_vol']
+                    syr_source = False
+                    syr_target = g.nodes[group_source]['object']
+
+                syringe_max_vol = float(g.nodes[syr_name]['Maximum volume'])*1000
+                syringe_min_vol = float(g.nodes[syr_name]['Minimum volume'])*1000
+                syr_command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move',
+                                    'max_vol': syringe_max_vol, 'min_vol': syringe_min_vol, 'parameters': {}}
+                if syr_source:
+                    upper = -1
+                    lower = 1
+                else:
+                    upper = -2
+                    lower = 0
+                for i, step in enumerate(step_group[lower:upper]):
+                    node = step_group[lower + i]
+                    follow_node = step_group[lower + i + 1]
+                    if 'syringe' != node[:-1] and 'syringe' != follow_node[:-1]:
+                        port = g.edges[node, follow_node, 0]['port']
+                        valve_name = f'valve{port[0]+1}'
+                        req_port = port[1]
+                        valve_command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': req_port,
+                                              'parameters': {'wait': True}}
+                        pipelined_steps.append(valve_command_dict)
+                max_movable = syr_command_dict['max_vol'] - syr_command_dict['min_vol']
+                if volume > max_movable:
+                    vol_to_move = max_movable
                 else:
                     vol_to_move = volume
-                parameters = {'volume': vol_to_move, 'flow_rate': flow_rate, 'target': syringe_target, 'withdraw': withdraw, 'wait':True}
-                syr_command_dict['parameters'] = parameters
+                syr_command_dict['parameters'] = {'volume': vol_to_move, 'flow_rate': flow_rate, 'target': syr_target, 'withdraw': withdraw, 'wait': True}
                 pipelined_steps.append(syr_command_dict)
             volume -= vol_to_move
         self.add_to_queue(pipelined_steps)
@@ -226,10 +252,22 @@ class Manager(Thread):
     def command_gui(self, command, message):
         if command == "write":
             self.gui_main.write_message(message)
+        self.q.task_done()
 
     def command_syringe(self, name, command, parameters):
         if command == 'move':
-            cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(parameters,))
+            if parameters['target'] is None:
+                adj = [key for key in self.graph.adj[name].keys()]
+                valve = adj[0]
+                valve = self.graph.nodes[valve]['object']
+                try:
+                    parameters['target'] = valve.port_objects[valve.current_port]
+                    cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(parameters,))
+                except KeyError:
+                    self.gui_main.write_message('Please set valve position or home valve')
+                    return False
+            else:
+                cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(parameters,))
         elif command == 'home':
             cmd_thread = Thread(target=self.syringes[name].home, name=name, args=())
         elif command == 'jog':
@@ -242,13 +280,17 @@ class Manager(Thread):
         cmd_thread.start()
         self.threads.append(cmd_thread)
         if parameters['wait']:
+            time.sleep(1)
             if not self.syringes[name].ready:
-                time.sleep(0.2)
+                self.wait_until_ready(self.syringes[name])
+        self.q.task_done()
         return True
 
     def command_valve(self, name, command, parameters):
         if type(command) is int and 0 <= command < 9:
             cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name, args=(command,))
+        elif command == 'home':
+            cmd_thread = Thread(target=self.valves[name].home_valve, name=name, args=())
         elif command == 'zero':
             cmd_thread = Thread(target=self.valves[name].zero, name=name, args=())
         elif command == 'jog':
@@ -261,11 +303,13 @@ class Manager(Thread):
         cmd_thread.start()
         self.threads.append(cmd_thread)
         if parameters['wait']:
+            time.sleep(0.5)
             self.wait_until_ready(self.valves[name])
+        self.q.task_done()
         return True
 
     @staticmethod
     def wait_until_ready(obj):
-        if not obj.ready:
+        while not obj.ready:
             time.sleep(0.2)
 

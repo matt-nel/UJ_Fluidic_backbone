@@ -10,6 +10,10 @@ class SelectorValve(Module):
         super(SelectorValve, self).__init__(module_info, cmduino, manager)
         # todo add ability to accommodate variable number of ports
         self.pos_dict = {0: 0, 1: 320, 2: 640, 3: 960, 4: 1280, 5: 1600, 6: 1920, 7: 2240, 8: 2560, 9: 2880}
+        self.port_names = {-1: '', 0: '', 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '', 8: '', 9: ''}
+        self.used_ports = []
+        self.port_objects = {-1: None, 0: None, 1: None, 2: None, 3: None, 4: None, 5: None, 6: None, 7: None, 8: None, 9: None}
+        self.current_port = None
         self.homing_spd = 5000
         self.check_spd = 3000
         self.pos_threshold = 0
@@ -29,19 +33,19 @@ class SelectorValve(Module):
                 self.pos_dict[position] = (self.spr/10)*position
 
     def move_to_pos(self, position):
-        if position == 0:
-            self.home_valve()
-        else:
+        if self.current_port != position:
             self.ready = False
             stepper = self.steppers[0]
             # check for true position within ~14 degree window
             stepper.move_to(self.pos_dict[position])
-            #self.check_pos(5, True)
             if self.geared:
-                time.sleep(0.5)
+                time.sleep(0.3)
             cur_pos = stepper.get_current_position()
             if cur_pos != self.pos_dict[position]:
                 self.pos_dict[position] = cur_pos
+            self.current_port = position
+            if position == 5 and self.he_sensors[0].analog_read() < 700:
+                self.home_valve()
             self.ready = True
 
     def jog(self, steps, direction):
@@ -49,41 +53,56 @@ class SelectorValve(Module):
         if direction == 'cc':
             steps = -steps
         self.steppers[0].move_steps(steps)
+        self.steppers[0].en_motor()
         self.ready = True
 
     def home_valve(self):
         # todo add logging of information
         self.ready = False
+        delay = 0.3
         stepper = self.steppers[0]
         he_sens = self.he_sensors[0]
         prev_speed = self.steppers[0].running_speed
         stepper.set_running_speed(self.homing_spd)
-        home_positions = [[], []]
-        if not self.geared:
-            home_positions[0].append(stepper.get_current_position())
-            home_positions[1].append(he_sens.analog_read())
-            spr = stepper.steps_per_rev
-            # get rough positions
-            for i in range(0, 20):
-                stepper.move_steps(spr/20)
-                home_positions[0].append(stepper.get_current_position())
-                home_positions[1].append(he_sens.analog_read())
-            min_pos = home_positions[1].index(min(home_positions[1]))
-            # index to 60 steps away from min pos
-            stepper.move_to(home_positions[0][min_pos] - 60)
-            # check for true min within 13.5 degree window
-            #self.check_pos(8, False)
-        else:
-            for i in range(10):
-                stepper.move_steps(self.spr/10)
-                time.sleep(0.5)
-                home_positions[0].append(stepper.get_current_position())
-                home_positions[1].append(he_sens.analog_read())
-            max_pos = home_positions[1].index(max(home_positions[1]))
-            stepper.move_to(max_pos)
-            stepper.move_steps(3200)
-            stepper.set_current_position(0)
         stepper.set_current_position(0)
+        max_pos = 0
+        direction = True
+        fwd = True
+        max_reading = he_sens.analog_read()
+        while max_reading < 700:
+            if max_reading < 600:
+                cnt = 0
+                for i in range(10):
+                    stepper.move_steps(self.spr/10)
+                    sensor_reading = he_sens.analog_read()
+                    time.sleep(delay)
+                    if sensor_reading > 550:
+                        max_pos = stepper.get_current_position()
+                        max_reading = sensor_reading
+                        break
+                    cnt += 1
+                if cnt > 9 and max_reading < 550:
+                    stepper.move_steps(320)
+            elif 600 < max_reading < 700:
+                prev_reading = max_reading
+                steps = 320
+                for i in range(3):
+                    steps = self.reverse_steps(steps, fwd)
+                    stepper.move_steps(steps)
+                    time.sleep(delay)
+                    sensor_reading = he_sens.analog_read()
+                    if sensor_reading > prev_reading:
+                        max_reading = sensor_reading
+                    else:
+                        fwd = not fwd
+                    steps = steps / 2
+                if max_reading == prev_reading:
+                    stepper.move_to(max_pos)
+                    max_reading = he_sens.analog_read()
+                    direction = not direction
+        stepper.move_steps(3200)
+        stepper.set_current_position(0)
+        self.current_port = 0
         stepper.en_motor()
         stepper.set_running_speed(prev_speed)
         self.ready = True
@@ -109,11 +128,19 @@ class SelectorValve(Module):
             target_pos = chk_pos[1].index(min(chk_pos[1]))
         stepper.move_to(chk_pos[0][target_pos])
         stepper.set_running_speed(prev_speed)
+        stepper.en_motor(False)
 
     def zero(self):
         self.steppers[0].set_current_position(0)
+        self.current_port = 0
 
     def he_read(self):
         reading = self.he_sensors[0].analog_read()
         message = f'{self.name} he sensor reading is {reading}'
         self.write_to_gui(message)
+
+    @staticmethod
+    def reverse_steps(steps, fwd):
+        if not fwd:
+            steps = -steps
+        return steps
