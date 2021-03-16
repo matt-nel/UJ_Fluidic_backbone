@@ -112,7 +112,7 @@ class FluidicBackboneUI:
 
         def asp_command(syr_name, direction):
             command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move',
-                            'parameters': {'volume': self.volume_tmp, 'flow_rate': self.flow_rate_tmp, 'withdraw': direction, 'wait': False, 'target': None}}
+                            'parameters': {'volume': self.volume_tmp*1000, 'flow_rate': self.flow_rate_tmp, 'withdraw': direction, 'wait': False, 'target': None}}
             asp_menu.destroy()
             self.send_command(command_dict)
 
@@ -283,9 +283,9 @@ class FluidicBackboneUI:
             elif command == 'move':
                 vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
                 if params['withdraw']:
-                    message = f'Sent command to {name} to withdraw {vol}ml at {flow} \u03BCL/min'
+                    message = f'Sent command to {name} to withdraw {vol/1000}ml at {flow} \u03BCL/min'
                 else:
-                    message = f'Sent command to {name} to aspirate {vol}ml at {flow} \u03BCL/min'
+                    message = f'Sent command to {name} to aspirate {vol/1000}ml at {flow} \u03BCL/min'
             elif command == 'setpos':
                 message = f"Sent command to {name} to set position to {params['pos']}"
             else:

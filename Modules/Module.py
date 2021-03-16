@@ -53,8 +53,8 @@ class FBFlask:
         self.manager = manager
         self.contents = module_info['Contents']
         self.contents_hist = []
-        self.cur_vol = int(module_info['Current volume'])
-        self.max_vol = int(module_info['Maximum volume'])
+        self.cur_vol = float(module_info['Current volume'])*1000
+        self.max_vol = float(module_info['Maximum volume'])*1000
 
     def change_volume(self, vol):
         if self.check_vol(vol):
@@ -79,5 +79,5 @@ class FBFlask:
             self.contents = new_contents
 
     def write_to_gui(self, message):
-        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'parameters': {'message': message}}
+        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'message': message, 'parameters': {}}
         self.manager.q.put(command_dict)

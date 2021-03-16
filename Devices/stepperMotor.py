@@ -86,15 +86,9 @@ class StepperMotor(Device):
         return self.position
 
     def set_current_position(self, position):
-        if type(position) is int:
-            if position > self.steps_per_rev:
-                position %= self.steps_per_rev
-            elif position < 0:
-                position = abs(position) % self.steps_per_rev
-                position = self.steps_per_rev - position
-            with self.serial_lock:
-                self.cmd_stepper.set_current_position(position)
-            self.position = position
+        with self.serial_lock:
+            self.cmd_stepper.set_current_position(position)
+        self.position = position
 
     def move_steps(self, steps):
         self.stopped = False

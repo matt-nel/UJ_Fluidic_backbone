@@ -63,27 +63,27 @@ class SelectorValve(Module):
         stepper = self.steppers[0]
         he_sens = self.he_sensors[0]
         prev_speed = self.steppers[0].running_speed
-        spr = stepper.steps_per_rev
         stepper.set_running_speed(self.homing_spd)
         stepper.set_current_position(0)
-        home_positions = []
-        sensor_readings = []
         max_pos = 0
         direction = True
         fwd = True
         max_reading = he_sens.analog_read()
-        while max_reading < 680:
+        while max_reading < 700:
             if max_reading < 600:
+                cnt = 0
                 for i in range(10):
                     stepper.move_steps(self.spr/10)
-                    time.sleep(delay)
                     sensor_reading = he_sens.analog_read()
+                    time.sleep(delay)
                     if sensor_reading > 550:
                         max_pos = stepper.get_current_position()
-                        max_reading = sensor_readings[-1]
+                        max_reading = sensor_reading
                         break
-                    stepper.move_steps(160)
-            elif 600 < max_reading < 680:
+                    cnt += 1
+                if cnt > 9 and max_reading < 550:
+                    stepper.move_steps(320)
+            elif 600 < max_reading < 700:
                 prev_reading = max_reading
                 steps = 320
                 for i in range(3):

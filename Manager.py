@@ -84,16 +84,27 @@ class Manager(Thread):
                 name = g.nodes[n]['name']
                 mod_type = g.nodes[n]['type']
                 if 'syringe' in mod_type:
-                    g.nodes[n]['object'] = self.syringes[name]
-                    self.syringes[name].change_contents(g.nodes[n]['Contents'], g.nodes[n]['Current volume'])
+                    node = g.nodes[n]
+                    node['object'] = self.syringes[name]
+                    self.syringes[name].change_contents(node['Contents'], float(node['Current volume'])*1000)
+                    self.syringes[name].set_pos(node['Current volume'])
                 elif 'valve' in mod_type:
                     g.nodes[n]['object'] = self.valves[name]
+                    for item in g.adj[n]:
+                        port = g.adj[n][item][0]['port'][1]
+                        self.valves[name].port_names[port] = item
+                        self.valves[name].used_ports.append(port)
                 elif 'flask' in mod_type:
                     config_dict = dict(g.nodes[n].items())
                     self.flasks[name] = FBFlask(self, config_dict)
                     g.nodes[n]['object'] = self.flasks[name]
                 elif 'reactor' in mod_type:
                     g.nodes[n]['object'] = self.reactors[name]
+        for valve_name in self.valves:
+            valve = self.valves[valve_name]
+            for port in valve.used_ports:
+                port_name = valve.port_names[port]
+                valve.port_objects[port] = g.nodes[port_name]['object']
 
     def run(self):
         while not self.interrupt:
@@ -121,6 +132,7 @@ class Manager(Thread):
 
     def move_liquid(self, source, target, volume, flow_rate):
         # currently a single path will be returned containing at least 1 syringe
+        volume *= 1000
         g = self.graph
         pipelined_steps = []
         path = self.find_path(source, target)
@@ -152,8 +164,9 @@ class Manager(Thread):
                     withdraw = True
                     syr_source = False
                     syr_target = g.nodes[group_source]['object']
-                syringe_max_vol = float(g.nodes[syr_name]['Maximum volume'])
-                syringe_min_vol = float(g.nodes[syr_name]['Minimum volume'])
+
+                syringe_max_vol = float(g.nodes[syr_name]['Maximum volume'])*1000
+                syringe_min_vol = float(g.nodes[syr_name]['Minimum volume'])*1000
                 syr_command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move',
                                     'max_vol': syringe_max_vol, 'min_vol': syringe_min_vol, 'parameters': {}}
                 if syr_source:
@@ -239,15 +252,22 @@ class Manager(Thread):
     def command_gui(self, command, message):
         if command == "write":
             self.gui_main.write_message(message)
+        self.q.task_done()
 
     def command_syringe(self, name, command, parameters):
         if command == 'move':
-            try:
-                target = parameters['target']
-            except KeyError:
-                target = self.graph.adj[name]
-                parameters['target'] = self.graph.nodes[target]['object']
-            cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(parameters,))
+            if parameters['target'] is None:
+                adj = [key for key in self.graph.adj[name].keys()]
+                valve = adj[0]
+                valve = self.graph.nodes[valve]['object']
+                try:
+                    parameters['target'] = valve.port_objects[valve.current_port]
+                    cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(parameters,))
+                except KeyError:
+                    self.gui_main.write_message('Please set valve position or home valve')
+                    return False
+            else:
+                cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name, args=(parameters,))
         elif command == 'home':
             cmd_thread = Thread(target=self.syringes[name].home, name=name, args=())
         elif command == 'jog':
@@ -260,13 +280,17 @@ class Manager(Thread):
         cmd_thread.start()
         self.threads.append(cmd_thread)
         if parameters['wait']:
+            time.sleep(1)
             if not self.syringes[name].ready:
-                time.sleep(0.2)
+                self.wait_until_ready(self.syringes[name])
+        self.q.task_done()
         return True
 
     def command_valve(self, name, command, parameters):
         if type(command) is int and 0 <= command < 9:
             cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name, args=(command,))
+        elif command == 'home':
+            cmd_thread = Thread(target=self.valves[name].home_valve, name=name, args=())
         elif command == 'zero':
             cmd_thread = Thread(target=self.valves[name].zero, name=name, args=())
         elif command == 'jog':
@@ -279,11 +303,13 @@ class Manager(Thread):
         cmd_thread.start()
         self.threads.append(cmd_thread)
         if parameters['wait']:
+            time.sleep(0.5)
             self.wait_until_ready(self.valves[name])
+        self.q.task_done()
         return True
 
     @staticmethod
     def wait_until_ready(obj):
-        if not obj.ready:
+        while not obj.ready:
             time.sleep(0.2)
 

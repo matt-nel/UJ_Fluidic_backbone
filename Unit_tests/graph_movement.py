@@ -15,11 +15,12 @@ class GraphTest(Thread):
 
             response = input('Test 1 or test 2?')
             if response == '1':
-                self.gui.manager.move_liquid('flask1', 'flask2', 20, 3000)
+                self.gui.manager.move_liquid('flask1', 'flask2', 10, 10000)
             elif response == '2':
                 self.gui.manager.move_liquid('flask')
             elif response == 'q':
                 break
+        self.gui.destroy()
 
 
 root = tkinter.Tk()

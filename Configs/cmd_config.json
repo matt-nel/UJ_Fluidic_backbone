@@ -32,7 +32,7 @@
     },
     "ios": [
         {
-            "port": "COM6"
+            "port": "COM5"
         }
     ]
 }
