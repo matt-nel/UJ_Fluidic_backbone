@@ -1,0 +1,44 @@
+{
+    "devices": {
+        "AR1": {
+            "command_id": "AR1"
+        },
+        "STIR": {
+            "command_id": "STIR"
+        },
+        "HCAP": {
+            "command_id": "HCAP"
+        },
+        "ENX": {
+            "command_id": "ENX"
+        },
+        "ENY": {
+            "command_id": "ENY"
+        },
+        "stepperX": {
+            "command_id": "STPX",
+            "config": {
+                "acceleration": 1000,
+                "enabled_acceleration": false,
+                "max_speed": 10000,
+                "speed": 1000,
+                "steps_per_rev": 3200
+            }
+        },
+        "stepperY": {
+            "command_id": "STPY",
+            "config": {
+                "acceleration": 1000,
+                "enabled_acceleration": false,
+                "max_speed": 10000,
+                "speed": 1000,
+                "steps_per_rev": 3200
+            }
+        }
+    },
+    "ios": [
+        {
+            "port": "COM5"
+        }
+    ]
+}

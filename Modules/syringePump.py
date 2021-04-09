@@ -1,4 +1,4 @@
-from Modules.Module import Module
+from Modules.modules import Module
 
 
 class SyringePump(Module):
@@ -6,26 +6,30 @@ class SyringePump(Module):
     Syringe pump module class for managing all equipment required for a syringe pump. 0 position corresponds to syringe
     max length
     """
-    cor_fact = 0.993  # correction factor for dispensed volume
-    # {volume: length in mm}
-    syr_lengths = {1000: 58, 2000: 2, 4000: 42, 5000: 58, 10000: 58, 20000: 20, 60000: 90}
-
-    def __init__(self, name, module_info, cmd_mng, manager):
+    def __init__(self, name, module_info, cmduino, manager):
         """
         :param name: syringe pump name
         :param module_info: Dictionary containing IDs of attached devices and their configuration information
-        :param cmd_mng: commanduino command manager object
+        :param cmduino: commanduino command manager object
         """
-        self.name = name
+        super(SyringePump, self).__init__(name, module_info, cmduino, manager)
         module_config = module_info["mod_config"]
-        self.syr_vol = module_config["volume"]
-        self.syr_length = self.syr_lengths[self.syr_vol]
+        # todo update this in Manager.check_connections
+        self.cor_fact = 0.993  # correction factor for dispensed volume
+        # {volume: length in mm}
+        self.syringe_lengths = {1000.0: 58, 2000.0: 2, 4000.0: 42, 5000.0: 58, 10000.0: 58, 20000.0: 20, 60000.0: 90}
+        self.syringe_volume = 0.0
+        self.syringe_length = 0.0
         self.screw_pitch = module_config["screw_pitch"]
         self.position = 0
+        self.remaining_vol = 0.0
         self.contents = ['empty', 0.0]
         self.contents_history = []
-        super(SyringePump, self).__init__(module_info, cmd_mng, manager)
         self.steps_per_rev = self.steppers[0].steps_per_rev
+
+    def set_volume(self, volume):
+        self.syringe_volume = float(volume) * 1000.0
+        self.syringe_length = self.syringe_lengths[self.syringe_volume]
 
     def change_contents(self, substance, vol):
         # Todo set up logger with tracking of volumes dispensed and timestamps
@@ -41,9 +45,9 @@ class SyringePump(Module):
         self.ready = False
         volume, flow_rate, withdraw = parameters['volume'], parameters['flow_rate'], parameters['withdraw']
         target = parameters['target']
-        speed = (flow_rate * self.steps_per_rev * self.syr_length) / (self.screw_pitch * self.syr_vol * 60)
+        speed = (flow_rate * self.steps_per_rev * self.syringe_length) / (self.screw_pitch * self.syringe_volume * 60)
         # calculate number of steps to send to motor
-        steps = (volume * self.syr_length * self.steps_per_rev) / (self.syr_vol * self.screw_pitch)
+        steps = (volume * self.syringe_length * self.steps_per_rev) / (self.syringe_volume * self.screw_pitch)
         travel = (steps / self.steps_per_rev) * self.screw_pitch
         move_flag = True
         if withdraw:
@@ -52,15 +56,25 @@ class SyringePump(Module):
             if self.position + travel < 0:
                 move_flag = False
         else:
-            if self.position + travel > self.syr_length:
+            if self.position + travel > self.syringe_length:
                 move_flag = False
+        vol_to_move = self.check_volume(travel)
+        if not target.check_volume(vol_to_move):
+            move_flag = False
         if move_flag:
             with self.lock:
-                self.steppers[0].en_motor(True)
+                cur_step_pos = self.steppers[0].get_current_position()
                 self.steppers[0].set_running_speed(round(speed))
                 self.steppers[0].move_steps(steps)
-                cur_step_pos = self.steppers[0].get_current_position()
-                self.position = (cur_step_pos / self.steps_per_rev) * self.screw_pitch
+                new_step_pos = self.steppers[0].get_current_position()
+                self.position = (new_step_pos / self.steps_per_rev) * self.screw_pitch
+                step_change = new_step_pos - cur_step_pos
+                if step_change != steps:
+                    actual_travel = (step_change / self.steps_per_rev) * self.screw_pitch
+                    self.remaining_vol = ((travel - actual_travel) / self.syringe_length) * self.syringe_volume
+                    travel = (step_change / self.steps_per_rev) * self.screw_pitch
+                else:
+                    self.remaining_vol = 0
                 if withdraw and target.contents != self.contents[0]:
                     self.contents[1] += self.change_volume(travel, target)
                     self.change_contents(target.contents, self.contents[1])
@@ -74,28 +88,43 @@ class SyringePump(Module):
         return False
 
     def home(self):
-        self.ready = False
-        self.steppers[0].en_motor(True)
-        self.steppers[0].home()
-        self.position = 0.0
-        self.ready = True
+        with self.lock:
+            self.ready = False
+            self.steppers[0].home()
+            self.position = 0.0
+            self.ready = True
 
     def jog(self, steps, withdraw):
         self.ready = False
         if withdraw:
             steps = -steps
         with self.lock:
-            self.steppers[0].en_motor(True)
             self.steppers[0].move_steps(steps)
         self.ready = True
 
+    def stop(self):
+        with self.steppers[0].stop_lock:
+            self.steppers[0].stop_cmd = True
+        self.steppers[0].stop()
+
+    def check_volume(self, travel):
+        vol_change = ((travel / self.syringe_length) * self.syringe_volume)
+        return vol_change
+
     def change_volume(self, travel, target):
-        vol_change = ((travel / self.syr_length) * self.syr_vol)
+        vol_change = self.check_volume(travel)
         target.change_volume(vol_change)
         return vol_change
 
     def set_pos(self, position):
         vol = float(position)*1000
         self.contents[1] = vol
-        self.position = self.syr_length - (vol/self.syr_vol)*self.syr_length
+        self.position = self.syringe_length - (vol/self.syringe_volume)*self.syringe_length
         self.steppers[0].set_current_position((self.position/8)*3200)
+
+    def resume(self, command_dicts):
+        if self.remaining_vol > 0:
+            return False
+        else:
+            command_dicts[0]['volume'] = self.remaining_vol
+        return True
