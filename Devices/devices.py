@@ -1,6 +1,4 @@
-import time
 import math
-from threading import Lock
 
 
 class Device:
@@ -36,17 +34,6 @@ class Device:
         with self.serial_lock:
             self.cmd_device.set_pwm_value(value)
 
-    def wait_for(self, secs):
-        elapsed = time.time() - self.start_time
-        while elapsed < secs:
-            time.sleep(0.5)
-            elapsed = time.time()
-            with self.stop_lock:
-                if self.stop_cmd:
-                    self.stop_cmd = False
-                    break
-        self.elapsed_time = time.time() - self.start_time
-
 
 class TempSensor(Device):
     def __init__(self, ts_obj, device_config, s_lock):
@@ -54,11 +41,15 @@ class TempSensor(Device):
         self.coefficients = device_config['SH_C']
 
     def read_temp(self):
-        v = self.analog_read()
-        r2 = (4700*v)/(1023-v)
+        v = []
+        for i in range(5):
+            v.append(self.analog_read())
+        v_ave = sum(v)/5
+        v_ave = (v_ave/1023) * 5.00
+        r2 = (4700*v_ave)/(5.00-v_ave)
         rln = math.log(r2, math.e)
         a, b, c = self.coefficients
-        temp = (a + (b * rln) + (c * pow(rln, 3)) - 273.15)
+        temp = 1/(a + (b * rln) + (c * pow(rln, 3))) - 273.15
         return temp
 
 
@@ -68,8 +59,8 @@ class Heater(Device):
         self.voltage = 0.0
 
     def start_heat(self, voltage):
-        self.voltage = max(0, min(voltage, 12.0))
-        voltage = int((self.voltage/12.0) * 255)
+        voltage = max(0.0, min(voltage, 255))
+        self.voltage = voltage
         self.analog_write(voltage)
 
     def stop_heat(self):

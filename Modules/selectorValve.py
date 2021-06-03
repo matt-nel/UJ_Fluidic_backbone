@@ -2,6 +2,11 @@ from Modules.modules import Module
 import time
 
 
+DEFAULT_LOWER_LIMIT = 330
+DEFAULT_UPPER_LIMIT = 820
+HOMING_SPEED = 5000
+
+
 class SelectorValve(Module):
     """
     Class for managing selector valves with one central inlet and multiple outlets.
@@ -15,18 +20,22 @@ class SelectorValve(Module):
         :param manager: Manager Object: coordinates modules
         """
         super(SelectorValve, self).__init__(name, module_info, cmduino, manager)
+        self.type = "SV"
+        self.syringe = None
         module_config = module_info["mod_config"]
         self.num_ports = module_config["ports"]
         # todo add ability to accommodate variable number of ports
         # {port: position in steps}
         self.pos_dict = {0: 0, 1: 320, 2: 640, 3: 960, 4: 1280, 5: 1600, 6: 1920, 7: 2240, 8: 2560, 9: 2880}
         # Dictionary keeps track of names of modules attached to each port and their associated object.
-        self.ports = {-1: {'name': '', 'object': None}, 0: {'name': '', 'object': None}, 1: {'name': '', 'object': None},
-                      2: {'name': '', 'object': None}, 3: {'name': '', 'object': None}, 4: {'name': '', 'object': None},
-                      5: {'name': '', 'object': None}, 6: {'name': '', 'object': None}, 7: {'name': '', 'object': None},
-                      8: {'name': '', 'object': None}, 9: {'name': '', 'object': None}}
+        self.ports = {-1: None, 0: None, 1: None, 2: None, 3: None, 4: None, 5: None, 6: None, 7: None,
+                      8: None, 9: None}
+        self.magnet_positions = {0: DEFAULT_UPPER_LIMIT, 2: DEFAULT_LOWER_LIMIT, 4: DEFAULT_LOWER_LIMIT,
+                                 6: DEFAULT_LOWER_LIMIT, 8: DEFAULT_LOWER_LIMIT}
+        self.adj_valves = []
         self.current_port = None
-        self.homing_spd = 5000
+        # kd, kp
+        self.pd_constants = [2, 0.5]
         self.check_spd = 3000
         self.pos_threshold = 0
         self.neg_threshold = 0
@@ -44,20 +53,38 @@ class SelectorValve(Module):
             for position in range(10):
                 self.pos_dict[position] = (self.spr/10)*position
 
+    def init_valve(self):
+        if self.he_sensors[0].analog_read() < DEFAULT_UPPER_LIMIT:
+            self.home_valve()
+
     def move_to_pos(self, position):
         if self.current_port != position:
             self.ready = False
             stepper = self.steppers[0]
             stepper.move_to(self.pos_dict[position])
-            if self.geared:
-                time.sleep(0.3)
+            self.check_pos(position)
             cur_pos = stepper.get_current_position()
             if cur_pos != self.pos_dict[position]:
                 self.pos_dict[position] = cur_pos
             self.current_port = position
-            if position == 5 and self.he_sensors[0].analog_read() < 700:
-                self.home_valve()
             self.ready = True
+
+    def move_to_target(self, target):
+        """
+        Gets the required port for movement and moves to that port using move_to_pos
+        :param target: string: name of module
+        :return:
+        """
+        target_found = False
+        for port in self.ports.items():
+            if port[1] is None:
+                continue
+            elif target in port[1].name:
+                target_found = True
+                self.move_to_pos(port[0])
+                break
+        if not target_found:
+            self.write_to_gui(f"{target} not found on valve {self.name}")
 
     def jog(self, steps, direction):
         self.ready = False
@@ -71,95 +98,128 @@ class SelectorValve(Module):
         self.ready = False
         with self.stop_lock:
             self.stop_cmd = False
-        delay = 0.3
         stepper = self.steppers[0]
         he_sens = self.he_sensors[0]
         prev_speed = self.steppers[0].running_speed
-        stepper.set_running_speed(self.homing_spd)
+        stepper.set_running_speed(HOMING_SPEED)
         stepper.set_current_position(0)
-        max_pos = 0
-        fwd = True
         max_reading = he_sens.analog_read()
-        iterations = 0
-        while max_reading < 700:
-            if max_reading < 600:
-                reading_history = []
-                for i in range(10):
-                    stepper.move_steps(self.spr/10, True)
-                    sensor_reading = he_sens.analog_read()
-                    reading_history.append(sensor_reading)
+        # Keep looking for home pos (reading > 700)
+        while max_reading < 690:
+            read = he_sens.analog_read()
+            # Close to home pos
+            if read > 600:
+                if self.find_opt(self.magnet_positions[0]):
+                    max_reading = he_sens.analog_read()
+                else:
                     if self.check_stop:
                         break
-                    if sensor_reading > 550:
-                        max_pos = stepper.get_current_position()
-                        max_reading = sensor_reading
+            # Close to one of the negative magnets
+            elif read < 500:
+                if self.find_opt(330):
+                    # Move between magnets until close to home position
+                    for i in range(0, 5):
+                        stepper.move_steps(self.spr/5, True)
+                        read = he_sens.analog_read()
+                        if read >= 600:
+                            max_reading = read
+                            break
+                else:
+                    if self.check_stop:
                         break
-                if i >= 9 and max_reading < 550:
-                    max_tmp = max(reading_history)
-                    pos = reading_history.index(max_tmp)
-                    stepper.move_to(i*pos, True)
-                    stepper.move_steps(-320, True)
-                    rvs_read = he_sens.analog_read()
-                    stepper.move_steps(640, True)
-                    fwd_read = he_sens.analog_read()
-                    if rvs_read > fwd_read:
-                        stepper.move_steps(-640, True)
-                        max_reading = rvs_read
-                    else:
-                        max_reading = fwd_read
-                    max_pos = stepper.get_current_position()
-            elif 550 < max_reading < 700:
-                prev_reading = max_reading
-                steps = 320 * (iterations + 1)
-                upper_limit = steps / 80
-                for i in range(upper_limit):
-                    steps = self.reverse_steps(steps, fwd)
-                    stepper.move_steps(steps, True)
-                    time.sleep(delay)
-                    sensor_reading = he_sens.analog_read()
-                    if sensor_reading > prev_reading:
-                        max_reading = sensor_reading
-                    else:
-                        fwd = not fwd
-                    steps = steps / 2
-                    if max_reading > 700:
-                        break
-                if max_reading == prev_reading:
-                    stepper.move_to(max_pos, True)
+            else:
+                # Move between magnets looking for positions
+                move = self.spr/10
+                stepper.move_steps(move, True)
+                read = he_sens.analog_read()
+                iterations = 0
+                # Move smaller increments looking for magnets
+                while 450 < read < 550 and iterations < 3:
+                    move = move/2
+                    stepper.move_steps(move, True)
+                    read = he_sens.analog_read()
+                    iterations += 1
             if self.check_stop:
                 break
         if not self.check_stop:
-            stepper.move_steps(3200)
             stepper.set_current_position(0)
             self.current_port = 0
-            stepper.set_running_speed(prev_speed)
+            self.magnet_positions[0] = he_sens.analog_read()
+            for i in range(1, 5):
+                stepper.move_steps(self.spr/5, True)
+                self.magnet_positions[i*2] = he_sens.analog_read()
+            stepper.move_steps(self.spr/5, True)
         else:
             self.current_port = None
         stepper.set_running_speed(prev_speed)
         stepper.en_motor()
+        self.current_port = 0
         self.ready = True
 
-    def check_pos(self, increments, max_min):
+    def find_opt(self, target):
+        kd, kp = self.pd_constants
+        direction = True
+        iters = 0
+        readings = [self.he_sensors[0].analog_read()]
+        opt_pos = self.steppers[0].get_current_position()
+        error = abs(target - readings[-1])
+        last_error = error
+        last_u = 0
+        prev_time = time.time()
+        errors = [error]
+        while abs(error) > 20:
+            iters += 1
+            dt = time.time() - prev_time
+            if dt == 0.0:
+                dt += 0.1
+            prop_error = kp * error
+            # if error < last error, kd*de/dt = neg
+            derv_error = kd * ((error-last_error) / dt)
+            # moving in wrong direction
+            if error - last_error > 20:
+                direction = not direction
+            if direction is False:
+                prop_error = -prop_error
+            u = prop_error + derv_error
+            last_error = error
+            prev_time = time.time()
+            self.steppers[0].move_steps(u, True)
+            readings.append(self.he_sensors[0].analog_read())
+            # Found new minimum
+            if target < 400 and readings[-1] < min(readings):
+                opt_pos = self.steppers[0].get_current_position()
+            # found new_maximum
+            elif readings[-1] > max(readings):
+                opt_pos = self.steppers[0].get_current_position()
+            error = abs(target - readings[-1])
+            errors.append(error)
+            last_u = u
+            if self.check_stop:
+                return False
+            elif readings[-1] > DEFAULT_UPPER_LIMIT or readings[-1] < DEFAULT_LOWER_LIMIT:
+                break
+            if iters > 10:
+                self.steppers[0].move_to(opt_pos)
+                opt = self.he_sensors[0].analog_read()
+                if opt > 700:
+                    self.magnet_positions[0] = opt
+                break
+        self.steppers[0].en_motor()
+        return True
+
+    def check_pos(self, position):
         """
-        :param increments: number of increments of 20 steps to move
-        :param max_min: Whether to check maximum or minimum from hall sensor. False only used for 0 position
+        :param position: position to move to
         :return:
         """
-        stepper = self.steppers[0]
-        he_sens = self.he_sensors[0]
-        prev_speed = self.steppers[0].running_speed
-        stepper.set_running_speed(self.check_spd)
-        chk_pos = [[], []]
-        for i in range(0, increments):
-            chk_pos[0].append(stepper.get_current_position())
-            chk_pos[1].append(he_sens.analog_read())
-            stepper.move_steps(20)
-        if max_min:
-            target_pos = chk_pos[1].index(max(chk_pos[1]))
-        else:
-            target_pos = chk_pos[1].index(min(chk_pos[1]))
-        stepper.move_to(chk_pos[0][target_pos])
-        stepper.set_running_speed(prev_speed)
+        if position in self.magnet_positions:
+            reading = self.he_sensors[0].analog_read()
+            if position == 0:
+                if reading < self.magnet_positions[position] + 10:
+                    self.find_opt(self.magnet_positions[position])
+            else:
+                if reading > self.magnet_positions[position] + 10:
+                    self.find_opt(self.magnet_positions[position])
 
     def zero(self):
         self.steppers[0].set_current_position(0)

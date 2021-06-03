@@ -1,38 +1,44 @@
 import os
-import time
+from dummy_manager import DummyManager
 from commanduino import CommandManager
+from threading import Lock
+from Modules import reactor
+import time
 
+
+def disable_all_motors(cmduino):
+    cmduino.ENY.high()
+    cmduino.ENX.high()
+
+
+stdout_mutex = Lock()
+Reactor = reactor.Reactor
 script_dir = os.path.dirname(__file__)
 cm_config = os.path.join(script_dir, "cmd_config.json")
 cmd_mng = CommandManager.from_configfile(cm_config, False)
-
-# for i in range(1):
-#     print("Setting capsule to 2.3V")
-#     cmd_mng.HCAP.set_pwm_value(200)
-#     time.sleep(20)
-#     print("Setting capsule to 9.1V")
-#     cmd_mng.HCAP.set_pwm_value(800)
-#     time.sleep(20)
-#     print("Setting capsule to 12V")
-#     cmd_mng.HCAP.set_pwm_value(1024)
-#     time.sleep(20)
-#     print("Setting to 0")
-#     cmd_mng.HCAP.set_pwm_value(0)
-
-# for i in range(2):
-#     print("fan speed 20%")
-#     cmd_mng.STIR.set_pwm_value(200)
-#     time.sleep(5)
-#     print("fan speed 80%")
-#     cmd_mng.STIR.set_pwm_value(800)
-#     time.sleep(5)
-#     print("fan speed 100%")
-#     cmd_mng.STIR.set_pwm_value(1024)
-#     time.sleep(5)
-#     print("fan speed o%")
-#     cmd_mng.STIR.set_pwm_value(0)
-#     time.sleep(5)
+disable_all_motors(cmd_mng)
+manager = DummyManager(stdout_mutex)
+manager.start()
+module_dict = {"reactor1": {"name": "reactor1", "mod_type": "reactor", "class_type": "Reactor",
+                            "mod_config": {"num_heaters": 1, "Contents": "empty", "Current volume": "0",
+                                           "Maximum volume": "100"},
+                            "devices": {'heater': {"name": "heater1", "cmd_id": "AW1", "device_config": {}},
+                                        "mag_stirrer": {"name": "stirrer1", "cmd_id": "AW2",
+                                                        "device_config": {"fan_speed": 7200}},
+                                        "temp_sensor": {"name": "temp_sensor1", "cmd_id": "T1", "device_config":
+                                            {"SH_C": [0.0008271125019925238, 0.0002088017729221142,
+                                                      8.059262669466295e-08]}}}}}
+module_info = module_dict["reactor1"]
+my_reactor = Reactor("test_reactor", module_info, cmd_mng, manager)
 
 while True:
-    pwm_val = int(input("What value should I set?"))
-    cmd_mng.STIR.set_pwm_value(pwm_val)
+    response = input("Write or read?")
+    if response == 'w':
+        temp_val = float(input("What temp value (°C) should I set?"))
+        temp_secs = float(input("How long should the reactor heat for?"))
+        stir_speed = int(input("What speed should the reactor stir?"))
+        stir_secs = float(input("How long should the reactor stir for?"))
+        my_reactor.start_reactor(False, temp_val, temp_secs, stir_speed, stir_secs)
+    elif response == 'r':
+        my_reactor.read_temp()
+        time.sleep(0.5)

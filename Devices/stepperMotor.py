@@ -20,7 +20,7 @@ class StepperMotor(Device):
         self.cmd_stepper = stepper_obj
         self.stop_lock = Lock()
         self.stop_cmd = False
-        self.enabled = False
+        self.enabled = True
         self.steps_per_rev = device_config['steps_per_rev']
         self.enabled_acceleration = device_config['enabled_acceleration']
         self.running_speed = device_config['speed']
@@ -142,7 +142,7 @@ class StepperMotor(Device):
         """
         self.en_motor(True)
         with self.serial_lock:
-            self.cmd_stepper.move(steps)
+            self.cmd_stepper.move(steps, False)
         self.watch_move(subs_moves)
         return True
 
@@ -156,7 +156,7 @@ class StepperMotor(Device):
         """
         self.en_motor(True)
         with self.serial_lock:
-            self.cmd_stepper.move_to(position)
+            self.cmd_stepper.move_to(position, False)
         self.watch_move(subs_moves)
         return True
 
@@ -175,7 +175,7 @@ class StepperMotor(Device):
         moving = True
         prev_time = time.time()
         while moving:
-            if time.time() > prev_time + 0.5:
+            if time.time() > prev_time + 2:
                 if not self.is_moving:
                     moving = False
             with self.stop_lock:
@@ -223,7 +223,7 @@ class LinearStepperMotor(StepperMotor):
         """
         Sends command over serial to run the motor until the end-switch is triggered.
         """
-        self.cmd_stepper.set_homing_speed(6400)
+        self.en_motor(True)
         with self.serial_lock:
             self.cmd_stepper.home(False)
         self.watch_move()

@@ -1,10 +1,23 @@
 {
     "ios": [
         {
-            "port": "COM7"
+            "port": "COM4"
         }
     ],
     "devices": {
+        "stepperX": {
+            "command_id": "STPX",
+            "config": {
+                "steps_per_rev": 3200,
+                "enabled_acceleration": false,
+                "speed": 1000,
+                "max_speed": 10000,
+                "acceleration": 1000
+            }
+        },
+        "ENX": {
+            "command_id": "ENX"
+        },
         "stepperY": {
             "command_id": "STPY",
             "config": {
@@ -18,11 +31,17 @@
         "ENY": {
             "command_id": "ENY"
         },
-        "AR1": {
-            "command_id": "AR1"
+        "T1": {
+            "command_id": "T1"
         },
-        "stepperX": {
-            "command_id": "STPX",
+        "AW2": {
+            "command_id": "AW2"
+        },
+        "AW1": {
+            "command_id": "AW1"
+        },
+        "stepperZ": {
+            "command_id": "STPZ",
             "config": {
                 "steps_per_rev": 3200,
                 "enabled_acceleration": false,
@@ -31,8 +50,27 @@
                 "acceleration": 1000
             }
         },
-        "ENX": {
-            "command_id": "ENX"
+        "ENZ": {
+            "command_id": "ENZ"
+        },
+        "AR1": {
+            "command_id": "AR1"
+        },
+        "stepperE0": {
+            "command_id": "STPE0",
+            "config": {
+                "steps_per_rev": 3200,
+                "enabled_acceleration": false,
+                "speed": 1000,
+                "max_speed": 10000,
+                "acceleration": 1000
+            }
+        },
+        "ENE0": {
+            "command_id": "ENE0"
+        },
+        "AR2": {
+            "command_id": "AR2"
         }
     }
 }

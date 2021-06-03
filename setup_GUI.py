@@ -1,7 +1,27 @@
 import tkinter as tk
 import os
+import sys
+import glob
+import serial.tools.list_ports
 import json
 from PIL import ImageTk, Image
+
+
+def populate_ports():
+    """
+    Gets the serial ports available for connection
+    :return: List of Arduinos available on the system
+    """
+    if sys.platform.startswith('win'):
+        ports = [f'COM{i + 1}' for i in range(256)]
+    elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
+        ports = glob.glob('/dev/tty[A-Za-z]*')
+    else:
+        raise EnvironmentError("Unsupported platform")
+
+    arduino_list = [port for port in serial.tools.list_ports.comports() if 'arduino' in port.description.lower()]
+
+    return [name.name for name in arduino_list]
 
 
 class CmdConfig:
@@ -72,9 +92,6 @@ class NodeConfig:
         self.class_type = ''
         self.valve_name = ''
         self.valve_id = None
-        self.valve_flag = False
-        self.flask_flag = False
-        self.syringe_flag = False
         self.port_no = None
         self.add_params = []
         self.dual = None
@@ -84,16 +101,42 @@ class NodeConfig:
     def as_dict(self):
         out_dict = {'id': self.name, 'name': self.name, 'mod_type': self.mod_type, 'class_type': self.class_type}
         out_dict.update(self.add_params)
+        if self.mod_type != 'valve':
+            self.clean_names(out_dict)
         return out_dict
+
+    @staticmethod
+    def clean_names(raw_dict):
+        raw_dict["Maximum volume"] = raw_dict["Maximum volume in ml"]
+        raw_dict["Current volume"] = raw_dict["Current volume in ml"]
+        return raw_dict
 
     def generate_flask(self):
         flask = ModConfig()
         raw_dict = self.as_dict()
+
         node_dict = {'name': self.name, 'mod_type': self.mod_type, 'class_type': self.class_type,
-                     'mod_config': {'Contents': raw_dict['Contents'], 'Current volume': raw_dict['Current volume'],
-                                    'Maximum volume': raw_dict['Maximum volume']}, 'devices': {}}
+                     'mod_config': {'Contents': raw_dict['Contents'],
+                                    'Current volume': raw_dict['Current volume in ml'],
+                                    'Maximum volume': raw_dict['Maximum volume in ml']}, 'devices': {}}
         flask.load_existing(**node_dict)
         return flask
+
+    def generate_reactor(self, thermistor, stirrer, heater):
+        reactor = ModConfig()
+        raw_dict = self.as_dict()
+        node_dict = {'name': raw_dict["Name"], 'mod_type': self.mod_type, 'class_type': self.class_type,
+                     'mod_config': {'Contents': raw_dict['Contents'], "num_heaters": 1,
+                                    'Current volume': raw_dict['Current volume in ml'],
+                                    'Maximum volume': raw_dict['Maximum volume in ml']},
+                     'devices': {'heater': {"name": "heater1", "cmd_id": heater, "device_config": {}},
+                                 "mag_stirrer": {"name": "stirrer1", "cmd_id": stirrer,
+                                                 "device_config": {'fan_speed': int(raw_dict["Fan speed RPM"])}},
+                                 "temp_sensor": {"name": "temp_sensor1", "cmd_id": thermistor, "device_config":
+                                     {"SH_C": [0.0008271125019925238, 0.0002088017729221142,
+                                               8.059262669466295e-08]}}}}
+        reactor.load_existing(**node_dict)
+        return reactor
 
 
 class ModConfig:
@@ -118,8 +161,8 @@ class ModConfig:
         return False
 
     def as_dict(self):
-        return {self.name: {'name': self.name, 'mod_type': self.mod_type, "class_type": self.class_type, 'mod_config': self.mod_config,
-                            'devices': self.devices}}
+        return {self.name: {'name': self.name, 'mod_type': self.mod_type, "class_type": self.class_type,
+                            'mod_config': self.mod_config, 'devices': self.devices}}
 
 
 class SetupGUI:
@@ -179,10 +222,10 @@ class SetupGUI:
                                                    'device_config': self.motor_configs['default']}},
                               'E1': {'stepperE1': {'cmd_id': 'STPE1', 'enable_pin': 'ENE1',
                                                    'device_config': self.motor_configs['default']}}}
-        self.pins = {'Analog Read 1 (A3)': 'AR1', 'Analog Read 2 (A4)': 'AR2'}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
         self.used_he_pins = []
+        self.used_valves = []
         self.config_filenames = ['Configs/cmd_config.json', 'Configs/module_connections.json',
                                  'Configs/module_info.json']
         for file in self.config_filenames:
@@ -197,40 +240,72 @@ class SetupGUI:
         self.init_utilities_panel()
 
     def init_setup_panel(self):
-        def add_com_port():
-            port = self.text_temp
-            self.cmd_devices.ios.append({"port": port})
-            self.write_message(f"Port {port} added")
-            com_port_entry.delete(0, 'end')
+        def display_ports(ports, refresh=False):
+            if ports:
+                i = 0
+                for name in ports:
+                    c_port_button = tk.Button(self.setup_frame, text='Arduino on ' + name, font=button_font,
+                                              bg="LemonChiffon2",
+                                              fg='black',
+                                              command=lambda: add_com_port(name))
+                    c_port_button.grid(row=3, column=i)
+                    i += 1
+            else:
+                ports = populate_ports()
+                if ports and refresh:
+                    refresh_button.destroy()
+                    display_ports(ports)
+
+        def add_com_port(port_name=''):
+            if port_name == '':
+                port = self.text_temp
+                self.cmd_devices.ios.append({"port": port})
+                self.write_message(f"Port {port} added")
+                com_port_entry.delete(0, 'end')
+            else:
+                self.cmd_devices.ios.append({"port": port_name})
+                self.write_message(f"Port {port_name} added")
 
         button_font = self.fonts['buttons']
         top_label = tk.Label(self.setup_frame, text='Setup', font=self.fonts['headings'], bg='white')
-        com_port_label = tk.Label(self.setup_frame, text="Enter the communication port or TCP/IP address",
-                                  font=self.fonts['labels'], bg='white')
-        val_text = self.primary.register(self.validate_text)
+        top_label.grid(row=0, column=0)
         com_frame = tk.Frame(self.setup_frame, bg='grey', pady=4)
+        com_frame.grid(row=2)
+
+        com_port_label = tk.Label(self.setup_frame, text="Choose an arduino to connect to, or write the name of the "
+                                                         "com port:",
+                                  font=self.fonts['labels'], bg='white')
+        avail_ports = populate_ports()
+        if not avail_ports:
+            refresh_button = tk.Button(self.setup_frame, text="Refresh", font=button_font, bg="LemonChiffon2",
+                                       fg="black", command=lambda: display_ports(avail_ports, refresh=True))
+            refresh_button.grid(row=3, column=0)
+        display_ports(avail_ports)
+
+        val_text = self.primary.register(self.validate_text)
+
         com_port_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'),
                                   bg='white', fg='black', width=25)
-        com_port_button = tk.Button(com_frame, text='Accept', font=button_font, bg='lawn green',
+        com_port_button = tk.Button(com_frame, text='Accept', font=('Verdana', 10), bg='lawn green',
                                     fg='black', command=add_com_port)
+
+        com_port_entry.grid(row=2, column=0, padx=4)
+        com_port_button.grid(row=2, column=1, padx=4)
+
         mod_frame = tk.Frame(self.setup_frame, bg='grey', pady=4)
 
-        con_label = tk.Label(self.setup_frame, text='Backbone modules and connections setup', font=self.fonts['labels'],
+        mod_label = tk.Label(self.setup_frame, text='Backbone modules and connections setup', font=self.fonts['labels'],
                              bg='white')
-        con_button = tk.Button(self.setup_frame, text='Configure modules', font=button_font, bg='LemonChiffon2',
+        mod_button = tk.Button(self.setup_frame, text='Configure modules', font=button_font, bg='LemonChiffon2',
                                fg='black', command=self.graph_setup)
         gen_button = tk.Button(self.setup_frame, text='Create config', font=button_font, bg='lawn green',
                                fg='black', command=self.generate_config)
 
-        top_label.grid(row=0, column=1)
-        com_port_label.grid(row=1, column=1)
-        com_frame.grid(row=2, column=1)
-        com_port_entry.grid(row=0, column=0, padx=4)
-        com_port_button.grid(row=0, column=1, padx=4)
-        mod_frame.grid(row=4, column=1)
-        con_label.grid(row=5, column=1)
-        con_button.grid(row=6, column=1, pady=4)
-        gen_button.grid(row=0, column=3)
+        com_port_label.grid(row=1, column=0)
+        mod_frame.grid(row=4, column=0)
+        mod_label.grid(row=5, column=0)
+        mod_button.grid(row=6, column=0, pady=4)
+        gen_button.grid(row=7, column=0)
 
     def init_utilities_panel(self):
         button_font = self.fonts['buttons']
@@ -266,10 +341,58 @@ class SetupGUI:
             port_var.set('')
             port_button = tk.Button(frame, text=f'Configure port {port}', bg='LightBlue3', fg='black')
             port_button.configure(command=lambda v=valve_no,
-                                  pv=port_var, pn=port, pb=port_button: port_menu_start(v, pv, pn, pb))
+                                                 pv=port_var, pn=port, pb=port_button: port_menu_start(v, pv, pn, pb))
             port_button.grid(row=row, column=col, columnspan=col_span)
-            port_om = tk.OptionMenu(frame, port_var, *options)
+            port_om = tk.OptionMenu(frame, port_var, *module_options)
             port_om.grid(row=row + 1, column=col, columnspan=col_span)
+
+        def port_menu_start(valve_no, p_var, port_no, button):
+            variable = p_var.get()
+            if variable != '':
+                port_options_window = tk.Toplevel(self.primary)
+                node_config = NodeConfig()
+                fields = ["Name", "Current volume in ml", "Maximum volume in ml"]
+                node_config.valve_name = f'valve{valve_no + 1}'
+                node_config.valve_id = valve_no
+                node_config.port_no = port_no
+                title = tk.Label(port_options_window, text=f'Configure port {port_no} on {node_config.valve_name}',
+                                 font=self.fonts['headings'])
+                title.grid(row=0, column=0, columnspan=2)
+                type_label = tk.Label(port_options_window, text=variable.capitalize(), font=self.fonts['default'])
+                type_label.grid(row=1, column=0, columnspan=2)
+                if variable == 'flask':
+                    node_config.mod_type = 'flask'
+                    node_config.class_type = 'FBFlask'
+                    fields += ['Contents']
+                    node_config.dual = True
+                    self.flask_setup(node_config, fields, port_options_window, button)
+                elif variable == 'reactor':
+                    node_config.mod_type = 'reactor'
+                    node_config.class_type = "Reactor"
+                    fields += ['Contents', 'Fan speed RPM', "Number of heaters"]
+                    self.reactor_setup(node_config, fields, port_options_window, button)
+                elif variable == 'syringe':
+                    node_config.name = f"syringe{self.conf_syr + 1}"
+                    node_config.mod_type = 'syringe'
+                    node_config.class_type = 'SyringePump'
+                    fields += ['Contents']
+                    fields.pop(0)
+                    node_config.dual = True
+                    self.syringe_setup(node_config, fields, port_options_window, button)
+                elif variable == "valve":
+                    node_config.dual = True
+                    self.valve_link(node_config, port_options_window, button)
+                elif variable == 'waste':
+                    node_config.mod_type = 'waste'
+                    node_config.class_type = 'FBFlask'
+                    node_config.dual = False
+                    self.flask_setup(node_config, fields, port_options_window, button)
+                elif variable == 'filter':
+                    node_config.mod_type = 'filter'
+                    node_config.class_type = 'FBFlask'
+                    fields += ["Dead volume in ml"]
+                    node_config.dual = False
+                    self.flask_setup(node_config, fields, port_options_window, button)
 
         if self.num_valves == 0 or self.num_syringes == 0:
             if self.num_valves == 0:
@@ -305,17 +428,19 @@ class SetupGUI:
             graph_setup = tk.Toplevel(self.primary)
             graph_setup.title('Backbone connections setup')
             self.graph_tmp = GraphConfig()
-            options = ['reactor', 'syringe', 'flask', 'waste', 'filter']
+            module_options = ['syringe', 'valve', 'reactor', 'flask', 'waste', 'filter']
             for i in range(0, self.num_valves):
-                valve_name = f'valve{i + 1}'
-                self.graph_tmp.add_valve(valve_name)
                 valve_frame = tk.Frame(graph_setup)
-                valve_frame.grid(row=1, column=i)
-                top_label = tk.Label(valve_frame, text=f'Valve {i + 1}', font=self.fonts['default'])
-                top_label.grid(row=0, column=1)
                 left_ports = tk.Frame(valve_frame)
                 img_frame = tk.Frame(valve_frame)
                 right_ports = tk.Frame(valve_frame)
+
+                valve_name = f'valve{i + 1}'
+                self.graph_tmp.add_valve(valve_name)
+                top_label = tk.Label(valve_frame, text=f'Valve {i + 1}', font=self.fonts['default'])
+
+                top_label.grid(row=0, column=1)
+                valve_frame.grid(row=1, column=i, padx=10)
                 img_frame.grid(row=1, column=1)
                 left_ports.grid(row=1, column=0)
                 right_ports.grid(row=1, column=2)
@@ -335,113 +460,14 @@ class SetupGUI:
                 valve_button = tk.Button(img_frame, text=f'Valve {i + 1} setup', font=self.fonts['buttons'],
                                          bg='LightBlue3',
                                          fg='black')
-                valve_button.configure(command=lambda: self.valve_setup(valve_button))
+                valve_button.configure(
+                    command=lambda valve_butt=valve_button: self.valve_setup(valve_butt))
                 valve_button.grid(row=9, column=0, columnspan=2)
 
-            options_frame = tk.Frame(graph_setup, bg='grey', borderwidth=5)
-            options_frame.grid(row=1, column=i + 1)
             accept_butt = tk.Button(graph_setup, text='Accept', bg='lawn green', command=accept)
             cancel_butt = tk.Button(graph_setup, text='Cancel', bg='tomato2', command=graph_setup.destroy)
             accept_butt.grid(row=2, column=1)
             cancel_butt.grid(row=2, column=2)
-
-            def port_menu_start(valve_no, p_var, port_no, port_button):
-                def accept_p(button):
-                    if not node_config.name:
-                        node_config.name = node_config.entries[0][1].get()
-                    for entry in node_config.entries:
-                        field = entry[0]
-                        words = field.split(' ')
-                        if len(words) > 2:
-                            field = words[0] + " " + words[1]
-                        config = entry[1].get()
-                        node_config.add_params.append((field, config))
-                    if not node_config.valve_flag:
-                        node_dict = node_config.as_dict()
-                        self.graph_tmp.add_node(node_dict)
-                        target_id = self.graph_tmp.internalId
-                        if node_config.mod_type == 'flask':
-                            flask = node_config.generate_flask()
-                            self.modules[flask.name] = flask
-                    else:
-                        target_id = self.graph_tmp.valves[node_config.name]['internalId']
-                    self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
-                                            target_name=node_config.name, target_id=target_id,
-                                            target_port=node_config.port_no, dual=node_config.dual)
-                    button.configure(bg='lawn green')
-                    delete_fields(options_frame)
-
-                def generate_fields(field_list, config):
-                    # todo add validation to volume entries
-                    title = tk.Label(options_frame, text=f'Configure port {config.port_no}',
-                                     font=self.fonts['headings'])
-                    title.grid(row=0, column=0, columnspan=2)
-                    offset = 1
-                    if config.syringe_flag:
-                        offset = 2
-                        label = tk.Label(options_frame, text=f'syringe{self.conf_syr + 1}')
-                        label.grid(row=1, column=0, columnspan=2)
-                    for cnt, field in enumerate(field_list):
-                        label = tk.Label(options_frame, text=field)
-                        label.grid(row=cnt + offset, column=0)
-                        entry = tk.Entry(options_frame)
-                        entry.grid(row=cnt + offset, column=1)
-                        config.entries.append((field, entry))
-                    if config.syringe_flag:
-                        accept_p_butt = tk.Button(options_frame, text='Accept', bg='lawn green', state='disabled',
-                                                  command=lambda: accept_p(port_button))
-                        syringe_button = tk.Button(options_frame, text='Syringe motor configuration',
-                                                   font=self.fonts['buttons'],
-                                                   bg='LemonChiffon2',
-                                                   fg='black', command=lambda: self.syringe_setup(accept_p_butt))
-                        syringe_button.grid(row=cnt + offset + 1, column=0, columnspan=2)
-
-                    else:
-                        accept_p_butt = tk.Button(options_frame, text='Accept', bg='lawn green',
-                                                  command=lambda: accept_p(port_button))
-                    accept_p_butt.grid(row=cnt + offset + 2, column=0)
-
-                def delete_fields(o_frame):
-                    for widget in o_frame.winfo_children():
-                        widget.destroy()
-
-                variable = p_var.get()
-                if variable != '':
-                    node_config = NodeConfig()
-                    fields = ["Name", "Current volume in ml", "Maximum volume in ml"]
-                    if variable == 'flask':
-                        node_config.mod_type = 'flask'
-                        node_config.class_type = 'FBFlask'
-                        fields += ['Contents']
-                        node_config.dual = True
-                        node_config.flask_flag = True
-                    elif variable == 'waste':
-                        node_config.mod_type = 'waste'
-                        node_config.class_type = 'FBFlask'
-                        node_config.dual = False
-                    elif variable == 'filter':
-                        node_config.mod_type = 'filter'
-                        node_config.class_type = 'FBFlask'
-                        fields += ["Dead volume in ml"]
-                        node_config.dual = False
-                    elif variable == 'syringe':
-                        node_config.name = f"syringe{self.conf_syr + 1}"
-                        node_config.mod_type = 'syringe'
-                        node_config.class_type = 'SyringePump'
-                        fields += ['Minimum volume in ml', 'Contents']
-                        fields.pop(0)
-                        node_config.syringe_flag = True
-                        node_config.dual = True
-                    elif 'valve' in variable:
-                        node_config.name = f"syringe{self.conf_valves + 1}"
-                        node_config.mod_type = 'valve'
-                        node_config.class_type = 'SelectorValve'
-                        node_config.valve_flag = True
-                        node_config.dual = False
-                    node_config.valve_name = f'valve{valve_no + 1}'
-                    node_config.valve_id = valve_no
-                    node_config.port_no = port_no
-                    generate_fields(fields, node_config)
 
     def add_mod(self, mod_type, popup):
         if mod_type == 'sp':
@@ -452,7 +478,7 @@ class SetupGUI:
         if self.num_syringes > 0 and self.num_valves > 0:
             self.graph_setup()
 
-    def syringe_setup(self, button):
+    def syringe_setup(self, node_config, fields, window, button):
         def accept():
             motor_cxn = motor_connector.get()
             endstop = endstop_connector.get()
@@ -477,46 +503,59 @@ class SetupGUI:
                     module.name = syringe_name
                     module.mod_type = 'syringe'
                     module.class_type = 'SyringePump'
-                    module.mod_config = {'screw_pitch': 8, 'linear_stepper': True}
-                    self.setup_motor(syringe_name, stepper_name, motor_cxn)
+                    module.mod_config = {'screw_lead': 8, 'linear_stepper': True}
+                    self.motor_setup(syringe_name, stepper_name, motor_cxn)
                     self.config_flags[0], self.config_flags[2] = False, False
-                    button.configure(state='normal')
-                    syringe_setup.destroy()
+                    self.read_fields(node_config)
+                    node_dict = node_config.as_dict()
+                    self.graph_tmp.add_node(node_dict)
+                    target_id = self.graph_tmp.internalId
+                    self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
+                                            target_name=node_config.name, target_id=target_id,
+                                            target_port=node_config.port_no, dual=node_config.dual)
+                    button.configure(bg='lawn green')
+                    window.destroy()
             else:
                 if not motor_cxn:
                     self.write_message('Please select a motor connector')
                 if not endstop:
                     self.write_message('Please select an endstop connector')
 
-        syringe_setup = tk.Toplevel(self.primary)
-        syringe_setup.title('Syringe setup')
         font = self.fonts['default']
-        motor_connector = tk.StringVar(syringe_setup)
-        endstop_connector = tk.StringVar(syringe_setup)
-        motor_connection_label = tk.Label(syringe_setup, text='Which motor connector is used for this syringe',
+        label = tk.Label(window, text=f'syringe{self.conf_syr + 1}', font=font)
+        label.grid(row=2, column=0, columnspan=2)
+        motor_connector = tk.StringVar(window)
+        endstop_connector = tk.StringVar(window)
+
+        motor_connection_label = tk.Label(window, text='Which motor connector is used for this syringe',
                                           font=font)
-        motor_connection_label.grid(row=0, column=0)
-        i = 1
+        motor_connection_label.grid(row=3, column=0)
+        i = 4
         options = self.motor_options.keys()
         selected = self.used_motor_connectors.keys()
         for motor in options:
-            tk.Radiobutton(syringe_setup, text=motor, variable=motor_connector, value=motor).grid(row=i, column=0)
+            tk.Radiobutton(window, text=motor, variable=motor_connector, value=motor).grid(row=i, column=0)
             i += 1
         motor_connector.set(self.find_unselected(options, selected))
-        endstop_label = tk.Label(syringe_setup, text='Which endstop connection is used for this syringe?', font=font)
-        endstop_label.grid(row=7, column=0)
-        i = 8
+
+        endstop_label = tk.Label(window, text='Which endstop connection is used for this syringe?', font=font)
+        endstop_label.grid(row=9, column=0)
+        i = 10
         options = self.es_options.keys()
         selected = self.used_endstop_connectors.keys()
         for option in options:
-            tk.Radiobutton(syringe_setup, text=option, variable=endstop_connector, value=option).grid(row=i, column=0)
+            tk.Radiobutton(window, text=option, variable=endstop_connector, value=option).grid(row=i, column=0)
             i += 1
         endstop_connector.set(self.find_unselected(options, selected))
 
-        accept_button = tk.Button(syringe_setup, text='Accept', fg='black', bg='lawn green', command=accept)
-        cancel_button = tk.Button(syringe_setup, text='Cancel', fg='black', bg='tomato2', command=syringe_setup.destroy)
-        accept_button.grid(row=i, column=0)
-        cancel_button.grid(row=i, column=1)
+        offset = i
+        offset = self.generate_fields(node_config, window, fields, offset) + 1
+
+        accept_button = tk.Button(window, text='Accept', fg='black', bg='lawn green', command=accept)
+        cancel_button = tk.Button(window, text='Cancel', fg='black', bg='tomato2',
+                                  command=window.destroy)
+        accept_button.grid(row=offset, column=0)
+        cancel_button.grid(row=offset, column=1)
 
     def valve_setup(self, valve_button):
         def accept(button):
@@ -524,7 +563,7 @@ class SetupGUI:
             try:
                 pin = hall_connector.get()
                 gear = geared_motor.get()
-                hall_sensor = self.pins[pin]
+                hall_sensor = pins[pin]
             except KeyError:
                 self.write_message('Please select a pin for the hall-effect sensor')
             else:
@@ -548,57 +587,90 @@ class SetupGUI:
                         if gear == '':
                             gear = 'Direct drive'
                         module.mod_config = {'ports': 10, "linear_stepper": False, 'gear': gear}
-                        self.setup_motor(valve_name, stepper_name, motor_cxn)
+                        self.motor_setup(valve_name, stepper_name, motor_cxn)
                         module.devices['he_sens'] = {'name': he_sens_name, 'cmd_id': hall_sensor, 'device_config': {}}
                         self.cmd_devices.devices[hall_sensor] = {'command_id': hall_sensor}
                         self.config_flags[0], self.config_flags[2] = False, False
                         button.configure(bg='lawn green')
-                        valve_setup.destroy()
+                        window.destroy()
 
-        valve_setup = tk.Toplevel(self.primary)
-        valve_setup.title('Valve setup')
+        pins = {'Analog Read 1 (A3)': 'AR1', 'Analog Read 2 (A4)': 'AR2'}
+        window = tk.Toplevel(self.primary)
+        label = tk.Label(window, text=f"Valve {self.conf_valves + 1}")
+        label.grid(row=2, column=0, columnspan=2)
         font = self.fonts['default']
-        motor_connector = tk.StringVar(valve_setup)
-        hall_connector = tk.StringVar(valve_setup)
-        geared_motor = tk.StringVar(valve_setup)
-        motor_text = 'Which motor connector is used for this valve?'
-        motor_connection_label = tk.Label(valve_setup, text=motor_text, font=font)
-        i = 1
+        motor_connector = tk.StringVar(window)
+        hall_connector = tk.StringVar(window)
+        geared_motor = tk.StringVar(window)
+
+        motor_connection_label = tk.Label(window, text='Which motor connector is used for this valve?', font=font)
+        motor_connection_label.grid(row=3, column=0)
+        i = 4
         options = self.motor_options.keys()
         selected = self.used_motor_connectors.keys()
         for motor_cn in options:
-            tk.Radiobutton(valve_setup, text=motor_cn, variable=motor_connector, value=motor_cn).grid(row=i, column=0)
+            tk.Radiobutton(window, text=motor_cn, variable=motor_connector, value=motor_cn).grid(row=i, column=0)
             i += 1
         motor_connector.set(self.find_unselected(options, selected))
-        hall_sensor_label = tk.Label(valve_setup, text='Which pin is the hall sensor plugged into?', font=font)
-        hall_options = list(self.pins.keys())
+
+        hall_sensor_label = tk.Label(window, text='Which pin is the hall sensor plugged into?', font=font)
+        hall_sensor_label.grid(row=9, column=0)
+        hall_options = list(pins.keys())
         pin_to_remove = None
         for j in range(0, len(hall_options)):
             if hall_options[j] in self.used_he_pins:
                 pin_to_remove = j
         if pin_to_remove is not None:
             hall_options.pop(pin_to_remove)
-        hall_sensor_selector = tk.OptionMenu(valve_setup, hall_connector, *hall_options)
+        hall_sensor_selector = tk.OptionMenu(window, hall_connector, *hall_options)
+        hall_sensor_selector.grid(row=10, column=0)
 
         gear_options = ['Direct drive', '1.5:1', '2:1', '3:1']
         geared_motor.set('')
-        gear_label = tk.Label(valve_setup, text='Gear options:', font=font)
-        gear_selector = tk.OptionMenu(valve_setup, geared_motor, *gear_options)
+        gear_label = tk.Label(window, text='Gear options:', font=font)
+        gear_label.grid(row=12)
+        gear_selector = tk.OptionMenu(window, geared_motor, *gear_options)
+        gear_selector.grid(row=13)
 
-        accept_button = tk.Button(valve_setup, text='Accept', fg='black', bg='lawn green',
+        offset = 14
+        accept_button = tk.Button(window, text='Accept', fg='black', bg='lawn green',
                                   command=lambda: accept(valve_button))
-        cancel_button = tk.Button(valve_setup, text='Cancel', fg='black', bg='tomato2',
-                                  command=valve_setup.destroy)
+        cancel_button = tk.Button(window, text='Cancel', fg='black', bg='tomato2',
+                                  command=lambda: window.destroy)
+        accept_button.grid(row=offset + 1, column=0)
+        cancel_button.grid(row=offset + 1, column=1)
 
-        motor_connection_label.grid(row=0, column=0)
-        hall_sensor_label.grid(row=7, column=0)
-        hall_sensor_selector.grid(row=8, column=0)
-        gear_label.grid(row=9)
-        gear_selector.grid(row=10)
-        accept_button.grid(row=16, column=0)
-        cancel_button.grid(row=16, column=1)
+    def valve_link(self, node_config, window, button):
+        def accept_valve_link(sel_valve, valve_button):
+            valve_name = sel_valve.get()
+            if valve_name != "":
+                valve = self.graph_tmp.valves[valve_name]
+                self.used_valves.append(valve_name)
+                self.graph_tmp.add_link(node_config.valve_name, node_config.valve_id, valve["name"],
+                                        valve["internalId"], node_config.port_no, node_config.dual)
+                valve_button.configure(bg="lawn green")
+                window.destroy()
+            else:
+                self.write_message("Please select a valve")
 
-    def setup_motor(self, name, stepper_name, motor_cn):
+        possible_valves = [valve for valve in self.graph_tmp.valves.keys()]
+        selected_valve = tk.StringVar(window)
+        selector_label = tk.Label(window, text="Select a valve:")
+        valve_selector = tk.OptionMenu(window, selected_valve,
+                                       *possible_valves)
+        selected_valve.set(self.find_unselected(possible_valves, self.used_valves))
+
+        valve_ok = tk.Button(window, text="Accept", fg="black", bg="lawn green",
+                             command=lambda: accept_valve_link(selected_valve, button))
+        cancel_butt = tk.Button(window, text="Cancel", fg="black",
+                                bg="tomato2", command=window.destroy)
+
+        selector_label.grid()
+        valve_selector.grid(row=2, column=1)
+        valve_ok.grid(row=3, column=1)
+        cancel_butt.grid(row=3, column=2)
+
+    def motor_setup(self, name, stepper_name, motor_cn):
         motor_config = {'name': stepper_name}
         motor_config.update(self.motor_options[motor_cn][stepper_name])
         mod_info_device = {'stepper': motor_config}
@@ -607,6 +679,84 @@ class SetupGUI:
                                                   'config': self.motor_configs['default']}
         enable_pin = motor_config['enable_pin']
         self.cmd_devices.devices[enable_pin] = {'command_id': enable_pin}
+
+    def flask_setup(self, node_config, fields, window, button):
+        def accept_flask(flask_button):
+            node_config.name = node_config.entries[0][1].get()
+            self.read_fields(node_config, 1)
+            node_dict = node_config.as_dict()
+            self.graph_tmp.add_node(node_dict)
+            target_id = self.graph_tmp.internalId
+            flask = node_config.generate_flask()
+            self.modules[flask.name] = flask
+            self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
+                                    target_name=node_config.name, target_id=target_id,
+                                    target_port=node_config.port_no, dual=node_config.dual)
+            flask_button.configure(bg='lawn green')
+            window.destroy()
+
+        offset = self.generate_fields(node_config, window, fields, 2) + 1
+        flask_ok = tk.Button(window, text='Accept', fg='black', bg='lawn green', command=lambda: accept_flask(button))
+        flask_cancel = tk.Button(window, text="Cancel", fg='black', bg='tomato2',
+                                 command=window.destroy)
+        flask_ok.grid(row=offset, column=1)
+        flask_cancel.grid(row=offset, column=2)
+
+    def reactor_setup(self, node_config, fields, window, button):
+        def accept_reactor(reactor_button):
+            try:
+                stirrer = stir_pin.get()
+                heater = heat_pin.get()
+                thermistor = temp_pin.get()
+                stirrer = pins[stirrer]
+                heater = pins[heater]
+            except KeyError:
+                self.write_message("Please select pins for the reactor devices")
+            else:
+                node_config.name = node_config.entries[0][1].get()
+                self.read_fields(node_config)
+                node_dict = node_config.as_dict()
+                self.graph_tmp.add_node(node_dict)
+                target_id = self.graph_tmp.internalId
+                reactor = node_config.generate_reactor(thermistor, stirrer, heater)
+                self.modules[reactor.name] = reactor
+                self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
+                                        target_name=node_config.name, target_id=target_id,
+                                        target_port=node_config.port_no, dual=node_config.dual)
+                self.cmd_devices.devices[thermistor] = {'command_id': thermistor}
+                self.cmd_devices.devices[stirrer] = {'command_id': stirrer}
+                self.cmd_devices.devices[heater] = {'command_id': heater}
+                reactor_button.configure(bg='lawn green')
+                window.destroy()
+
+        pins = {"D8": "AW1", "D9": "AW2", "D10": "AW3"}
+        temp_pins = ["T1", "T2"]
+        heat_pin = tk.StringVar()
+        stir_pin = tk.StringVar()
+        temp_pin = tk.StringVar()
+
+        offset = self.generate_fields(node_config, window, fields, 2) + 1
+        pin_heat_label = tk.Label(window, text="Which pin is the heater connected to?")
+        pin_heat_selector = tk.OptionMenu(window, heat_pin, *list(pins.keys()))
+        pin_heat_label.grid(row=offset)
+        pin_heat_selector.grid(row=offset, column=1)
+
+        pin_stir_label = tk.Label(window, text="Which pin is the stirrer connected to?")
+        pin_stir_label.grid(row=offset + 1)
+        pin_stir_selector = tk.OptionMenu(window, stir_pin, *list(pins.keys()))
+        pin_stir_selector.grid(row=offset + 1, column=1)
+
+        tpin_label = tk.Label(window, text="Which pin is the thermistor attached to?")
+        tpin_label.grid(row=offset + 2)
+        tpin_selector = tk.OptionMenu(window, temp_pin, *temp_pins)
+        tpin_selector.grid(row=offset + 2, column=1)
+
+        reactor_ok = tk.Button(window, text='Accept', fg='black', bg='lawn green',
+                               command=lambda: accept_reactor(button))
+        reactor_ok.grid(row=offset + 3)
+        reactor_cancel = tk.Button(window, text="Cancel", fg="black",
+                                   bg="tomato2", command=window.destroy)
+        reactor_cancel.grid(row=offset + 3, column=2)
 
     def validate_text(self, new_text):
         if not new_text:
@@ -635,6 +785,30 @@ class SetupGUI:
         for option in options:
             if option not in selected:
                 return option
+
+    @staticmethod
+    def generate_fields(node_config, frame, field_list, offset):
+        # todo add validation to volume entries
+        index = 0
+        for index, field in enumerate(field_list):
+            label = tk.Label(frame, text=field)
+            label.grid(row=index + offset, column=0)
+            entry = tk.Entry(frame)
+            entry.grid(row=index + offset, column=1)
+            node_config.entries.append((field, entry))
+        return index + offset
+
+    @staticmethod
+    def read_fields(node_config, start_field=0):
+        for i in range(start_field, len(node_config.entries)):
+            field = node_config.entries[i][0]
+            config = node_config.entries[i][1].get()
+            node_config.add_params.append((field, config))
+
+    @staticmethod
+    def delete_fields(o_frame):
+        for widget in o_frame.winfo_children():
+            widget.destroy()
 
     def run_fb_menu(self):
         run_popup = tk.Toplevel(self.primary)

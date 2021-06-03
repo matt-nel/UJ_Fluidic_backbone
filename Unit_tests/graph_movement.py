@@ -26,6 +26,8 @@ class GraphTest(Thread):
             elif 'heat' or 'stir' in response:
                 print("The following reactors are available:\n", self.gui.manager.flasks.keys(), '\n')
                 reactor = input("Which reactor?")
+                speed, temp = 0, 0.0
+                heat_secs, stir_secs = 0.0, 0.0
                 if 'heat' in response:
                     temp = float(input("Temperature?"))
                     heat_secs = int(input("For how many seconds?"))
@@ -33,7 +35,9 @@ class GraphTest(Thread):
                     print("Stirring:\n")
                     speed = float(input("What speed"))
                     stir_secs = float(input("For how many seconds?"))
-                self.gui.manager.move_liquid('flask1', 'syringe1', 5, 10000)
+                params = {'temp': temp, 'heat_secs': heat_secs, 'speed': speed, 'stir_secs': stir_secs}
+                command = Manager.generate_cmd_dict('reactor', reactor, response, params)
+                self.gui.manager.add_to_queue(command)
             elif response == 'q':
                 break
         self.gui.destroy()

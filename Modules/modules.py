@@ -74,12 +74,13 @@ class FBFlask(Module):
     """
     def __init__(self, name, module_info, cmd_mng, manager):
         super(FBFlask, self).__init__(name, module_info, cmd_mng, manager)
+        self.type = "FSK"
         self.manager = manager
         module_config = module_info['mod_config']
         self.contents = module_config['Contents']
         self.contents_hist = []
         self.cur_vol = float(module_config['Current volume'])*1000
-        self.max_vol = float(module_config['Maximum volume'])*1000
+        self.max_volume = float(module_config['Maximum volume'])*1000
 
     def change_volume(self, vol):
         if self.check_volume(vol):
@@ -90,13 +91,16 @@ class FBFlask(Module):
         return False
 
     def check_volume(self, vol):
-        # todo use this to check for contents in available flasks
-        if self.cur_vol + vol > self.max_vol:
-            self.write_to_gui(f'Max volume of {self.name} would be exceeded')
-            return False
-        elif self.cur_vol + vol < 0:
-            self.write_to_gui(f'Insufficient {self.contents} in {self.name}')
-            return False
+        # if syringe aspirating (+vol), flask volume reduces. If syringe dispensing (-vol), flask volume increases.
+        vol = -vol
+        if vol < 0:
+            if self.cur_vol + vol < 0:
+                self.write_to_gui(f'Max volume of {self.name} would be exceeded')
+                return False
+        else:
+            if self.cur_vol + vol > self.max_volume:
+                self.write_to_gui(f'Insufficient {self.contents} in {self.name}')
+                return False
         return True
 
     def change_contents(self, new_contents, vol):
