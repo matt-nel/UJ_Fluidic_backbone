@@ -31,6 +31,15 @@
         "ENY": {
             "command_id": "ENY"
         },
+        "T1": {
+            "command_id": "T1"
+        },
+        "AW2": {
+            "command_id": "AW2"
+        },
+        "AW1": {
+            "command_id": "AW1"
+        },
         "stepperZ": {
             "command_id": "STPZ",
             "config": {
@@ -43,6 +52,9 @@
         },
         "ENZ": {
             "command_id": "ENZ"
+        },
+        "AR1": {
+            "command_id": "AR1"
         },
         "stepperE0": {
             "command_id": "STPE0",
@@ -57,6 +69,9 @@
         "ENE0": {
             "command_id": "ENE0"
         },
+        "AR2": {
+            "command_id": "AR2"
+        },
         "stepperE1": {
             "command_id": "STPE1",
             "config": {
@@ -68,22 +83,7 @@
             }
         },
         "ENE1": {
-            "command_id": "ENE1"
-        },
-        "T1": {
-            "command_id": "T1"
-        },
-        "AW2": {
-            "command_id": "AW2"
-        },
-        "AW1": {
-            "command_id": "AW1"
-        },
-        "AR1": {
-            "command_id": "AR1"
-        },
-        "AR2": {
-            "command_id": "AR2"
+            "command_id": "ENE0"
         }
-    }
+}
 }

@@ -236,6 +236,13 @@ class SetupGUI:
 
         self.simulation = False
         self.exit_flag = False
+        steppers = [("stepperX", "STPX", "ENX"), ("stepperY", "STPY", "ENY"), ("stepperZ", "STPZ", "ENZ"), ("stepperE0", "STPE0", "ENE0"), ("stepperE1", "STPE1", "ENE1")]
+        motor_config = self.motor_configs["default"]
+        for stepper in steppers:
+            self.cmd_devices.devices[stepper[0]] = {'command_id': stepper[1],
+                                                      'config': self.motor_configs['default']}
+            enable_pin = stepper[2]
+            self.cmd_devices.devices[enable_pin] = {'command_id': enable_pin}
         self.init_setup_panel()
         self.init_utilities_panel()
 
@@ -370,6 +377,7 @@ class SetupGUI:
                     node_config.mod_type = 'reactor'
                     node_config.class_type = "Reactor"
                     fields += ['Contents', 'Fan speed RPM', "Number of heaters"]
+                    node_config.dual = True
                     self.reactor_setup(node_config, fields, port_options_window, button)
                 elif variable == 'syringe':
                     node_config.name = f"syringe{self.conf_syr + 1}"
@@ -675,10 +683,6 @@ class SetupGUI:
         motor_config.update(self.motor_options[motor_cn][stepper_name])
         mod_info_device = {'stepper': motor_config}
         self.modules[name].devices.update(mod_info_device)
-        self.cmd_devices.devices[stepper_name] = {'command_id': motor_config['cmd_id'],
-                                                  'config': self.motor_configs['default']}
-        enable_pin = motor_config['enable_pin']
-        self.cmd_devices.devices[enable_pin] = {'command_id': enable_pin}
 
     def flask_setup(self, node_config, fields, window, button):
         def accept_flask(flask_button):

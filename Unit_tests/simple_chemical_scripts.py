@@ -1,12 +1,14 @@
 from Manager import Manager
+from web_listener import WebListener
 from threading import Thread
 from Fluidic_backbone_GUI import FluidicBackboneUI
 
 
 class GraphTest(Thread):
-    def __init__(self, gui):
+    def __init__(self, gui_main, web_listener):
         Thread.__init__(self)
         self.gui = gui
+        self.listener = web_listener
         self.quit_flag = False
 
     def run(self):
@@ -18,7 +20,7 @@ class GraphTest(Thread):
 
     def main_menu(self):
         response = input("[1]: Move\n[2]: Heat and stir\n[3]: Show pipeline\n[4]: Execute pipeline\n"
-                         "[5]: Clear pipeline")
+                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n[8]: Update URL\n")
         if response == "1":
             self.move_menu()
         elif response == "2":
@@ -31,6 +33,14 @@ class GraphTest(Thread):
             self.gui.manager.start_queue()
         elif response == "5":
             self.gui.manager.pipeline.queue.clear()
+        elif response == "6":
+            self.gui.manager.import_queue("Configs/Pipeline.json")
+        elif response == "7":
+            self.gui.manager.export_queue()
+        elif response == "8":
+            print("Please enter the IP address of the server")
+            response = input("IP address:")
+            self.listener.update_url(response)
 
     def move_menu(self):
         print("The following nodes are connected:")
@@ -55,14 +65,14 @@ class GraphTest(Thread):
         speed, temp = 0, 0.0
         heat_secs, stir_secs = 0.0, 0.0
         preheat = False
-        if 'heat' in response:
+        if 'heat' in response.lower():
             print("Heating parameters:")
             temp = float(input("Temperature?"))
             heat_secs = int(input("For how many seconds?"))
             preheat = input("Would you like the reactor to preheat?")
             if preheat == 'y' or preheat == 'Y':
                 preheat = True
-        if 'stir' in response:
+        if 'stir' in response.lower():
             print("Stirring parameters:")
             speed = float(input("What speed"))
             stir_secs = float(input("For how many seconds?"))
@@ -72,6 +82,8 @@ class GraphTest(Thread):
 
 
 gui = FluidicBackboneUI(False)
-test = GraphTest(gui)
+listener = WebListener(gui.manager)
+test = GraphTest(gui, listener)
 test.start()
+listener.start()
 gui.primary.mainloop()

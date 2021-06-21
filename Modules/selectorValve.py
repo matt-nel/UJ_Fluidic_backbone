@@ -112,6 +112,7 @@ class SelectorValve(Module):
                 if self.find_opt(self.magnet_positions[0]):
                     max_reading = he_sens.analog_read()
                 else:
+                    max_reading = he_sens.analog_read()
                     if self.check_stop:
                         break
             # Close to one of the negative magnets
@@ -189,20 +190,21 @@ class SelectorValve(Module):
             if target < 400 and readings[-1] < min(readings):
                 opt_pos = self.steppers[0].get_current_position()
             # found new_maximum
-            elif readings[-1] > max(readings):
+            elif readings[-1] > max(readings[0:-1]):
                 opt_pos = self.steppers[0].get_current_position()
             error = abs(target - readings[-1])
             errors.append(error)
             last_u = u
             if self.check_stop:
                 return False
-            elif readings[-1] > DEFAULT_UPPER_LIMIT or readings[-1] < DEFAULT_LOWER_LIMIT:
+            elif readings[-1] > self.magnet_positions[0] or readings[-1] < DEFAULT_LOWER_LIMIT:
                 break
             if iters > 10:
                 self.steppers[0].move_to(opt_pos)
                 opt = self.he_sensors[0].analog_read()
                 if opt > 700:
                     self.magnet_positions[0] = opt
+
                 break
         self.steppers[0].en_motor()
         return True

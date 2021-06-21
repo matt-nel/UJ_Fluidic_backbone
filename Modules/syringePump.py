@@ -20,7 +20,7 @@ class SyringePump(Module):
         # {volume: length in mm}
         self.syringe_lengths = {1000.0: 58, 2000.0: 2, 4000.0: 42, 5000.0: 58, 10000.0: 58, 20000.0: 20, 60000.0: 90}
         self.max_volume = 0.0
-        self.min_volume = 1.0
+        self.min_volume = 1000
         self.syringe_length = 0.0
         self.screw_lead = module_config["screw_lead"]
         self.position = 0

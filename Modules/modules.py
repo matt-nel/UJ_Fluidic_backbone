@@ -83,6 +83,7 @@ class FBFlask(Module):
         self.max_volume = float(module_config['Maximum volume'])*1000
 
     def change_volume(self, vol):
+        vol = -vol
         if self.check_volume(vol):
             self.cur_vol += vol
             if self.cur_vol == 0:

@@ -223,8 +223,9 @@ class LinearStepperMotor(StepperMotor):
         """
         Sends command over serial to run the motor until the end-switch is triggered.
         """
-        self.en_motor(True)
-        with self.serial_lock:
-            self.cmd_stepper.home(False)
-        self.watch_move()
-        self.set_running_speed(self.running_speed)
+        if not self.check_endstop():
+            self.en_motor(True)
+            with self.serial_lock:
+                self.cmd_stepper.home(False)
+            self.watch_move()
+            self.set_running_speed(self.running_speed)

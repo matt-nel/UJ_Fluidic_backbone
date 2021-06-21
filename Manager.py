@@ -22,11 +22,13 @@ class Manager(Thread):
     def __init__(self, gui_main, simulation=False):
         Thread.__init__(self)
         self.name = "Manager"
+        self.id = "UJFB1"
         self.gui_main = gui_main
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
         cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
         self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
+        self.disable_all_motors()
         self.module_info = self.json_loader("Configs/module_info.json")
         graph_config = self.json_loader("Configs/module_connections.json")
         self.q = Queue()
@@ -58,6 +60,13 @@ class Manager(Thread):
                 return json.load(file)
         except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
             raise FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
+
+    def disable_all_motors(self):
+        self.cmd_mng.ENX.high()
+        self.cmd_mng.ENY.high()
+        self.cmd_mng.ENZ.high()
+        self.cmd_mng.ENE0.high()
+        self.cmd_mng.ENE1.high()
 
     def populate_modules(self):
         syringes = 0
@@ -163,9 +172,29 @@ class Manager(Thread):
         pipeline = []
         while not self.pipeline.empty():
             command_dict = self.pipeline.get(block=False)
-            pipeline += command_dict
+            pipeline.append(command_dict)
         self.add_to_queue(pipeline)
         return pipeline
+
+    def export_queue(self):
+        output = {"pipeline": list(self.pipeline.queue)}
+        export_queue = json.dumps(output, indent=4)
+        pipeline_path = os.path.join(self.script_dir, "Configs/Pipeline.json")
+        file = open(pipeline_path, 'w+')
+        file.write(export_queue)
+        file.close()
+
+    def import_queue(self, file, overwrite=False):
+        file = os.path.join(self.script_dir, file)
+        try:
+            with open(file) as queue_file:
+                queue_list = json.load(queue_file)['pipeline']
+        except json.decoder.JSONDecodeError:
+            self.gui_main.write_message("That is not a valid JSON file")
+            return False
+        if overwrite:
+            self.pipeline.queue.clear()
+        self.add_to_queue(queue_list)
 
     def start_queue(self):
         with self.interrupt_lock:
@@ -249,7 +278,8 @@ class Manager(Thread):
 
     def command_syringe(self, name, command, parameters, command_dict):
         if command == 'move':
-            if parameters['target'] is None:
+            target = parameters["target"]
+            if target is None:
                 adj = [key for key in self.graph.adj[name].keys()]
                 valve = adj[0]
                 valve = self.graph.nodes[valve]['object']
@@ -260,6 +290,7 @@ class Manager(Thread):
                     self.gui_main.write_message('Please set valve position or home valve')
                     return False
             else:
+                parameters["target"] = self.find_target(target)
                 cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name + 'move', args=(parameters,))
         elif command == 'home':
             cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=())
@@ -277,6 +308,16 @@ class Manager(Thread):
             self.wait_until_ready()
         self.q.task_done()
         return True
+
+    def find_target(self, target):
+        target_name = target.lower()
+        if "syringe" in target_name:
+            target = self.syringes[target]
+        elif "flask" in target_name:
+            target = self.flasks[target]
+        elif "reactor" in target_name:
+            target = self.reactors[target]
+        return target
 
     def command_valve(self, name, command, parameters, command_dict):
         if type(command) is int and 0 <= command < 9:
@@ -343,7 +384,8 @@ class Manager(Thread):
         """
         volume *= 1000
         pipelined_steps = []
-        max_vols = []
+        prev_max_vol = 999999.00
+        min_vol = 0
         # Returns a simple path from source to target. No nodes are repeated.
         path = self.find_path(source, target)
         if len(path) < 1:
@@ -352,8 +394,11 @@ class Manager(Thread):
         valves = path[1:-1]
         # Find lowest maximum volume amongst syringes
         for valve in valves:
-            max_vols.append(self.valves[valve].syringe.max_volume)
-        max_volume = min(max_vols)
+            cur_max_vol = self.valves[valve].syringe.max_volume
+            if cur_max_vol < prev_max_vol:
+                max_vol = cur_max_vol
+                min_vol = self.valves[valve].syringe.min_volume
+        max_volume = max_vol - min_vol
         # Determine number of moves required
         nr_full_moves = int(volume / max_volume)
         remaining_volume = volume % max_volume
@@ -380,6 +425,7 @@ class Manager(Thread):
             path_list = [p for p in paths]
             if path_list:
                 return path_list[0]
+
         if not source_found:
             self.gui_main.write_message(f"{source} not present")
         if not target_found:
@@ -425,23 +471,20 @@ class Manager(Thread):
         if source.type == "SP":
             direction = "D"
             name = source.name
-            max_volume = source.max_volume
-            min_volume = source.min_volume
             valve_target = target
+            syringe_target = target
         else:
             direction = "A"
             name = target.name
-            max_volume = target.max_volume
-            min_volume = target.min_volume
             valve_target = source
+            syringe_target = source
         # Command to index valve to required position
         commands.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
                          'parameters': {'target': valve_target.name, 'wait': True}})
         # Command to dispense/withdraw syringe
         commands.append({'mod_type': 'syringe', 'module_name': name, 'command': 'move',
-                         'max_volume': max_volume, 'min_vol': min_volume, 'parameters':
-                             {'volume': volume, 'flow_rate': flow_rate, 'target': target,
-                              'direction': direction, 'wait': True}})
+                         'parameters': {'volume': volume, 'flow_rate': flow_rate, 'target': syringe_target.name,
+                                        'direction': direction, 'wait': True}})
         return commands
 
     @staticmethod
@@ -473,24 +516,21 @@ class Manager(Thread):
         commands += valve_commands
         source_syringe = source_valve.ports[-1]
         target_syringe = target_valve.ports[-1]
-        max_volume = max(source_syringe.max_volume, target_syringe.max_volume)
         # Command to dispense source syringe into target syringe. Does not signal Manager to wait for completion.
-        commands.append({'mod_type': 'syringe', 'module_name': source_syringe.name, 'command': 'move',
-                         'max_vol': max_volume, 'parameters':
-                             {'volume': volume, 'flow_rate': flow_rate, 'target': target_syringe,
-                              'direction': "D", 'wait': False}})
+        commands.append({'mod_type': 'syringe', 'module_name': source_syringe.name, 'command': 'move', 'parameters':
+            {'volume': volume, 'flow_rate': flow_rate, 'target': target_syringe.name,
+             'direction': "D", 'wait': False}})
         # Command to aspirate target syringe to accept contents of source syringe. Signals manager to
         # wait for completion.
-        commands.append({'mod_type': 'syringe', 'module_name': target_syringe.name, 'command': 'move',
-                         'max_vol': max_volume, 'parameters':
-                             {'volume': volume, 'flow_rate': flow_rate, 'target': source_syringe,
-                              'direction': "A", 'wait': True}})
+        commands.append({'mod_type': 'syringe', 'module_name': target_syringe.name, 'command': 'move', 'parameters':
+            {'volume': volume, 'flow_rate': flow_rate, 'target': source_syringe.name,
+             'direction': "A", 'wait': True}})
         return commands
 
     @classmethod
     def generate_cmd_dict(cls, mod_type, mod_name, command, parameters):
         return [{'mod_type': mod_type, 'module_name': mod_name, 'command': command,
-                "parameters": parameters}]
+                 "parameters": parameters}]
 
 
 class Task:
