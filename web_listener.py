@@ -10,12 +10,17 @@ class WebListener(Thread):
     def __init__(self, robot_manager):
         Thread.__init__(self)
         self.manager = robot_manager
-        self.url = DEFAULT_URL
+        self.url = self.manager.prev_run_config['url']
+        if self.url == "":
+            self.url = DEFAULT_URL
         self.lock = Lock()
+        self.manager.prev_run_config['url'] = self.url
 
     def update_url(self, new_url):
         with self.lock:
             self.url = "http://" + new_url + "/robot_query"
+        self.manager.prev_run_config['url'] = self.url
+        self.manager.rc_changes = True
 
     def check_connection(self):
         if self.url == "":

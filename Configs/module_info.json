@@ -1,14 +1,47 @@
 {
-    "Flask1": {
-        "name": "Flask1",
-        "mod_type": "flask",
-        "class_type": "FBFlask",
+    "syringe1": {
+        "name": "syringe1",
+        "mod_type": "syringe",
+        "class_type": "SyringePump",
         "mod_config": {
-            "Contents": "water",
-            "Current volume": "300",
-            "Maximum volume": "400"
+            "screw_lead": 8,
+            "linear_stepper": true
         },
-        "devices": {}
+        "devices": {
+            "stepper": {
+                "name": "stepperX",
+                "cmd_id": "STPX",
+                "device_config": {
+                    "steps_per_rev": 3200,
+                    "enabled_acceleration": false,
+                    "speed": 1000,
+                    "max_speed": 10000,
+                    "acceleration": 1000
+                }
+            }
+        }
+    },
+    "syringe2": {
+        "name": "syringe2",
+        "mod_type": "syringe",
+        "class_type": "SyringePump",
+        "mod_config": {
+            "screw_lead": 8,
+            "linear_stepper": true
+        },
+        "devices": {
+            "stepper": {
+                "name": "stepperY",
+                "cmd_id": "STPY",
+                "device_config": {
+                    "steps_per_rev": 3200,
+                    "enabled_acceleration": false,
+                    "speed": 1000,
+                    "max_speed": 10000,
+                    "acceleration": 1000
+                }
+            }
+        }
     },
     "Reactor1": {
         "name": "Reactor1",
@@ -46,63 +79,6 @@
             }
         }
     },
-    "Flask2": {
-        "name": "Flask2",
-        "mod_type": "flask",
-        "class_type": "FBFlask",
-        "mod_config": {
-            "Contents": "empty",
-            "Current volume": "0",
-            "Maximum volume": "300"
-        },
-        "devices": {}
-    },
-    "syringe1": {
-        "name": "syringe1",
-        "mod_type": "syringe",
-        "class_type": "SyringePump",
-        "mod_config": {
-            "screw_lead": 8,
-            "linear_stepper": true
-        },
-        "devices": {
-            "stepper": {
-                "name": "stepperX",
-                "cmd_id": "STPX",
-                "enable_pin": "ENX",
-                "device_config": {
-                    "steps_per_rev": 3200,
-                    "enabled_acceleration": false,
-                    "speed": 1000,
-                    "max_speed": 10000,
-                    "acceleration": 1000
-                }
-            }
-        }
-    },
-    "syringe2": {
-        "name": "syringe2",
-        "mod_type": "syringe",
-        "class_type": "SyringePump",
-        "mod_config": {
-            "screw_lead": 8,
-            "linear_stepper": true
-        },
-        "devices": {
-            "stepper": {
-                "name": "stepperY",
-                "cmd_id": "STPY",
-                "enable_pin": "ENY",
-                "device_config": {
-                    "steps_per_rev": 3200,
-                    "enabled_acceleration": false,
-                    "speed": 1000,
-                    "max_speed": 10000,
-                    "acceleration": 1000
-                }
-            }
-        }
-    },
     "valve1": {
         "name": "valve1",
         "mod_type": "valve",
@@ -116,7 +92,6 @@
             "stepper": {
                 "name": "stepperZ",
                 "cmd_id": "STPZ",
-                "enable_pin": "ENZ",
                 "device_config": {
                     "steps_per_rev": 3200,
                     "enabled_acceleration": false,
@@ -145,7 +120,6 @@
             "stepper": {
                 "name": "stepperE0",
                 "cmd_id": "STPE0",
-                "enable_pin": "ENE0",
                 "device_config": {
                     "steps_per_rev": 3200,
                     "enabled_acceleration": false,
@@ -160,5 +134,27 @@
                 "device_config": {}
             }
         }
+    },
+    "Flask2": {
+        "name": "Flask2",
+        "mod_type": "flask",
+        "class_type": "FBFlask",
+        "mod_config": {
+            "Contents": "empty",
+            "Current volume": "0",
+            "Maximum volume": "300"
+        },
+        "devices": {}
+    },
+    "Flask1": {
+        "name": "Flask1",
+        "mod_type": "flask",
+        "class_type": "FBFlask",
+        "mod_config": {
+            "Contents": "water",
+            "Current volume": "300",
+            "Maximum volume": "400"
+        },
+        "devices": {}
     }
 }

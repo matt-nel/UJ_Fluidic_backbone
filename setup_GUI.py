@@ -212,22 +212,26 @@ class SetupGUI:
                                           "max_speed": 10000, "acceleration": 1000},
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
                                               "acceleration": 1000}}
-        self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX', 'enable_pin': 'ENX',
+        self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
                                                  'device_config': self.motor_configs['default']}},
-                              'Y': {'stepperY': {'cmd_id': 'STPY', 'enable_pin': 'ENY',
+                              'Y': {'stepperY': {'cmd_id': 'STPY',
                                                  'device_config': self.motor_configs['default']}},
-                              'Z': {'stepperZ': {'cmd_id': 'STPZ', 'enable_pin': 'ENZ',
+                              'Z': {'stepperZ': {'cmd_id': 'STPZ',
                                                  'device_config': self.motor_configs['default']}},
-                              'E0': {'stepperE0': {'cmd_id': 'STPE0', 'enable_pin': 'ENE0',
+                              'E0': {'stepperE0': {'cmd_id': 'STPE0',
                                                    'device_config': self.motor_configs['default']}},
-                              'E1': {'stepperE1': {'cmd_id': 'STPE1', 'enable_pin': 'ENE1',
+                              'E1': {'stepperE1': {'cmd_id': 'STPE1',
                                                    'device_config': self.motor_configs['default']}}}
+        self.default_running_config = {
+            "url": "",
+            "magnet_readings": {"valve1": {"0": 0, "2": 0, "4": 0, "6": 0, "8": 0}, "valve2": {"0": 0, "2": 0,
+                                                                                               "4": 0, "6": 0, "8": 0}}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
         self.used_he_pins = []
         self.used_valves = []
         self.config_filenames = ['Configs/cmd_config.json', 'Configs/module_connections.json',
-                                 'Configs/module_info.json']
+                                 'Configs/module_info.json', 'Configs/running_config.json']
         for file in self.config_filenames:
             file = os.path.join(self.script_dir, file)
 
@@ -236,13 +240,11 @@ class SetupGUI:
 
         self.simulation = False
         self.exit_flag = False
-        steppers = [("stepperX", "STPX", "ENX"), ("stepperY", "STPY", "ENY"), ("stepperZ", "STPZ", "ENZ"), ("stepperE0", "STPE0", "ENE0"), ("stepperE1", "STPE1", "ENE1")]
-        motor_config = self.motor_configs["default"]
+        steppers = [("stepperX", "STPX"), ("stepperY", "STPY"), ("stepperZ", "STPZ"),
+                    ("stepperE0", "STPE0"), ("stepperE1", "STPE1")]
         for stepper in steppers:
             self.cmd_devices.devices[stepper[0]] = {'command_id': stepper[1],
-                                                      'config': self.motor_configs['default']}
-            enable_pin = stepper[2]
-            self.cmd_devices.devices[enable_pin] = {'command_id': enable_pin}
+                                                    'config': self.motor_configs['default']}
         self.init_setup_panel()
         self.init_utilities_panel()
 
@@ -644,7 +646,7 @@ class SetupGUI:
         accept_button = tk.Button(window, text='Accept', fg='black', bg='lawn green',
                                   command=lambda: accept(valve_button))
         cancel_button = tk.Button(window, text='Cancel', fg='black', bg='tomato2',
-                                  command=lambda: window.destroy)
+                                  command=window.destroy)
         accept_button.grid(row=offset + 1, column=0)
         cancel_button.grid(row=offset + 1, column=1)
 
@@ -842,6 +844,8 @@ class SetupGUI:
             modules.update(self.modules[k].as_dict())
         module_config = json.dumps(modules, indent=4)
         config_files[2].write(module_config)
+        prev_running_config = json.dumps(self.default_running_config, indent=4)
+        config_files[3].write(prev_running_config)
         for file in config_files:
             file.close()
         self.write_message("Config files written")

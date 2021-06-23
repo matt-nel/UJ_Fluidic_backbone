@@ -1,0 +1,112 @@
+{
+    "pipeline": [
+        {
+            "mod_type": "valve",
+            "module_name": "valve1",
+            "command": "target",
+            "parameters": {
+                "target": "Flask1",
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "syringe",
+            "module_name": "syringe1",
+            "command": "move",
+            "parameters": {
+                "volume": 10000.0,
+                "flow_rate": 5000,
+                "target": "Flask1",
+                "direction": "A",
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "valve",
+            "module_name": "valve1",
+            "command": 5,
+            "parameters": {
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "valve",
+            "module_name": "valve2",
+            "command": 5,
+            "parameters": {
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "syringe",
+            "module_name": "syringe1",
+            "command": "move",
+            "parameters": {
+                "volume": 10000.0,
+                "flow_rate": 5000,
+                "target": "syringe2",
+                "direction": "D",
+                "wait": false
+            }
+        },
+        {
+            "mod_type": "syringe",
+            "module_name": "syringe2",
+            "command": "move",
+            "parameters": {
+                "volume": 10000.0,
+                "flow_rate": 5000,
+                "target": "syringe1",
+                "direction": "A",
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "valve",
+            "module_name": "valve2",
+            "command": "target",
+            "parameters": {
+                "target": "Reactor1",
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "syringe",
+            "module_name": "syringe2",
+            "command": "move",
+            "parameters": {
+                "volume": 10000.0,
+                "flow_rate": 5000,
+                "target": "Reactor1",
+                "direction": "D",
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "reactor",
+            "module_name": "Reactor1",
+            "command": "stir",
+            "parameters": {
+                "preheat": false,
+                "temp": 0.0,
+                "heat_secs": 0.0,
+                "speed": 4000.0,
+                "stir_secs": 60.0,
+                "wait": true
+            }
+        },
+        {
+            "mod_type": "reactor",
+            "module_name": "Reactor1",
+            "command": "heat",
+            "parameters": {
+                "preheat": "n",
+                "temp": 60.0,
+                "heat_secs": 300,
+                "speed": 0,
+                "stir_secs": 0.0,
+                "wait": true
+            }
+        }
+    ]
+}

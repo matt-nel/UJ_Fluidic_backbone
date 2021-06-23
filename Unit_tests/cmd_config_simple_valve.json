@@ -83,7 +83,7 @@
             }
         },
         "ENE1": {
-            "command_id": "ENE0"
+            "command_id": "ENE1"
         }
 }
 }

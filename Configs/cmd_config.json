@@ -15,9 +15,6 @@
                 "acceleration": 1000
             }
         },
-        "ENX": {
-            "command_id": "ENX"
-        },
         "stepperY": {
             "command_id": "STPY",
             "config": {
@@ -27,9 +24,6 @@
                 "max_speed": 10000,
                 "acceleration": 1000
             }
-        },
-        "ENY": {
-            "command_id": "ENY"
         },
         "stepperZ": {
             "command_id": "STPZ",
@@ -41,9 +35,6 @@
                 "acceleration": 1000
             }
         },
-        "ENZ": {
-            "command_id": "ENZ"
-        },
         "stepperE0": {
             "command_id": "STPE0",
             "config": {
@@ -54,9 +45,6 @@
                 "acceleration": 1000
             }
         },
-        "ENE0": {
-            "command_id": "ENE0"
-        },
         "stepperE1": {
             "command_id": "STPE1",
             "config": {
@@ -66,9 +54,6 @@
                 "max_speed": 10000,
                 "acceleration": 1000
             }
-        },
-        "ENE1": {
-            "command_id": "ENE1"
         },
         "T1": {
             "command_id": "T1"

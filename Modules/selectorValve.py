@@ -1,7 +1,6 @@
 from Modules.modules import Module
 import time
 
-
 DEFAULT_LOWER_LIMIT = 330
 DEFAULT_UPPER_LIMIT = 820
 HOMING_SPEED = 5000
@@ -11,6 +10,7 @@ class SelectorValve(Module):
     """
     Class for managing selector valves with one central inlet and multiple outlets.
     """
+
     def __init__(self, name, module_info, cmduino, manager):
         """
         :param name: String: name of the valve
@@ -30,8 +30,10 @@ class SelectorValve(Module):
         # Dictionary keeps track of names of modules attached to each port and their associated object.
         self.ports = {-1: None, 0: None, 1: None, 2: None, 3: None, 4: None, 5: None, 6: None, 7: None,
                       8: None, 9: None}
-        self.magnet_positions = {0: DEFAULT_UPPER_LIMIT, 2: DEFAULT_LOWER_LIMIT, 4: DEFAULT_LOWER_LIMIT,
-                                 6: DEFAULT_LOWER_LIMIT, 8: DEFAULT_LOWER_LIMIT}
+        self.magnet_readings = self.manager.prev_run_config['magnet_readings'][self.name]
+        if self.magnet_readings[0] == 0:
+            self.magnet_readings = {0: DEFAULT_UPPER_LIMIT, 2: DEFAULT_LOWER_LIMIT, 4: DEFAULT_LOWER_LIMIT,
+                                    6: DEFAULT_LOWER_LIMIT, 8: DEFAULT_LOWER_LIMIT}
         self.adj_valves = []
         self.current_port = None
         # kd, kp
@@ -51,11 +53,12 @@ class SelectorValve(Module):
             self.geared = False
         if self.spr != 3200:
             for position in range(10):
-                self.pos_dict[position] = (self.spr/10)*position
+                self.pos_dict[position] = (self.spr / 10) * position
 
     def init_valve(self):
-        if self.he_sensors[0].analog_read() < DEFAULT_UPPER_LIMIT:
+        if self.he_sensors[0].analog_read() < self.magnet_readings[0]:
             self.home_valve()
+        self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
 
     def move_to_pos(self, position):
         if self.current_port != position:
@@ -109,7 +112,7 @@ class SelectorValve(Module):
             read = he_sens.analog_read()
             # Close to home pos
             if read > 600:
-                if self.find_opt(self.magnet_positions[0]):
+                if self.find_opt(self.magnet_readings[0]):
                     max_reading = he_sens.analog_read()
                 else:
                     max_reading = he_sens.analog_read()
@@ -120,7 +123,7 @@ class SelectorValve(Module):
                 if self.find_opt(330):
                     # Move between magnets until close to home position
                     for i in range(0, 5):
-                        stepper.move_steps(self.spr/5, True)
+                        stepper.move_steps(self.spr / 5, True)
                         read = he_sens.analog_read()
                         if read >= 600:
                             max_reading = read
@@ -130,13 +133,13 @@ class SelectorValve(Module):
                         break
             else:
                 # Move between magnets looking for positions
-                move = self.spr/10
+                move = self.spr / 10
                 stepper.move_steps(move, True)
                 read = he_sens.analog_read()
                 iterations = 0
                 # Move smaller increments looking for magnets
                 while 450 < read < 550 and iterations < 3:
-                    move = move/2
+                    move = move / 2
                     stepper.move_steps(move, True)
                     read = he_sens.analog_read()
                     iterations += 1
@@ -145,15 +148,16 @@ class SelectorValve(Module):
         if not self.check_stop:
             stepper.set_current_position(0)
             self.current_port = 0
-            self.magnet_positions[0] = he_sens.analog_read()
-            for i in range(1, 5):
-                stepper.move_steps(self.spr/5, True)
-                self.magnet_positions[i*2] = he_sens.analog_read()
-            stepper.move_steps(self.spr/5, True)
+            reading = he_sens.analog_read()
+            if abs(self.magnet_readings[0] - reading) > 20:
+                self.magnet_readings[0] = he_sens.analog_read()
+                for i in range(1, 5):
+                    stepper.move_steps(self.spr / 5, True)
+                    self.magnet_readings[i * 2] = he_sens.analog_read()
+                stepper.move_steps(self.spr / 5, True)
         else:
             self.current_port = None
         stepper.set_running_speed(prev_speed)
-        stepper.en_motor()
         self.current_port = 0
         self.ready = True
 
@@ -175,7 +179,7 @@ class SelectorValve(Module):
                 dt += 0.1
             prop_error = kp * error
             # if error < last error, kd*de/dt = neg
-            derv_error = kd * ((error-last_error) / dt)
+            derv_error = kd * ((error - last_error) / dt)
             # moving in wrong direction
             if error - last_error > 20:
                 direction = not direction
@@ -197,16 +201,15 @@ class SelectorValve(Module):
             last_u = u
             if self.check_stop:
                 return False
-            elif readings[-1] > self.magnet_positions[0] or readings[-1] < DEFAULT_LOWER_LIMIT:
+            elif readings[-1] > self.magnet_readings[0] or readings[-1] < DEFAULT_LOWER_LIMIT:
                 break
             if iters > 10:
                 self.steppers[0].move_to(opt_pos)
                 opt = self.he_sensors[0].analog_read()
                 if opt > 700:
-                    self.magnet_positions[0] = opt
+                    self.magnet_readings[0] = opt
 
                 break
-        self.steppers[0].en_motor()
         return True
 
     def check_pos(self, position):
@@ -214,14 +217,16 @@ class SelectorValve(Module):
         :param position: position to move to
         :return:
         """
-        if position in self.magnet_positions:
+        if position in self.magnet_readings:
             reading = self.he_sensors[0].analog_read()
             if position == 0:
-                if reading < self.magnet_positions[position] + 10:
-                    self.find_opt(self.magnet_positions[position])
+                if reading < self.magnet_readings[position] + 10:
+                    self.find_opt(self.magnet_readings[position])
             else:
-                if reading > self.magnet_positions[position] + 10:
-                    self.find_opt(self.magnet_positions[position])
+                if reading > self.magnet_readings[position] + 10:
+                    self.find_opt(self.magnet_readings[position])
+            self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
+            self.manager.rc_changes = True
 
     def zero(self):
         self.steppers[0].set_current_position(0)
@@ -255,12 +260,10 @@ class SelectorValve(Module):
             return True
         else:
             # add home and then valve move cmds to task command dict list.
-            command_home = {'mod_type': 'valve', 'module_name': self.name, 'command': 'home', 'parameters': {'wait': True}}
-            command_move_pos = {'mod_type': 'valve', 'module_name': self.name, 'command': command_dicts[0]['command'], 'parameters': {'wait': True}}
+            command_home = {'mod_type': 'valve', 'module_name': self.name, 'command': 'home',
+                            'parameters': {'wait': True}}
+            command_move_pos = {'mod_type': 'valve', 'module_name': self.name, 'command': command_dicts[0]['command'],
+                                'parameters': {'wait': True}}
             command_dicts[0] = command_home
             command_dicts.append(command_move_pos)
             return True
-
-
-
-

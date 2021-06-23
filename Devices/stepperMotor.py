@@ -3,19 +3,17 @@ from threading import Lock
 import time
 
 
-class StepperMotor(Device):
+class StepperMotor:
     """
     Class for managing stepper motors. Motors are communicated with using the Commandduino library with a Serial
     connection. Target library uses the Accelstepper stepper library.
     """
-    def __init__(self, stepper_obj, motor_en_obj, device_config, serial_lock):
+    def __init__(self, stepper_obj, device_config, serial_lock):
         """
         :param stepper_obj: commanduino object for controlling the stepper motor
-        :param motor_en_obj: commandduino object for toggling the enable pin with digitalWrite
         :param device_config: Dictionary containing the configuration information for the motor.
         :param: serial_lock: threading.Lock() object for controlling access to serial connection
         """
-        super(StepperMotor, self).__init__(motor_en_obj, serial_lock)
         self.serial_lock = serial_lock
         self.cmd_stepper = stepper_obj
         self.stop_lock = Lock()
@@ -28,21 +26,6 @@ class StepperMotor(Device):
         self.acceleration = device_config["acceleration"]
         self.reversed_direction = False
         self.position = 0
-        # Disable motor after start-up
-        self.en_motor()
-
-    def en_motor(self, en=False):
-        """
-        Enables (write LOW) or disable (write HIGH) the stepper driver
-        :param en: Boolean. Determines whether to enable or disable the motor driver
-        """
-        if en != self.enabled:
-            if en:
-                self.digital_write(0)
-                self.enabled = True
-            else:
-                self.digital_write(1)
-                self.enabled = False
 
     def enable_acceleration(self, enable=True):
         """
@@ -140,7 +123,6 @@ class StepperMotor(Device):
         :param steps: Integer number of steps to move
         :return: True
         """
-        self.en_motor(True)
         with self.serial_lock:
             self.cmd_stepper.move(steps, False)
         self.watch_move(subs_moves)
@@ -154,7 +136,6 @@ class StepperMotor(Device):
         movement complete.
         :return: True
         """
-        self.en_motor(True)
         with self.serial_lock:
             self.cmd_stepper.move_to(position, False)
         self.watch_move(subs_moves)
@@ -182,8 +163,6 @@ class StepperMotor(Device):
                 if self.stop_cmd:
                     self.stop_cmd = False
                     break
-        if not subs_moves:
-            self.en_motor()
 
     @property
     def is_moving(self):
@@ -200,14 +179,13 @@ class LinearStepperMotor(StepperMotor):
     """
     Class for managing stepper motors with a finite linear travel.
     """
-    def __init__(self, stepper_obj, motor_en_obj, device_config, serial_lock):
+    def __init__(self, stepper_obj, device_config, serial_lock):
         """
         :param stepper_obj: commanduino object for controlling the stepper motor
-        :param motor_en_obj: commandduino object for toggling the enable pin with digitalWrite
         :param device_config: Dictionary containing the configuration information for the motor.
         :param: serial_lock: threading.Lock() object for controlling access to serial connection
         """
-        super(LinearStepperMotor, self).__init__(stepper_obj, motor_en_obj, device_config, serial_lock)
+        super(LinearStepperMotor, self).__init__(stepper_obj, device_config, serial_lock)
         self.switch_state = 0
 
     def check_endstop(self):
@@ -224,7 +202,6 @@ class LinearStepperMotor(StepperMotor):
         Sends command over serial to run the motor until the end-switch is triggered.
         """
         if not self.check_endstop():
-            self.en_motor(True)
             with self.serial_lock:
                 self.cmd_stepper.home(False)
             self.watch_move()

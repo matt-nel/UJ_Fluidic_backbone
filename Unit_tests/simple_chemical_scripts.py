@@ -5,10 +5,10 @@ from Fluidic_backbone_GUI import FluidicBackboneUI
 
 
 class GraphTest(Thread):
-    def __init__(self, gui_main, web_listener):
+    def __init__(self, gui_main):
         Thread.__init__(self)
-        self.gui = gui
-        self.listener = web_listener
+        self.gui = gui_main
+        self.listener = self.gui.manager.listener
         self.quit_flag = False
 
     def run(self):
@@ -83,7 +83,7 @@ class GraphTest(Thread):
 
 gui = FluidicBackboneUI(False)
 listener = WebListener(gui.manager)
-test = GraphTest(gui, listener)
+test = GraphTest(gui)
 test.start()
 listener.start()
 gui.primary.mainloop()

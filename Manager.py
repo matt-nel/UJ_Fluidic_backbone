@@ -6,6 +6,7 @@ from networkx.readwrite.json_graph import node_link_graph
 from queue import Queue
 from threading import Thread, Lock
 from commanduino import CommandManager
+from web_listener import WebListener
 from Modules.syringePump import SyringePump
 from Modules.selectorValve import SelectorValve
 from Modules.reactor import Reactor
@@ -18,6 +19,23 @@ def load_graph(graph_config):
     return graph
 
 
+def object_hook_int(obj):
+    """
+    :param obj: dictionary converted from JSON
+    :return: dictionary of JSON data with integers formatted
+    """
+    output = {}
+    for k, v in obj.items():
+        key = k
+        if isinstance(k, str):
+            try:
+                key = int(k)
+            except ValueError:
+                pass
+        output[key] = v
+    return output
+
+
 class Manager(Thread):
     def __init__(self, gui_main, simulation=False):
         Thread.__init__(self)
@@ -26,11 +44,10 @@ class Manager(Thread):
         self.gui_main = gui_main
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
-        cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
+        cm_config = os.path.join(self.script_dir, "Configs\\cmd_config.json")
         self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
-        self.disable_all_motors()
-        self.module_info = self.json_loader("Configs/module_info.json")
-        graph_config = self.json_loader("Configs/module_connections.json")
+        self.module_info = self.json_loader("Configs\\module_info.json")
+        self.prev_run_config = self.json_loader("Configs\\running_config.json", object_hook=object_hook_int)
         self.q = Queue()
         self.pipeline = Queue()
         # list to hold current Task objects.
@@ -50,23 +67,28 @@ class Manager(Thread):
         self.reactors = {}
         self.flasks = {}
         self.populate_modules()
+        graph_config = self.json_loader("Configs\\module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
+        self.listener = WebListener(self)
+        self.listener.start()
+        self.write_running_config("Configs\\running_config.json")
+        self.rc_changes = False
 
-    def json_loader(self, fp):
+    def json_loader(self, fp, object_hook=None):
         fp = os.path.join(self.script_dir, fp)
         try:
             with open(fp) as file:
-                return json.load(file)
+                return json.load(file, object_hook=object_hook)
         except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
             raise FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
-    def disable_all_motors(self):
-        self.cmd_mng.ENX.high()
-        self.cmd_mng.ENY.high()
-        self.cmd_mng.ENZ.high()
-        self.cmd_mng.ENE0.high()
-        self.cmd_mng.ENE1.high()
+    def write_running_config(self, fp):
+        fp = os.path.join(self.script_dir, fp)
+        rc_file = open(fp, 'w')
+        running_config = json.dumps(self.prev_run_config, indent=4)
+        rc_file.write(running_config)
+        rc_file.close()
 
     def populate_modules(self):
         syringes = 0
@@ -159,6 +181,8 @@ class Manager(Thread):
                     else:
                         pass
                         # log failed command
+                if self.rc_changes:
+                    self.write_running_config("Configs\\running_config.json")
         self.pause_all()
         self.cmd_mng.commandhandlers[0].stop()
 

@@ -34,12 +34,11 @@ class Module:
                 if 'stepper' in item:
                     # stepper dict: {..."stepper" : [ "cmd_stepper", "cmd_enabler"]...}
                     stepper = getattr(cmduino, assoc_devices[item]["name"])
-                    enable_pin = getattr(cmduino, assoc_devices[item]["enable_pin"])
                     if module_info["mod_config"]["linear_stepper"]:
-                        self.steppers.append(LinearStepperMotor(stepper, enable_pin, assoc_devices[item]["device_config"],
+                        self.steppers.append(LinearStepperMotor(stepper, assoc_devices[item]["device_config"],
                                                                 manager.serial_lock))
                     else:
-                        self.steppers.append(StepperMotor(stepper, enable_pin, assoc_devices[item]["device_config"],
+                        self.steppers.append(StepperMotor(stepper, assoc_devices[item]["device_config"],
                                                           manager.serial_lock))
                 elif 'endstop' in item:
                     endstop = getattr(cmduino, assoc_devices[item]["cmd_id"])

@@ -45,6 +45,8 @@ class TempSensor(Device):
         for i in range(5):
             v.append(self.analog_read())
         v_ave = sum(v)/5
+        if v_ave == 5.00:
+            return -273.15
         v_ave = (v_ave/1023) * 5.00
         r2 = (4700*v_ave)/(5.00-v_ave)
         rln = math.log(r2, math.e)

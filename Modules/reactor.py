@@ -43,6 +43,9 @@ class Reactor(FBFlask):
         if temp > 25 and heat_secs > 0.0:
             self.temp = temp
             cart_voltage = self.calc_voltage(temp)
+            if cart_voltage == -273.15:
+                self.write_to_gui("Temperature sensor is not connected")
+                return False
             for heater in self.heaters:
                 heater.start_heat(cart_voltage)
             self.heat_start_time = self.prev_time
@@ -100,6 +103,8 @@ class Reactor(FBFlask):
     def calc_voltage(self, temp):
         kd, ki, kp,  = self.pid_constants
         self.cur_temp = self.temp_sensors[0].read_temp()
+        if self.cur_temp == -273.15:
+            return self.cur_temp
         if self.cur_temp >= self.temp:
             self.write_to_gui(f"Reactor reached {self.temp}°C")
         cur_time = time.time()

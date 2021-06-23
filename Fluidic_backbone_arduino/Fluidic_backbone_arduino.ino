@@ -22,19 +22,19 @@ CommandManager cmdMng;
 
 //initialised module objects
 AccelStepper stpx(AccelStepper::DRIVER, 54, 55);
-CommandLinearAccelStepperActuator cmdStpx(stpx, 3);
+CommandLinearAccelStepperActuator cmdStpx(stpx, 3, 38);
 
 AccelStepper stpy(AccelStepper::DRIVER, 60, 61);
-CommandLinearAccelStepperActuator cmdStpy(stpy, 2);
+CommandLinearAccelStepperActuator cmdStpy(stpy, 2, 56);
 
 AccelStepper stpz(AccelStepper::DRIVER, 46, 48);
-CommandAccelStepper cmdStpz(stpz);
+CommandAccelStepper cmdStpz(stpz, 62);
 
 AccelStepper stpe0(AccelStepper::DRIVER, 26, 28);
-CommandAccelStepper cmdStpe0(stpe0);
+CommandAccelStepper cmdStpe0(stpe0, 24);
 
 AccelStepper stpe1(AccelStepper::DRIVER, 36, 34);
-CommandAccelStepper cmdStpe1(stpe1);
+CommandAccelStepper cmdStpe1(stpe1, 30);
 
 //enable pins
 CommandDigitalWrite enx(38);
