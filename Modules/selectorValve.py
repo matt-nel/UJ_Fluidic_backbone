@@ -1,8 +1,8 @@
 from Modules.modules import Module
 import time
 
-DEFAULT_LOWER_LIMIT = 330
-DEFAULT_UPPER_LIMIT = 820
+DEFAULT_LOWER_LIMIT = 350
+DEFAULT_UPPER_LIMIT = 650
 HOMING_SPEED = 5000
 
 
@@ -56,7 +56,13 @@ class SelectorValve(Module):
                 self.pos_dict[position] = (self.spr / 10) * position
 
     def init_valve(self):
-        if self.he_sensors[0].analog_read() < self.magnet_readings[0]:
+        reading = self.he_sensors[0].analog_read()
+        if 500 < reading < 550:
+            self.steppers[0].move_steps(self.spr/10)
+        max_read = self.he_sensors[0].analog_read()
+        if max_read < self.magnet_readings[0] - 10 and max_read < 600:
+            max_read = self.check_all_positions(max_read)
+        if max_read < (self.magnet_readings[0] - 10):
             self.home_valve()
         self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
 
@@ -108,31 +114,22 @@ class SelectorValve(Module):
         stepper.set_current_position(0)
         max_reading = he_sens.analog_read()
         # Keep looking for home pos (reading > 700)
-        while max_reading < 690:
+        while max_reading < self.magnet_readings[0] - 10:
             read = he_sens.analog_read()
             # Close to home pos
             if read > 600:
                 if self.find_opt(self.magnet_readings[0]):
                     max_reading = he_sens.analog_read()
+                    self.magnet_readings[0] = max_reading
                 else:
                     max_reading = he_sens.analog_read()
-                    if self.check_stop:
-                        break
             # Close to one of the negative magnets
             elif read < 500:
                 if self.find_opt(330):
                     # Move between magnets until close to home position
-                    for i in range(0, 5):
-                        stepper.move_steps(self.spr / 5, True)
-                        read = he_sens.analog_read()
-                        if read >= 600:
-                            max_reading = read
-                            break
-                else:
-                    if self.check_stop:
-                        break
+                    max_reading = self.check_all_positions(max_reading)
             else:
-                # Move between magnets looking for positions
+                # Move around looking for magnet positions
                 move = self.spr / 10
                 stepper.move_steps(move, True)
                 read = he_sens.analog_read()
@@ -208,9 +205,18 @@ class SelectorValve(Module):
                 opt = self.he_sensors[0].analog_read()
                 if opt > 700:
                     self.magnet_readings[0] = opt
-
                 break
         return True
+
+    def check_all_positions(self, max_reading):
+        for i in range(0, 5):
+            self.steppers[0].move_steps(self.spr / 5, True)
+            read = self.he_sensors[0].analog_read()
+            if read >= 600:
+                return read
+            if self.check_stop:
+                break
+        return max_reading
 
     def check_pos(self, position):
         """

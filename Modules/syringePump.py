@@ -20,10 +20,11 @@ class SyringePump(Module):
         # {volume: length in mm}
         self.syringe_lengths = {1000.0: 58, 2000.0: 2, 4000.0: 42, 5000.0: 58, 10000.0: 58, 20000.0: 20, 60000.0: 90}
         self.max_volume = 0.0
-        self.min_volume = 1000
+        self.min_volume = 0.0
         self.syringe_length = 0.0
         self.screw_lead = module_config["screw_lead"]
         self.position = 0
+        self.cur_step_pos = 0
         self.current_vol = 0.0
         self.contents = ['empty', 0.0]
         self.contents_history = []
@@ -42,7 +43,7 @@ class SyringePump(Module):
         self.contents = [substance, float(vol)]
         self.contents_history.append((substance, vol))
 
-    def move_syringe(self, parameters):
+    def move_syringe(self, target, volume, flow_rate, direction):
         """
         Determines the number of steps to send to the manager function for addressing stepper drivers
         :param : parameters{volume: int, flow_rate: int, direction: string "A" for aspirate, "D" for dispense
@@ -50,43 +51,42 @@ class SyringePump(Module):
         :return:
         """
         self.ready = False
-        volume, flow_rate, direction = parameters['volume'], parameters['flow_rate'], parameters['direction']
-        target = parameters['target']
         speed = (flow_rate * self.steps_per_rev * self.syringe_length) / (self.screw_lead * self.max_volume * 60)
         # calculate number of steps to send to motor
         steps = (volume * self.syringe_length * self.steps_per_rev) / (self.max_volume * self.screw_lead)
+        # calculate distance travelled after steps
         travel = (steps / self.steps_per_rev) * self.screw_lead
         move_flag = True
         if direction == "A":
-            # Turn CCW
+            # Aspirate: Turn CCW, syringe filling
             steps = -steps
-            if self.position + travel > self.syringe_length:
+            travel = -travel
+            if self.position + travel < -self.syringe_length:
                 move_flag = False
         else:
-            # Volume within syringe reducing
-            travel = -travel
-            if self.position + travel < 0:
+            # Dispense: Turn CW, syringe emptying
+            if self.position + travel > 0:
                 move_flag = False
-        vol_to_move = self.check_volume(travel)
-        if not target.check_volume(vol_to_move):
-            move_flag = False
+        # None target allows systems with simple routing to function.
+        if target is not None:
+            if not target.check_volume(volume):
+                move_flag = False
         if move_flag:
             with self.lock:
-                cur_step_pos = self.steppers[0].get_current_position()
+                self.cur_step_pos = self.steppers[0].get_current_position()
                 self.steppers[0].set_running_speed(round(speed))
                 self.steppers[0].move_steps(steps)
+                # Blocked until move complete or stop command received
                 new_step_pos = self.steppers[0].get_current_position()
-                self.position += ((cur_step_pos - new_step_pos) / self.steps_per_rev) * self.screw_lead
-                step_change = new_step_pos - cur_step_pos
-                if step_change != steps:
-                    actual_travel = (step_change / self.steps_per_rev) * self.screw_lead
-                    if direction == "D":
-                        actual_travel = -actual_travel
-                    self.current_vol = ((travel - actual_travel) / self.syringe_length) * self.max_volume
-                    travel = (step_change / self.steps_per_rev) * self.screw_lead
-                else:
-                    self.current_vol += vol_to_move
-                self.change_volume(travel, target)
+                # if aspirating, step change is neg.
+                step_change = new_step_pos + self.cur_step_pos
+                actual_travel = (step_change / self.steps_per_rev) * self.screw_lead
+                self.position += actual_travel
+                vol_change = self.calc_volume(actual_travel)
+                if direction == 'A':
+                    vol_change = -vol_change
+                self.current_vol += vol_change
+                self.change_volume(vol_change, target)
             self.ready = True
             return True
         self.ready = True
@@ -112,26 +112,30 @@ class SyringePump(Module):
             self.steppers[0].stop_cmd = True
         self.steppers[0].stop()
 
-    def check_volume(self, travel):
+    def calc_volume(self, travel):
         vol_change = (travel / self.syringe_length) * self.max_volume
         return vol_change
 
-    def change_volume(self, travel, target):
-        vol_change = self.check_volume(travel)
-        if target.type != "SP":
-            if travel < 0 and target.contents != self.contents[0]:
-                self.contents[1] += vol_change
-                self.change_contents(target.contents, self.contents[1])
+    def check_volume(self, volume):
+        if volume > self.max_volume:
+            return False
+        return True
+
+    def change_volume(self, volume_change, target):
+        self.contents[1] += volume_change
+        if target is not None:
+            if target.type != "SP":
+                # target is not a syringe pump
+                if volume_change > 0 and target.contents != self.contents[0]:
+                    self.change_contents(target.contents, self.contents[1])
+                target.change_volume(volume_change)
             else:
-                self.contents[1] += vol_change
-            if self.contents[1] == 0:
-                self.change_contents('empty', 0)
-            target.change_volume(vol_change)
-        else:
-            if travel < 0:
-                self.change_contents(target.contents, vol_change)
-            else:
-                self.change_contents('empty', 0)
+                # target is a syringe pump
+                if volume_change < 0:
+                    # this pump is aspirating from another pump
+                    self.change_contents(target.contents, volume_change)
+        if self.contents[1] == 0:
+            self.change_contents('empty', 0)
 
     def set_pos(self, position):
         vol = float(position)*1000
@@ -140,8 +144,13 @@ class SyringePump(Module):
         self.steppers[0].set_current_position((self.position/8)*3200)
 
     def resume(self, command_dicts):
-        if self.current_vol > 0:
-            return False
-        else:
-            command_dicts[0]['volume'] = self.current_vol
-        return True
+        params = command_dicts[0]['parameters']
+        # if aspirating, and there is more liquid to take up
+        if params['direction'] == 'A':
+            if self.current_vol != params['volume']:
+                command_dicts[0]['parameters']['volume'] = params['volume'] - self.current_vol
+                return True
+        elif self.current_vol > 0:
+            params['volume'] = self.current_vol
+            return True
+        return False

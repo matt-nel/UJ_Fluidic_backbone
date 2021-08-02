@@ -303,26 +303,31 @@ class Manager(Thread):
     def command_syringe(self, name, command, parameters, command_dict):
         if command == 'move':
             target = parameters["target"]
+            volume = parameters["volume"]
+            flow_rate = parameters["flow_rate"]
+            direction = parameters["direction"]
             if target is None:
                 adj = [key for key in self.graph.adj[name].keys()]
-                valve = adj[0]
-                valve = self.graph.nodes[valve]['object']
                 try:
+                    valve = adj[0]
+                    valve = self.graph.nodes[valve]['object']
                     parameters['target'] = valve.ports[valve.current_port]
-                    cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name + 'move', args=(parameters,))
+                    target = parameters["target"]
                 except KeyError:
-                    self.gui_main.write_message('Please set valve position or home valve')
-                    return False
-            else:
-                parameters["target"] = self.find_target(target)
-                cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name + 'move', args=(parameters,))
+                    target = None
+            elif isinstance(target, str):
+                parameters['target'] = self.find_target(target)
+                target = parameters['target']
+            cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name + 'move',
+                                args=(target, volume, flow_rate, direction))
         elif command == 'home':
             cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=())
         elif command == 'jog':
             cmd_thread = Thread(target=self.syringes[name].jog, name=name + 'jog',
                                 args=(parameters['steps'], parameters['direction']))
         elif command == 'setpos':
-            cmd_thread = Thread(target=self.syringes[name].set_pos, name=name + 'setpos', args=(parameters['pos'],))
+            position = parameters['pos']
+            cmd_thread = Thread(target=self.syringes[name].set_pos, name=name + 'setpos', args=(position,))
         else:
             self.gui_main.write_message(f"Command {command} is not recognised")
             return False
@@ -345,7 +350,8 @@ class Manager(Thread):
 
     def command_valve(self, name, command, parameters, command_dict):
         if type(command) is int and 0 <= command < 9:
-            cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(command,))
+            port = command
+            cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(port,))
         elif command == "target":
             target = parameters["target"]
             cmd_thread = Thread(target=self.valves[name].move_to_target, name=name + "targetmove", args=(target,))
@@ -354,8 +360,9 @@ class Manager(Thread):
         elif command == 'zero':
             cmd_thread = Thread(target=self.valves[name].zero, name=name + 'zero', args=())
         elif command == 'jog':
-            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog',
-                                args=(parameters['steps'], parameters['direction']))
+            steps = parameters['steps']
+            direction = parameters['direction']
+            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, direction))
         elif command == 'he_sens':
             cmd_thread = Thread(target=self.valves[name].he_read, name=name + 'sens')
         else:

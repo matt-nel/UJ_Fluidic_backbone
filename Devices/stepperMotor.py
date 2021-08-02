@@ -1,4 +1,3 @@
-from Devices.devices import Device
 from threading import Lock
 import time
 

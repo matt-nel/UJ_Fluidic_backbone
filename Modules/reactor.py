@@ -17,10 +17,10 @@ class Reactor(FBFlask):
         self.pid_range = 255
         self.last_voltage = 0
         self.cur_temp = 0.0
-        self.stored_params = (0.0, 0.0, 0.0, 0.0)
         self.heating = False
         self.stirring = False
-        self.preheat = False
+        self.heat_time_threshold = 30
+        self.temp_change_threshold = 1
         self.temp = 0.0
         self.prev_error = 0.0
         self.integral_error = 0.0
@@ -34,11 +34,20 @@ class Reactor(FBFlask):
         self.stir_rem_time = 0.0
 
     def start_reactor(self, preheat, temp, heat_secs, speed, stir_secs):
-        stir = True
+        """
+        Starts the heating or stirring operation
+        :param preheat: Should preheat True/False
+        :param temp: Temperature to heat
+        :param heat_secs: Time to heat
+        :param speed: Speed to stir in rpm
+        :param stir_secs: Time to stir
+        :return: False if no temp sensor connected
+        """
+        self.ready = False
+        self.stirring = False
+        self.heating = False
         if preheat:
-            self.preheat = True
-            stir = False
-            self.stored_params = (temp, heat_secs, speed, stir_secs)
+            self.wait_for_temp(temp)
         self.prev_time = time.time()
         if temp > 25 and heat_secs > 0.0:
             self.temp = temp
@@ -55,38 +64,37 @@ class Reactor(FBFlask):
                 self.heat_time = 600
             else:
                 self.heat_time = heat_secs
-        else:
-            self.heat_rem_time = 0.0
-        if stir:
-            if speed > 0.0 and stir_secs > 0.0:
-                if speed < 3000:
-                    self.mag_stirrers[0].start_stir(3000)
-                self.mag_stirrers[0].start_stir(speed)
-                self.stir_start_time = time.time()
-                self.stir_time = stir_secs
-                self.stirring = True
-                self.write_to_gui(f'{self.name} started stirring at {speed}')
-        else:
-            self.stir_rem_time = 0.0
+        if speed > 0.0 and stir_secs > 0.0:
+            if speed < 3000:
+                self.mag_stirrers[0].start_stir(3000)
+            self.mag_stirrers[0].start_stir(speed)
+            self.stir_start_time = time.time()
+            self.stir_time = stir_secs
+            self.stirring = True
+            self.write_to_gui(f'{self.name} started stirring at {speed}')
         self.wait_for_completion()
 
     def wait_for_completion(self):
+        """
+        Keeps heating and stirring until completed.
+        """
         while self.heating or self.stirring:
             cur_time = time.time()
             if self.heating:
+                # heat operation complete
                 if cur_time - self.heat_start_time > self.heat_time:
                     for heater in self.heaters:
                         heater.stop_heat()
                         self.heating = False
                         self.integral_error = 0
+                # update cartridge voltage
                 elif (cur_time - self.prev_time) >= (1/self.polling_rate):
                     new_voltage = self.calc_voltage(self.temp)
                     if new_voltage != self.last_voltage:
                         for heater in self.heaters:
                             heater.start_heat(new_voltage)
                     self.last_voltage = new_voltage
-                if self.preheat and self.cur_temp >= self.temp - 1:
-                    break
+            # check for stirring completion
             if self.stirring:
                 if cur_time - self.stir_start_time > self.stir_time:
                     self.mag_stirrers[0].stop_stir()
@@ -94,13 +102,56 @@ class Reactor(FBFlask):
             with self.stop_lock:
                 if self.stop_cmd:
                     self.stop_cmd = False
+                    if self.heating:
+                        for heater in self.heaters:
+                            heater.stop_heat()
+                        self.heating = False
+                        elapsed_time = cur_time - self.heat_start_time
+                        if self.heat_time > elapsed_time:
+                            self.heat_rem_time = self.heat_time - elapsed_time
+                    if self.stirring:
+                        self.mag_stirrers[0].stop_stir()
+                        self.stirring = False
+                        elapsed_time = cur_time - self.stir_start_time
+                        if self.stir_time > elapsed_time:
+                            self.stir_rem_time = self.stir_time - elapsed_time
                     break
-        if self.preheat:
-            self.preheat = False
-            temp, heat_secs, speed, stir_secs = self.stored_params
-            self.start_reactor(False, temp, heat_secs, speed, stir_secs)
+        self.ready = True
+
+    def wait_for_temp(self, temp):
+        """
+        Waits until desired temperature reached. If heating, will time out when temperature has
+        not increased by 1C in the last 30 seconds.
+        :param temp: the target temperature
+        :return: None
+        """
+        self.cur_temp = self.temp_sensors[0].read_temp()
+        # Current temp lower than desired temp
+        if self.cur_temp < temp:
+            prev_temp = self.cur_temp
+            last_check_time = time.time()
+            while self.cur_temp < temp:
+                cur_time = time.time()
+                if (cur_time - self.prev_time) > (1/self.polling_rate):
+                    self.calc_voltage(temp)
+                if (cur_time - last_check_time) > self.heat_time_threshold:
+                    if (self.cur_temp - prev_temp) < self.temp_change_threshold:
+                        return
+                    else:
+                        prev_temp = self.cur_temp
+                        last_check_time = time.time()
+        elif self.cur_temp > temp:
+            self.prev_time = time.time()
+            while self.cur_temp > temp:
+                if time.time() - self.prev_time >= 1/self.polling_rate:
+                    self.cur_temp = self.temp_sensors.analog_read()
 
     def calc_voltage(self, temp):
+        """
+        Calculates the voltage for the heater element using a PID controller.
+        :param temp: the target temperature
+        :return: voltage: the new required voltage for the heater element.
+        """
         kd, ki, kp,  = self.pid_constants
         self.cur_temp = self.temp_sensors[0].read_temp()
         if self.cur_temp == -273.15:
@@ -130,31 +181,27 @@ class Reactor(FBFlask):
         self.write_to_gui(f"Current temp is {temp} °C")
 
     def stop(self):
+        """
+        Stops all reactor operations when stop override received. Stores time remaining to resume.
+        """
         with self.stop_lock:
             self.stop_cmd = True
-        cur_time = time.time()
-        if self.heating:
-            for heater in self.heaters:
-                heater.stop_heat()
-            self.heating = False
-            elapsed_time = cur_time - self.heat_start_time
-            if self.heat_time > elapsed_time:
-                self.heat_rem_time = self.heat_time - elapsed_time
-        if self.stirring:
-            self.mag_stirrers[0].stop_stir()
-            self.stirring = False
-            elapsed_time = cur_time - self.stir_start_time
-            if self.stir_time > elapsed_time:
-                self.stir_rem_time = self.stir_time - elapsed_time
 
-    def resume(self, command_dict):
+    def resume(self, command_dicts):
+        """
+        Resumes heating and stirring once signal received.
+        :param command_dicts: dictionary representing heat and stir command
+        :return: True if resuming, else returns False.
+        """
         heat_flag, stir_flag = False, False
         if self.heat_rem_time > 0:
-            command_dict['heat_secs'] = self.heat_rem_time
+            command_dicts[0]['heat_secs'] = self.heat_rem_time
             heat_flag = True
         if self.stir_rem_time > 0:
-            command_dict['stir_secs'] = self.stir_rem_time
+            command_dicts[0]['stir_secs'] = self.stir_rem_time
             stir_flag = True
         if heat_flag or stir_flag:
+            self.heat_rem_time = 0
+            self.stir_rem_time = 0
             return True
         return False

@@ -43,6 +43,17 @@
             }
         }
     },
+    "Flask1": {
+        "name": "Flask1",
+        "mod_type": "flask",
+        "class_type": "FBFlask",
+        "mod_config": {
+            "Contents": "water",
+            "Current volume": "300",
+            "Maximum volume": "400"
+        },
+        "devices": {}
+    },
     "Reactor1": {
         "name": "Reactor1",
         "mod_type": "reactor",
@@ -134,27 +145,5 @@
                 "device_config": {}
             }
         }
-    },
-    "Flask2": {
-        "name": "Flask2",
-        "mod_type": "flask",
-        "class_type": "FBFlask",
-        "mod_config": {
-            "Contents": "empty",
-            "Current volume": "0",
-            "Maximum volume": "300"
-        },
-        "devices": {}
-    },
-    "Flask1": {
-        "name": "Flask1",
-        "mod_type": "flask",
-        "class_type": "FBFlask",
-        "mod_config": {
-            "Contents": "water",
-            "Current volume": "300",
-            "Maximum volume": "400"
-        },
-        "devices": {}
     }
 }
