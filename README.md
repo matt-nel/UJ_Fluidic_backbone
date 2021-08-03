@@ -5,7 +5,7 @@ The Manager script coordinates the modules, which in turn control their attached
 
 ## Installation
 
-###Python packages
+### Python packages
 
 Please first install the following packages using the command prompt (Windows) or terminal (Unix):
 
@@ -21,7 +21,7 @@ It is also required that the commanduino library be installed. Commanduino is a 
 
 https://github.com/Pajables/commanduino
 
-###Arduino IDE and libraries
+### Arduino IDE and libraries
 
 To set up the firmware on the Arduino, please first download the Arduino IDE at:
 
@@ -35,11 +35,11 @@ Please copy the contents into your Arduino library folder. For Windows users, th
 
 `Documents/Arduino/libraries`
 
-###Arduino firmware
+## #Arduino firmware
 
 Once the Arduino libraries are set up, use the Arduino IDE to upload the firmware within `./fluidic_backbone_arduino/`. This will set the Arduino up to send and receive commands using Commanduino. 
 
-##First-time setup
+## First-time setup
 
 To first configure the robot, please run the setup GUI. This program will allow you to configure the software for the specific hardware setup you are using.
 
