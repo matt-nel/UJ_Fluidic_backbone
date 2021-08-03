@@ -27,15 +27,13 @@ To set up the firmware on the Arduino, please first download the Arduino IDE at:
 
 https://www.arduino.cc/en/software
 
-Two libraries are required to get the firmware running:
+The required libraries for the software can be found in the repo under: 
 
-**Arduino-CommandTools**
+`./fluidic_backbone_arduino/commanduino_libraries/`
 
-https://github.com/croningp/Arduino-CommandTools
+Please copy the contents into your Arduino library folder. For Windows users, this is likely 
 
-**Arduino-CommandHandler**
-
-https://github.com/croningp/Arduino-CommandHandler
+`Documents/Arduino/libraries`
 
 ###Arduino firmware
 
@@ -47,11 +45,11 @@ To first configure the robot, please run the setup GUI. This program will allow 
 
 1. Run `python setup_GUI.py` using the terminal.
 2. If a button for an Arduino is available, click on that. Otherwise, write the name of the serial port you will be using in the field, and click "Accept".
-3. Click on "Configure modules", then enter the number of valves and syringes into the pop ups that appear.
+3. Click on **"Configure modules"**, then enter the number of valves and syringes into the pop ups that appear.
 4. The next screen will show the available valves. Each port has a dropdown where you can select the type of module that is connected to that port. For each port you have connected, select the corresponding item in the dropdown.
 5. Once you have selected modules for each used port, then click on the buttons for each used port to configure the module. The configuration options will change based on the module you have selected. Once configuration for the port is complete, the button will turn green.
-6. Once you have configured all the ports, click "Accept"
-7. In the main window, click "Create config", then exit the program.
+6. Once you have configured all the ports, click **"Accept"**
+7. In the main window, click **"Create config"**, then exit the program.
 
 Now you can run **Fluidic_backbone_GUI.py** to control the robot manually, or run **simple_chemical_scripts** to access a simple console app for scheduling commands.
 
