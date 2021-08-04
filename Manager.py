@@ -66,6 +66,7 @@ class Manager(Thread):
         self.syringes = {}
         self.reactors = {}
         self.flasks = {}
+        self.cameras ={}
         self.populate_modules()
         graph_config = self.json_loader("Configs\\module_connections.json")
         self.graph = load_graph(graph_config)
@@ -105,6 +106,7 @@ class Manager(Thread):
                 self.reactors[module_name] = Reactor(module_name, module_info, self.cmd_mng, self)
             elif module_type == "flask":
                 self.flasks[module_name] = FBFlask(module_name, module_info, self.cmd_mng, self)
+            #todo add module_type == camera
         if syringes == 0:
             self.command_gui('write', 'No pumps configured')
             time.sleep(2)
