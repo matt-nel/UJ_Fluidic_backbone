@@ -1,5 +1,4 @@
-from Devices.stepperMotor import StepperMotor, LinearStepperMotor
-from Devices.devices import Device, TempSensor, Heater, MagStirrer
+from UJ_FB.Devices import devices, steppermotor
 from threading import Lock
 
 
@@ -35,26 +34,26 @@ class Module:
                     # stepper dict: {..."stepper" : [ "cmd_stepper", "cmd_enabler"]...}
                     stepper = getattr(cmduino, assoc_devices[item]["name"])
                     if module_info["mod_config"]["linear_stepper"]:
-                        self.steppers.append(LinearStepperMotor(stepper, assoc_devices[item]["device_config"],
+                        self.steppers.append(steppermotor.LinearStepperMotor(stepper, assoc_devices[item]["device_config"],
                                                                 manager.serial_lock))
                     else:
-                        self.steppers.append(StepperMotor(stepper, assoc_devices[item]["device_config"],
+                        self.steppers.append(steppermotor.StepperMotor(stepper, assoc_devices[item]["device_config"],
                                                           manager.serial_lock))
                 elif 'endstop' in item:
                     endstop = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                    self.endstops.append(Device(endstop, manager.serial_lock))
+                    self.endstops.append(devices.Device(endstop, manager.serial_lock))
                 elif 'he_sens' in item:
                     he_sens = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                    self.he_sensors.append(Device(he_sens, manager.serial_lock))
+                    self.he_sensors.append(devices.Device(he_sens, manager.serial_lock))
                 elif 'mag_stirrer' in item:
                     stirrer = getattr(cmduino, assoc_devices[item]['cmd_id'])
-                    self.mag_stirrers.append(MagStirrer(stirrer, assoc_devices[item]["device_config"], manager.serial_lock))
+                    self.mag_stirrers.append(devices.MagStirrer(stirrer, assoc_devices[item]["device_config"], manager.serial_lock))
                 elif 'heater' in item:
                     heater = getattr(cmduino, assoc_devices[item]['cmd_id'])
-                    self.heaters.append(Heater(heater, assoc_devices[item]["device_config"], manager.serial_lock))
+                    self.heaters.append(devices.Heater(heater, assoc_devices[item]["device_config"], manager.serial_lock))
                 elif 'temp_sensor' in item:
                     temp_sensor = getattr(cmduino, assoc_devices[item]['cmd_id'])
-                    self.temp_sensors.append(TempSensor(temp_sensor, assoc_devices[item]["device_config"], manager.serial_lock))
+                    self.temp_sensors.append(devices.TempSensor(temp_sensor, assoc_devices[item]["device_config"], manager.serial_lock))
 
     def write_to_gui(self, message):
         command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'message': message, 'parameters': {}}

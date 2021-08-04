@@ -1,7 +1,8 @@
-from Manager import Manager
-from web_listener import WebListener
+from context import UJ_FB
+import UJ_FB.web_listener as web_listener
+import UJ_FB.manager as manager
 from threading import Thread
-from Fluidic_backbone_GUI import FluidicBackboneUI
+import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
 
 
 class GraphTest(Thread):
@@ -77,12 +78,12 @@ class GraphTest(Thread):
             speed = float(input("What speed"))
             stir_secs = float(input("For how many seconds?"))
         params = {'preheat': preheat, 'temp': temp, 'heat_secs': heat_secs, 'speed': speed, 'stir_secs': stir_secs, "wait": True}
-        command = Manager.generate_cmd_dict('reactor', reactor, response, params)
+        command = manager.Manager.generate_cmd_dict('reactor', reactor, response, params)
         self.gui.manager.add_to_queue(command)
 
 
-gui = FluidicBackboneUI(False)
-listener = WebListener(gui.manager)
+gui = fluidic_backbone_gui.FluidicBackboneUI(False)
+listener = web_listener.WebListener(gui.manager)
 test = GraphTest(gui)
 test.start()
 listener.start()

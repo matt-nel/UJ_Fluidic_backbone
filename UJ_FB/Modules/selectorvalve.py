@@ -1,4 +1,4 @@
-from Modules.modules import Module
+from UJ_FB.Modules import modules
 import time
 
 DEFAULT_LOWER_LIMIT = 350
@@ -6,7 +6,7 @@ DEFAULT_UPPER_LIMIT = 650
 HOMING_SPEED = 5000
 
 
-class SelectorValve(Module):
+class SelectorValve(modules.Module):
     """
     Class for managing selector valves with one central inlet and multiple outlets.
     """

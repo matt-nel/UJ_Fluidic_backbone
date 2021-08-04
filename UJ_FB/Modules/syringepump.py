@@ -1,7 +1,7 @@
-from Modules.modules import Module
+from UJ_FB.Modules import modules
 
 
-class SyringePump(Module):
+class SyringePump(modules.Module):
     """
     Syringe pump module class for managing all equipment required for a syringe pump. 0 position corresponds to syringe
     max length

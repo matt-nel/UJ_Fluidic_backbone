@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from Manager import Manager
+from UJ_FB import manager
 
 
 class FluidicBackboneUI:
@@ -10,7 +10,7 @@ class FluidicBackboneUI:
         """
         self.primary = tk.Tk()
         self.primary.protocol('WM_DELETE_WINDOW', self.end_program)
-        self.manager = Manager(self, simulation)
+        self.manager = manager.Manager(self, simulation)
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background='SteelBlue2')
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0

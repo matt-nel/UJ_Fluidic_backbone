@@ -915,7 +915,7 @@ class SetupGUI:
 
     def start_fb(self):
         self.primary.destroy()
-        os.system('python Fluidic_backbone_GUI.py')
+        os.system('python fluidic_backbone_gui.py')
 
 
 if __name__ == '__main__':

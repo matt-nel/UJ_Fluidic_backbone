@@ -1,9 +1,9 @@
-from Modules.modules import FBFlask
+from UJ_FB.Modules import modules
 import math
 import time
 
 
-class Reactor(FBFlask):
+class Reactor(modules.FBFlask):
     """
     Class for managing reactors
     """

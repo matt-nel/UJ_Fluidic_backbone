@@ -6,12 +6,9 @@ from networkx.readwrite.json_graph import node_link_graph
 from queue import Queue
 from threading import Thread, Lock
 from commanduino import CommandManager
-from web_listener import WebListener
-from Modules.syringePump import SyringePump
-from Modules.selectorValve import SelectorValve
-from Modules.reactor import Reactor
-from Modules.modules import FBFlask
-from fbexceptions import *
+from UJ_FB import web_listener
+from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules
+from UJ_FB import fbexceptions
 
 
 def load_graph(graph_config):
@@ -71,7 +68,7 @@ class Manager(Thread):
         graph_config = self.json_loader("Configs\\module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
-        self.listener = WebListener(self)
+        self.listener = web_listener.WebListener(self)
         self.listener.start()
         self.write_running_config("Configs\\running_config.json")
         self.rc_changes = False
@@ -82,7 +79,7 @@ class Manager(Thread):
             with open(fp) as file:
                 return json.load(file, object_hook=object_hook)
         except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
-            raise FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
+            raise fbexceptions.FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
     def write_running_config(self, fp):
         fp = os.path.join(self.script_dir, fp)
@@ -98,14 +95,14 @@ class Manager(Thread):
             module_info = self.module_info[module_name]
             if module_type == "valve":
                 self.num_valves += 1
-                self.valves[module_name] = SelectorValve(module_name, module_info, self.cmd_mng, self)
+                self.valves[module_name] = selectorvalve.SelectorValve(module_name, module_info, self.cmd_mng, self)
             elif module_type == "syringe":
                 syringes += 1
-                self.syringes[module_name] = SyringePump(module_name, module_info, self.cmd_mng, self)
+                self.syringes[module_name] = syringepump.SyringePump(module_name, module_info, self.cmd_mng, self)
             elif module_type == "reactor":
-                self.reactors[module_name] = Reactor(module_name, module_info, self.cmd_mng, self)
+                self.reactors[module_name] = reactor.Reactor(module_name, module_info, self.cmd_mng, self)
             elif module_type == "flask":
-                self.flasks[module_name] = FBFlask(module_name, module_info, self.cmd_mng, self)
+                self.flasks[module_name] = modules.FBFlask(module_name, module_info, self.cmd_mng, self)
             #todo add module_type == camera
         if syringes == 0:
             self.command_gui('write', 'No pumps configured')
