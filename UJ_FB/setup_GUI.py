@@ -13,13 +13,11 @@ def populate_ports():
     :return: List of Arduinos available on the system
     """
     if sys.platform.startswith('win'):
-        ports = [f'COM{i + 1}' for i in range(256)]
+        arduino_list = [port for port in serial.tools.list_ports.comports() if 'arduino' in port.description.lower()]
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
-        ports = glob.glob('/dev/tty[A-Za-z]*')
+        arduino_list = [port for port in serial.tools.list_ports.comports() if 'ACM' in port.description.lower()]
     else:
         raise EnvironmentError("Unsupported platform")
-
-    arduino_list = [port for port in serial.tools.list_ports.comports() if 'arduino' in port.description.lower()]
 
     return [name.name for name in arduino_list]
 
