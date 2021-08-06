@@ -1,7 +1,6 @@
 import tkinter as tk
 import os
 import sys
-import glob
 import serial.tools.list_ports
 import json
 from PIL import ImageTk, Image

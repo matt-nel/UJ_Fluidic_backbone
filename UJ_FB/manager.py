@@ -41,10 +41,10 @@ class Manager(Thread):
         self.gui_main = gui_main
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
-        cm_config = os.path.join(self.script_dir, "Configs\\cmd_config.json")
+        cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
         self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
-        self.module_info = self.json_loader("Configs\\module_info.json")
-        self.prev_run_config = self.json_loader("Configs\\running_config.json", object_hook=object_hook_int)
+        self.module_info = self.json_loader("Configs/module_info.json")
+        self.prev_run_config = self.json_loader("Configs/running_config.json", object_hook=object_hook_int)
         self.q = Queue()
         self.pipeline = Queue()
         # list to hold current Task objects.
@@ -65,12 +65,12 @@ class Manager(Thread):
         self.flasks = {}
         self.cameras ={}
         self.populate_modules()
-        graph_config = self.json_loader("Configs\\module_connections.json")
+        graph_config = self.json_loader("Configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
         self.listener = web_listener.WebListener(self)
         self.listener.start()
-        self.write_running_config("Configs\\running_config.json")
+        self.write_running_config("Configs/running_config.json")
         self.rc_changes = False
 
     def json_loader(self, fp, object_hook=None):
