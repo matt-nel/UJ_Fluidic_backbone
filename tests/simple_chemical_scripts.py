@@ -62,25 +62,23 @@ class GraphTest(Thread):
         for reactor in avail_reactors:
             print(reactor, '\n')
         reactor = input("Which reactor?")
-        response = input("Heat, stir, or heat and stir?")
+        command = input("Heat, stir, or heat and stir?")
         speed, temp = 0, 0.0
         heat_secs, stir_secs = 0.0, 0.0
         preheat = False
-        if 'heat' in response.lower():
+        if 'heat' in command.lower():
             print("Heating parameters:")
             temp = float(input("Temperature?"))
             heat_secs = int(input("For how many seconds?"))
             preheat = input("Would you like the reactor to preheat?")
             if preheat == 'y' or preheat == 'Y':
                 preheat = True
-        if 'stir' in response.lower():
+        if 'stir' in command.lower():
             print("Stirring parameters:")
             speed = float(input("What speed"))
             stir_secs = float(input("For how many seconds?"))
-        params = {'preheat': preheat, 'temp': temp, 'heat_secs': heat_secs, 'speed': speed, 'stir_secs': stir_secs, "wait": True}
-        command = manager.Manager.generate_cmd_dict('reactor', reactor, response, params)
-        self.gui.manager.add_to_queue(command)
-
+        self.gui.manager.heat_stir(reactor, command, preheat, temp, heat_secs, speed, stir_secs)
+        
 
 gui = fluidic_backbone_gui.FluidicBackboneUI(False)
 listener = web_listener.WebListener(gui.manager)

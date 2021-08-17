@@ -1,3 +1,4 @@
+import xml.etree.ElementTree as et
 from threading import Thread, Lock
 import time
 import requests
@@ -43,6 +44,63 @@ class WebListener(Thread):
         except requests.ConnectionError:
             self.url = ""
             print("Could not connect to server, running offline. Update URL to connect\n")
+
+    def load_xdl(self, file):
+        try:
+            with open(file) as queue_file:
+                tree = et.parse(file)
+        except FileNotFoundError:
+            self.manager.gui_main.write_message(f"{file} not found")
+            return False
+        self.parse_xdl(tree)
+
+    def parse_xdl(self, tree):
+        reagents = {}
+        root = tree.getroot()
+        req_hardware = root.findall('Hardware')
+        req_reagents = root.findall('Reagents')
+        procedure = root.finall('Procedure')
+        for reagent in req_reagents:
+            flask = self.manager.find_reagent(reagent['name'])
+            reagents[reagent['name']] = flask
+        for step in procedure:
+            if step.tag == "Add":
+                target = step['vessel']
+                source = reagents[step['reagent']]
+                volume = float(step['volume'].split(' ')[0])
+                flow_rate = volume/int(step['time'].split(' ')[0])
+                self.manager.move_liquid(source, target, volume, flow_rate)
+            elif step.tag == "Transfer":
+                source = step['from_vessel']
+                target = step['to_vessel']
+                volume = float(step['volume'].split(' ')[0])
+                flow_rate = volume/int(step['time'].split(' ')[0])
+                self.manager.move_liquid(source, target, volume, flow_rate)
+            elif 'Stir' in step.tag:
+                reactor_name = step['vessel']
+                #StartStir
+                if 'Start' in step.tag:
+                    self.manager.start_stir(reactor_name, command='start_stir', speed=step['stir_speed'], stir_secs=0, wait=False)
+                #StopStir
+                elif 'Stop' in step.tag:
+                    self.manager.stop_reactor(reactor_name, command='stop_stir')
+                #Stir
+                else:
+                    self.manager.start_stir(reactor_name, command='start_stir', speed=step['stir_speed'], stir_secs=step['time'], wait=True)
+            elif "HeatChill" in step.tag:
+                reactor_name = step['vessel']
+                #StartHeatChill
+                if 'Start' in step.tag:
+                    self.manager.start_heating(reactor_name, command='start_heat', temp=step['temp'], heat_secs=0, wait=False)
+                #StopHeatChill
+                elif 'Stop' in step.tag:
+                    self.manager.stop_reactor(reactor_name, command='stop_heat')
+                #HeatChillToTemp
+                elif 'To' in step.tag:
+                    self.manager.start_heating(reactor_name, command='start_heat', temp=step['temp'], heat_secs=0, target=True, wait=True)
+                #HeatChill
+                else:
+                    self.manager.start_heating(reactor_name, command='start_heat', temp=step['temp'], heat_secs=step['time'], target=True, wait=True)
 
     def run(self):
         while True:
