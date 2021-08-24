@@ -2,6 +2,7 @@ from UJ_FB.Modules import modules
 from threading import Thread
 import math
 import time
+import logging
 
 
 class Reactor(modules.FBFlask):
@@ -44,7 +45,7 @@ class Reactor(modules.FBFlask):
     def start_heat(self, temp, heat_secs, target):
         cart_voltage = self.calc_voltage(temp)
         if cart_voltage == -273.15:
-            self.write_to_gui("Temperature sensor is not connected")
+            self.write_log("Temperature sensor is not connected", level=logging.ERROR)
             return False
         else:
             self.last_voltage = cart_voltage
@@ -53,7 +54,7 @@ class Reactor(modules.FBFlask):
             self.ready = False
             if target:
                 self.target = True
-        self.write_to_gui(f'{self.name} started heating')
+        self.write_log(f'{self.name} started heating', level=logging.INFO)
         self.target_temp = temp
         for heater in self.heaters:
             heater.start_heat(cart_voltage)
@@ -66,7 +67,7 @@ class Reactor(modules.FBFlask):
         self.mag_stirrers[0].start_stir(speed)
         self.stir_start_time = time.time()
         self.stir_time = stir_secs
-        self.write_to_gui(f'{self.name} started stirring at {speed}')
+        self.write_log(f'{self.name} started stirring at {speed}', level=logging.INFO)
 
     def run(self):
         while True:
@@ -141,7 +142,7 @@ class Reactor(modules.FBFlask):
         if self.cur_temp == -273.15:
             return self.cur_temp
         if self.cur_temp >= self.temp:
-            self.write_to_gui(f"Reactor reached {self.temp}°C")
+            self.write_log(f"Reactor reached {self.temp}°C")
         cur_time = time.time()
         error = temp - self.cur_temp
         dt = cur_time - self.prev_time
@@ -162,7 +163,7 @@ class Reactor(modules.FBFlask):
 
     def read_temp(self):
         temp = self.temp_sensors[0].read_temp()
-        self.write_to_gui(f"Current temp is {temp} °C")
+        self.write_log(f"Current temp is {temp} °C", level=logging.INFO)
 
     def stop(self):
         """

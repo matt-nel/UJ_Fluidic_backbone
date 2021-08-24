@@ -1,15 +1,13 @@
-from context import UJ_FB
-import UJ_FB.web_listener as web_listener
+import context
 import UJ_FB.manager as manager
 from threading import Thread
-import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
 
 
-class GraphTest(Thread):
-    def __init__(self, gui_main):
+class QueueTest(Thread):
+    def __init__(self, manager):
         Thread.__init__(self)
-        self.gui = gui_main
-        self.listener = self.gui.manager.listener
+        self.manager = manager
+        self.listener = self.manager.listener
         self.quit_flag = False
 
     def run(self):
@@ -21,31 +19,34 @@ class GraphTest(Thread):
 
     def main_menu(self):
         response = input("[1]: Move\n[2]: Heat and stir\n[3]: Show pipeline\n[4]: Execute pipeline\n"
-                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n[8]: Update URL\n")
+                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n[8]: Update URL\n"
+                         "[q] Quit")
         if response == "1":
             self.move_menu()
         elif response == "2":
             self.reactor_menu()
         elif response == "3":
-            pipeline = self.gui.manager.echo_queue()
+            pipeline = self.manager.echo_queue()
             for command in pipeline:
                 print(f"{command['module_name']}: {command['command']}")
         elif response == "4":
-            self.gui.manager.start_queue()
+            self.manager.start_queue()
         elif response == "5":
-            self.gui.manager.pipeline.queue.clear()
+            self.manager.pipeline.queue.clear()
         elif response == "6":
-            self.gui.manager.import_queue("Configs/Pipeline.json")
+            self.manager.import_queue("Configs/Pipeline.json")
         elif response == "7":
-            self.gui.manager.export_queue()
+            self.manager.export_queue()
         elif response == "8":
             print("Please enter the IP address of the server")
             response = input("IP address:")
             self.listener.update_url(response)
+        elif response == 'q':
+            self.quit_flag = True
 
     def move_menu(self):
         print("The following nodes are connected:")
-        for node in self.gui.manager.valid_nodes:
+        for node in self.manager.valid_nodes:
             print(node)
         source = input('What is the source?')
         destination = input('What is the destination?')
@@ -54,10 +55,10 @@ class GraphTest(Thread):
         print(f"Move {volume}ml from {source} to {destination} at {speed} ul/min.\n")
         response = input("Is this correct? (y/n)")
         if response == 'y':
-            self.gui.manager.move_liquid(source, destination, volume, speed)
+            self.manager.move_liquid(source, destination, volume, speed)
 
     def reactor_menu(self):
-        avail_reactors = self.gui.manager.reactors.keys()
+        avail_reactors = self.manager.reactors.keys()
         print("The following reactors are available:\n")
         for reactor in avail_reactors:
             print(reactor, '\n')
@@ -77,12 +78,11 @@ class GraphTest(Thread):
             print("Stirring parameters:")
             speed = float(input("What speed"))
             stir_secs = float(input("For how many seconds?"))
-        self.gui.manager.heat_stir(reactor, command, preheat, temp, heat_secs, speed, stir_secs)
+        self.manager.heat_stir(reactor, command, preheat, temp, heat_secs, speed, stir_secs)
         
 
-gui = fluidic_backbone_gui.FluidicBackboneUI(False)
-listener = web_listener.WebListener(gui.manager)
-test = GraphTest(gui)
-test.start()
-listener.start()
-gui.primary.mainloop()
+if __name__ == "__main__":
+    test = QueueTest(manager.Manager())
+    test.start()
+    test.manager.mainloop()
+

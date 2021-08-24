@@ -1,148 +1,152 @@
 {
-    "syringe1": {
-        "name": "syringe1",
-        "mod_type": "syringe",
-        "class_type": "SyringePump",
-        "mod_config": {
-            "screw_lead": 8,
-            "linear_stepper": true
-        },
-        "devices": {
-            "stepper": {
-                "name": "stepperX",
-                "cmd_id": "STPX",
-                "device_config": {
-                    "steps_per_rev": 3200,
-                    "enabled_acceleration": false,
-                    "speed": 1000,
-                    "max_speed": 10000,
-                    "acceleration": 1000
+    "id": "UJFB1",
+    "key": "ZQAB9645%",
+    "Modules": {
+        "syringe1": {
+            "name": "syringe1",
+            "mod_type": "syringe",
+            "class_type": "SyringePump",
+            "mod_config": {
+                "screw_lead": 8,
+                "linear_stepper": true
+            },
+            "devices": {
+                "stepper": {
+                    "name": "stepperX",
+                    "cmd_id": "STPX",
+                    "device_config": {
+                        "steps_per_rev": 3200,
+                        "enabled_acceleration": false,
+                        "speed": 1000,
+                        "max_speed": 10000,
+                        "acceleration": 1000
+                    }
                 }
             }
-        }
-    },
-    "syringe2": {
-        "name": "syringe2",
-        "mod_type": "syringe",
-        "class_type": "SyringePump",
-        "mod_config": {
-            "screw_lead": 8,
-            "linear_stepper": true
         },
-        "devices": {
-            "stepper": {
-                "name": "stepperY",
-                "cmd_id": "STPY",
-                "device_config": {
-                    "steps_per_rev": 3200,
-                    "enabled_acceleration": false,
-                    "speed": 1000,
-                    "max_speed": 10000,
-                    "acceleration": 1000
+        "syringe2": {
+            "name": "syringe2",
+            "mod_type": "syringe",
+            "class_type": "SyringePump",
+            "mod_config": {
+                "screw_lead": 8,
+                "linear_stepper": true
+            },
+            "devices": {
+                "stepper": {
+                    "name": "stepperY",
+                    "cmd_id": "STPY",
+                    "device_config": {
+                        "steps_per_rev": 3200,
+                        "enabled_acceleration": false,
+                        "speed": 1000,
+                        "max_speed": 10000,
+                        "acceleration": 1000
+                    }
                 }
             }
-        }
-    },
-    "Flask1": {
-        "name": "Flask1",
-        "mod_type": "flask",
-        "class_type": "FBFlask",
-        "mod_config": {
-            "Contents": "water",
-            "Current volume": "300",
-            "Maximum volume": "400"
         },
-        "devices": {}
-    },
-    "Reactor1": {
-        "name": "Reactor1",
-        "mod_type": "reactor",
-        "class_type": "Reactor",
-        "mod_config": {
-            "Contents": "empty",
-            "num_heaters": 1,
-            "Current volume": "0",
-            "Maximum volume": "300"
+        "Flask1": {
+            "name": "Flask1",
+            "mod_type": "flask",
+            "class_type": "FBFlask",
+            "mod_config": {
+                "Contents": "water",
+                "Current volume": "300",
+                "Maximum volume": "400"
+            },
+            "devices": {}
         },
-        "devices": {
-            "heater": {
-                "name": "heater1",
-                "cmd_id": "AW1",
-                "device_config": {}
+        "Reactor1": {
+            "name": "Reactor1",
+            "mod_type": "reactor",
+            "class_type": "Reactor",
+            "mod_config": {
+                "Contents": "empty",
+                "num_heaters": 1,
+                "Current volume": "0",
+                "Maximum volume": "300"
             },
-            "mag_stirrer": {
-                "name": "stirrer1",
-                "cmd_id": "AW2",
-                "device_config": {
-                    "fan_speed": 7200
-                }
-            },
-            "temp_sensor": {
-                "name": "temp_sensor1",
-                "cmd_id": "T1",
-                "device_config": {
-                    "SH_C": [
-                        0.0008271125019925238,
-                        0.0002088017729221142,
-                        8.059262669466295e-08
-                    ]
+            "devices": {
+                "heater": {
+                    "name": "heater1",
+                    "cmd_id": "AW1",
+                    "device_config": {}
+                },
+                "mag_stirrer": {
+                    "name": "stirrer1",
+                    "cmd_id": "AW2",
+                    "device_config": {
+                        "fan_speed": 7200
+                    }
+                },
+                "temp_sensor": {
+                    "name": "temp_sensor1",
+                    "cmd_id": "T1",
+                    "device_config": {
+                        "SH_C": [
+                            0.0008271125019925238,
+                            0.0002088017729221142,
+                            8.059262669466295e-08
+                        ]
+                    }
                 }
             }
-        }
-    },
-    "valve1": {
-        "name": "valve1",
-        "mod_type": "valve",
-        "class_type": "SelectorValve",
-        "mod_config": {
-            "ports": 10,
-            "linear_stepper": false,
-            "gear": "2:1"
         },
-        "devices": {
-            "stepper": {
-                "name": "stepperZ",
-                "cmd_id": "STPZ",
-                "device_config": {
-                    "steps_per_rev": 3200,
-                    "enabled_acceleration": false,
-                    "speed": 1000,
-                    "max_speed": 10000,
-                    "acceleration": 1000
-                }
+        "valve1": {
+            "name": "valve1",
+            "mod_type": "valve",
+            "class_type": "SelectorValve",
+            "mod_config": {
+                "ports": 10,
+                "linear_stepper": false,
+                "gear": "2:1"
             },
-            "he_sens": {
-                "name": "he_sens1",
-                "cmd_id": "AR1",
-                "device_config": {}
+            "devices": {
+                "stepper": {
+                    "name": "stepperZ",
+                    "cmd_id": "STPZ",
+                    "device_config": {
+                        "steps_per_rev": 3200,
+                        "enabled_acceleration": false,
+                        "speed": 1000,
+                        "max_speed": 10000,
+                        "acceleration": 1000
+                    }
+                },
+                "he_sens": {
+                    "name": "he_sens1",
+                    "cmd_id": "AR1",
+                    "device_config": {}
+                }
             }
-        }
-    },
-    "valve2": {
-        "name": "valve2",
-        "mod_type": "valve",
-        "class_type": "SelectorValve",
-        "mod_config": {
-            "ports": 10,
-            "linear_stepper": false,
-            "gear": "2:1"
         },
-        "devices": {
-            "stepper": {
-                "name": "stepperE0",
-                "cmd_id": "STPE0",
-                "device_config": {
-                    "steps_per_rev": 3200,
-                    "enabled_acceleration": false,
-                    "speed": 1000,
-                    "max_speed": 10000,
-                    "acceleration": 1000
-                }
+        "valve2": {
+            "name": "valve2",
+            "mod_type": "valve",
+            "class_type": "SelectorValve",
+            "mod_config": {
+                "ports": 10,
+                "linear_stepper": false,
+                "gear": "2:1"
             },
-            "he_sens": {
-                "name": "he_sens2",
-                "cmd_id": "AR2",
-                "device_config": {}
+            "devices": {
+                "stepper": {
+                    "name": "stepperE0",
+                    "cmd_id": "STPE0",
+                    "device_config": {
+                        "steps_per_rev": 3200,
+                        "enabled_acceleration": false,
+                        "speed": 1000,
+                        "max_speed": 10000,
+                        "acceleration": 1000
+                    }
+                },
+                "he_sens": {
+                    "name": "he_sens2",
+                    "cmd_id": "AR2",
+                    "device_config": {}
+                }
             }
         }
     }

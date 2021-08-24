@@ -1,16 +1,16 @@
 import os
 import tkinter as tk
-from UJ_FB import manager
+import UJ_FB.manager as manager
 
 
 class FluidicBackboneUI:
-    def __init__(self, simulation):
+    def __init__(self, manager):
         """
         :param simulation: Bool to run the software in simulation mode
         """
         self.primary = tk.Tk()
         self.primary.protocol('WM_DELETE_WINDOW', self.end_program)
-        self.manager = manager.Manager(self, simulation)
+        self.manager = manager
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background='SteelBlue2')
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
@@ -53,7 +53,6 @@ class FluidicBackboneUI:
         self.pause_butt.grid(row=0, column=0)
         self.stop_butt.grid(row=0, column=1)
         self.log.grid(row=14, column=0)
-        self.manager.start()
 
     def populate_syringes(self, syringe_name):
         """
@@ -415,5 +414,5 @@ class FluidicBackboneUI:
 
 if __name__ == '__main__':
     sim = False
-    fb_gui = FluidicBackboneUI(sim)
-    fb_gui.primary.mainloop()
+    man = manager.Manager()
+    fb_gui = FluidicBackboneUI(sim, man)

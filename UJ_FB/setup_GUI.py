@@ -172,6 +172,8 @@ class SetupGUI:
         self.primary.configure(background='DarkOliveGreen1')
         self.fonts = {'buttons': ('Verdana', 12), 'labels': ('Verdana', 14), 'default': ('Verdana', 16),
                       'headings': ('Verdana', 16), 'text': ('Verdana', 10)}
+        self.key = ''
+        self.id = ''
 
         self.setup_frame = tk.Frame(self.primary, bg='grey', borderwidth=5)
         self.utilities_frame = tk.Frame(self.primary, bg='grey', borderwidth=2)
@@ -227,8 +229,8 @@ class SetupGUI:
         self.used_endstop_connectors = {}
         self.used_he_pins = []
         self.used_valves = []
-        self.config_filenames = ['Configs/cmd_config.json', 'Configs/module_connections.json',
-                                 'Configs/module_info.json', 'Configs/running_config.json']
+        self.config_filenames = ['UJ_FB/Configs/cmd_config.json', 'UJ_FB/Configs/module_connections.json',
+                                 'UJ_FB/Configs/module_info.json', 'UJ_FB/Configs/running_config.json']
         for file in self.config_filenames:
             file = os.path.join(self.script_dir, file)
 
@@ -272,6 +274,16 @@ class SetupGUI:
                 self.cmd_devices.ios.append({"port": port_name})
                 self.write_message(f"Port {port_name} added")
 
+        def add_key():
+            self.key = self.text_temp
+            robot_key_entry.delete(0, 'end')
+            self.write_message(f'Robot key added')
+        
+        def add_id():
+            self.id = self.text_temp
+            robot_id_entry.delete(0, 'end')
+            self.write_message(f'Robot ID added')
+
         button_font = self.fonts['buttons']
         top_label = tk.Label(self.setup_frame, text='Setup', font=self.fonts['headings'], bg='white')
         top_label.grid(row=0, column=0)
@@ -292,11 +304,26 @@ class SetupGUI:
 
         com_port_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'),
                                   bg='white', fg='black', width=25)
-        com_port_button = tk.Button(com_frame, text='Accept', font=('Verdana', 10), bg='lawn green',
+        com_port_button = tk.Button(com_frame, text='Accept port', font=('Verdana', 10), bg='lawn green',
                                     fg='black', command=add_com_port)
 
         com_port_entry.grid(row=2, column=0, padx=4)
         com_port_button.grid(row=2, column=1, padx=4)
+        
+        robot_id_label = tk.Label(com_frame, text='Please enter the robot ID', font=self.fonts['labels'], bg='white')
+        robot_id_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'), bg='white', fg='black', width=25)
+        robot_id_button = tk.Button(com_frame, text='Accept ID', font=button_font, bg='lawn green', fg='black', command=add_id)
+
+        robot_key_label = tk.Label(com_frame, text='Please enter the robot key', font=self.fonts['labels'], bg='white')
+        robot_key_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'), bg='white', fg='black', width=25)
+        robot_key_button = tk.Button(com_frame, text='Accept key', font=button_font, bg='lawn green', fg='black', command=add_key)
+
+        robot_id_label.grid(row=3, column=0, padx=4)
+        robot_id_entry.grid(row=3, column=1, padx=4)
+        robot_id_button.grid(row=3, column=2, padx=4)
+        robot_key_label.grid(row=4, column=0, padx=4)
+        robot_key_entry.grid(row=4, column=1, padx=4)
+        robot_key_button.grid(row=4, column=2, padx=4)
 
         mod_frame = tk.Frame(self.setup_frame, bg='grey', pady=4)
 
@@ -839,7 +866,8 @@ class SetupGUI:
         modules = {}
         for k in self.modules:
             modules.update(self.modules[k].as_dict())
-        module_config = json.dumps(modules, indent=4)
+        module_config = {"id": self.id, "key": self.key, "modules": modules}
+        module_config = json.dumps(module_config, indent=4)
         config_files[2].write(module_config)
         prev_running_config = json.dumps(self.default_running_config, indent=4)
         config_files[3].write(prev_running_config)

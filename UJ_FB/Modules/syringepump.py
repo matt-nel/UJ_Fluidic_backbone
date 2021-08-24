@@ -1,5 +1,7 @@
+import logging
 from UJ_FB.Modules import modules
 
+direction_map = {'A': "aspirate", "D": "dispense"}
 
 class SyringePump(modules.Module):
     """
@@ -86,6 +88,7 @@ class SyringePump(modules.Module):
                 if direction == 'A':
                     vol_change = -vol_change
                 self.current_vol += vol_change
+                self.write_log(f'{self.name}: {direction_map[direction]} {abs(vol_change)}')
                 self.change_volume(vol_change, target)
             self.ready = True
             return True

@@ -1,15 +1,17 @@
 import os
+import logging
 import json
 import networkx as nx
+import datetime
 import time
 from networkx.readwrite.json_graph import node_link_graph
 from queue import Queue
 from threading import Thread, Lock
 from commanduino import CommandManager
-from UJ_FB import web_listener
+import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
+import UJ_FB.web_listener as web_listener
 from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules
-from UJ_FB import fbexceptions
-
+import UJ_FB.fbexceptions as fbexceptions
 
 def load_graph(graph_config):
     graph = node_link_graph(graph_config, directed=True, multigraph=True)
@@ -34,16 +36,19 @@ def object_hook_int(obj):
 
 
 class Manager(Thread):
-    def __init__(self, gui_main, simulation=False):
+    def __init__(self, gui=True, simulation=False, web_enabled=False):
         Thread.__init__(self)
         self.name = "Manager"
-        self.id = "UJFB1"
-        self.gui_main = gui_main
+        logfile = 'UJ_FB/Logs/log' + datetime.datetime.today().strftime('%Y%m%d')
+        self.logger = logging.basicConfig(filename=logfile, level=logging.INFO)
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
         cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
         self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
         self.module_info = self.json_loader("Configs/module_info.json")
+        self.key = self.module_info['key']
+        self.id = self.module_info['id']
+        self.module_info = self.module_info['Modules']
         self.prev_run_config = self.json_loader("Configs/running_config.json", object_hook=object_hook_int)
         self.q = Queue()
         self.pipeline = Queue()
@@ -57,6 +62,7 @@ class Manager(Thread):
         self.stop_flag = False
         self.pause_flag = False
         self.paused = False
+        self.ready = True
         self.valid_nodes = []
         self.valves = {}
         self.num_valves = 0
@@ -68,10 +74,21 @@ class Manager(Thread):
         graph_config = self.json_loader("Configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
-        self.listener = web_listener.WebListener(self)
-        self.listener.start()
+        self.listener = web_listener.WebListener(self, self.id, self.key)
         self.write_running_config("Configs/running_config.json")
         self.rc_changes = False
+        self.xdl = ''
+        if gui:
+            self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
+        else:
+            self.gui_main = None
+        self.start()
+        if web_enabled:
+            self.listener.test_connection()
+
+    def mainloop(self):
+        if self.gui_main is not None:
+            self.gui_main.primary.mainloop()
 
     def json_loader(self, fp, object_hook=None):
         fp = os.path.join(self.script_dir, fp)
@@ -80,6 +97,21 @@ class Manager(Thread):
                 return json.load(file, object_hook=object_hook)
         except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
             raise fbexceptions.FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
+
+    def write_log(self, message, level):
+        if self.gui_main is not None:
+            if level > 9:
+                self.gui_main.write_message(message)
+        if level > 49:
+            self.logger.critical(message)
+        elif level > 39:
+            self.logger.error(message)
+        elif level > 29:
+            self.logger.warning(message)
+        elif level > 19:
+            self.logger.info(message)
+        elif level > 9:
+            self.logger.info(message)
 
     def write_running_config(self, fp):
         fp = os.path.join(self.script_dir, fp)
@@ -103,9 +135,9 @@ class Manager(Thread):
                 self.reactors[module_name] = reactor.Reactor(module_name, module_info, self.cmd_mng, self)
             elif module_type == "flask":
                 self.flasks[module_name] = modules.FBFlask(module_name, module_info, self.cmd_mng, self)
-            #todo add module_type == camera
+            # todo add module_type == camera
         if syringes == 0:
-            self.command_gui('write', 'No pumps configured')
+            self.write_log('No pumps configured', level=logging.WARNING)
             time.sleep(2)
             self.interrupt = True
             self.exit_flag = True
@@ -120,7 +152,7 @@ class Manager(Thread):
         valves_list = []
         for n in list(g.nodes):
             if g.degree[n] < 1:
-                self.gui_main.write_message(f'Node {n} is not connected to the system!')
+                self.write_log(f'Node {n} is not connected to the system!', level=logging.WARNING)
             else:
                 name = g.nodes[n]['name']
                 mod_type = g.nodes[n]['mod_type']
@@ -166,7 +198,12 @@ class Manager(Thread):
                 pause = self.pause_flag
                 waiting = self.waiting
                 if self.q.empty():
+                    self.ready = True
+                    self.listener.update_status(ready=self.ready)
+                    self.listener.request_reaction()
                     continue
+                else:
+                    self.ready = False
             if not pause:
                 if waiting:
                     if not self.tasks:
@@ -213,11 +250,18 @@ class Manager(Thread):
             with open(file) as queue_file:
                 queue_list = json.load(queue_file)['pipeline']
         except json.decoder.JSONDecodeError:
-            self.gui_main.write_message("That is not a valid JSON file")
+            self.write_log("That is not a valid JSON file", level=logging.WARNING)
             return False
         if overwrite:
             self.pipeline.queue.clear()
-        self.add_to_queue(queue_list)
+        protocol = queue_list.get('protocol')
+        if protocol:
+            self.xdl = protocol
+        if queue_list.get('pipeline'):
+            self.add_to_queue(queue_list)
+        else:
+            if not self.listener.load_xdl(self.xdl, is_file=False):
+                return False
 
     def start_queue(self):
         with self.interrupt_lock:
@@ -278,8 +322,7 @@ class Manager(Thread):
             mod_type, name = command_dict['mod_type'], command_dict['module_name']
             command, parameters = command_dict["command"], command_dict["parameters"]
         except KeyError:
-            # todo: change this to a log message
-            self.gui_main.write_message("Missing parameters: module type, name, command, parameters")
+            self.write_log("Missing parameters: module type, name, command, parameters", level=logging.WARNING)
             return False
         if mod_type == 'valve':
             return self.command_valve(name, command, parameters, command_dict)
@@ -287,17 +330,10 @@ class Manager(Thread):
             return self.command_syringe(name, command, parameters, command_dict)
         elif mod_type == 'reactor':
             return self.command_reactor(name, command, parameters, command_dict)
-        elif mod_type == 'gui':
-            message = command_dict['message']
-            return self.command_gui(command, message)
+        # todo add camera module 
         else:
-            self.gui_main.write_message(f'{mod_type} is not recognised')
+            self.write_log(f'{mod_type} is not recognised', level=logging.WARNING)
             return False
-
-    def command_gui(self, command, message):
-        if command == "write":
-            self.gui_main.write_message(message)
-        self.q.task_done()
 
     def command_syringe(self, name, command, parameters, command_dict):
         if command == 'move':
@@ -328,7 +364,7 @@ class Manager(Thread):
             position = parameters['pos']
             cmd_thread = Thread(target=self.syringes[name].set_pos, name=name + 'setpos', args=(position,))
         else:
-            self.gui_main.write_message(f"Command {command} is not recognised")
+            self.gui_main.write_message(f"Command {command} is not recognised", level=logging.WARNING)
             return False
         self.tasks.append(Task(command_dict, self.syringes[name], cmd_thread))
         cmd_thread.start()
@@ -365,7 +401,7 @@ class Manager(Thread):
         elif command == 'he_sens':
             cmd_thread = Thread(target=self.valves[name].he_read, name=name + 'sens')
         else:
-            self.gui_main.write_message(f"{command} is not a valid command")
+            self.gui_main.write_message(f"{command} is not a valid command", level=logging.WARNING)
             return False
         self.tasks.append(Task(command_dict, self.valves[name], cmd_thread))
         cmd_thread.start()
@@ -375,25 +411,23 @@ class Manager(Thread):
         return True
 
     def command_reactor(self, name, command, parameters, command_dict):
-        preheat = parameters['preheat']
-        heat_secs = parameters['heat_secs']
-        temp = parameters['temp']
-        stir_secs = parameters['stir_secs']
-        speed = parameters['speed']
-        if command == 'heatstir':
-            cmd_thread = Thread(target=self.reactors[name].start_reactor, name=name + 'heatstir',
-                                args=(preheat, temp, heat_secs, speed, stir_secs))
-        elif command == "heat":
-            cmd_thread = Thread(target=self.reactors[name].start_reactor, name=name + 'heat',
-                                args=(preheat, temp, heat_secs, 0.0, 0.0))
-        elif command == 'stir':
-            cmd_thread = Thread(target=self.reactors[name].start_reactor, name=name + 'stir',
-                                args=(preheat, 0.0, 0.0, speed, stir_secs))
+        if command == 'start_stir':
+            speed = parameters['speed']
+            stir_secs = parameters['stir_secs']
+            self.reactors[name].start_stir(speed, stir_secs)
+        elif command == 'stop_stir':
+            self.reactors[name].stop_stir()
+        elif command == "start_heat":
+            temp = parameters['temp']
+            heat_secs = parameters['heat_secs']
+            target = parameters['target']
+            self.reactors[name].start_heat(temp, heat_secs, target)
+        elif command == 'stop_heat':
+            self.reactors[name].stop_heat()
         else:
-            self.gui_main.write_message(f"{command} is not a valid command")
+            self.gui_main.write_message(f"{command} is not a valid command", level=logging.WARNING)
             return False
-        self.tasks.append(Task(command_dict, self.reactors[name], cmd_thread))
-        cmd_thread.start()
+        self.tasks.append(Task(command_dict, self.reactors[name], self.reactors[name].thread, single=False))
         if parameters['wait']:
             self.wait_until_ready()
         self.q.task_done()
@@ -403,12 +437,18 @@ class Manager(Thread):
         with self.interrupt_lock:
             self.waiting = True
 
+    def find_reagent(self, reagent_name):
+        for flask in self.flasks:
+            if flask.contents == reagent_name:
+                return flask.name
+        return ""
+        
     def move_liquid(self, source, target, volume, flow_rate):
         """
         Generates all the required commands to move liquid between two points in the robot
         :param source: String - name of the source
         :param target: String - name of the target
-        :param volume: Float - volume to be moved
+        :param volume: Float - volume to be moved (ml)
         :param flow_rate: Int - flow rate in ul/min
         :return: Boolean - successful or unsuccessful
         """
@@ -457,9 +497,9 @@ class Manager(Thread):
                 return path_list[0]
 
         if not source_found:
-            self.gui_main.write_message(f"{source} not present")
+            self.write_log(f"{source} not present", level=logging.WARNING)
         if not target_found:
-            self.gui_main.write_message(f"{target} not present")
+            self.gui_main.write_message(f"{target} not present", level=logging.WARNING)
         return []
 
     def generate_moves(self, source, target, valves, volume, flow_rate):
@@ -557,6 +597,24 @@ class Manager(Thread):
              'direction': "A", 'wait': True}})
         return commands
 
+    def start_stirring(self, reactor_name, command, speed, stir_secs, wait):
+        params = {'speed': speed, "stir_secs": stir_secs, "wait": wait}
+        command_dict = Manager.generate_cmd_dict('reactor', reactor_name, command, params)
+        self.add_to_queue(command_dict)
+
+    def start_heating(self, reactor_name, command, temp, heat_secs, wait,  target=False):
+        params = {'temp': temp, 'heat_secs': heat_secs, 'wait': wait, 'target': target}
+        command_dict = Manager.generate_cmd_dict('reactor', reactor_name, command, params)
+        self.add_to_queue(command_dict)
+
+    def stop_reactor(self, reactor_name, command):
+        if command == 'stop_stir':
+            command_dict = Manager.generate_cmd_dict('reactor', reactor_name, command, {})
+            self.add_to_queue(command_dict)
+        elif command == 'stop_heat':
+            command_dict = Manager.generate_cmd_dict('reactor', reactor_name, command, {})
+            self.add_to_queue(command_dict)
+
     @classmethod
     def generate_cmd_dict(cls, mod_type, mod_name, command, parameters):
         return [{'mod_type': mod_type, 'module_name': mod_name, 'command': command,
@@ -568,11 +626,12 @@ class Task:
     Class to represent queued tasks. Primarily used to pause, resume, or stop all queued tasks.
     """
 
-    def __init__(self, command_dict, module, thread):
+    def __init__(self, command_dict, module, thread, single=True):
         self.command_dict = command_dict
         self.command_dicts = [self.command_dict]
         self.module = module
         self.worker = thread
+        self.single = single
         self.complete = False
         self.paused = False
 
@@ -581,7 +640,11 @@ class Task:
         self.paused = True
 
     def wait_for_completion(self):
-        self.worker.join()
+        if self.single:
+            self.worker.join()
+        else:
+            while not self.module.ready:
+                time.sleep(2)
 
     def resume(self):
         resume_flag = self.module.resume(self.command_dicts)
@@ -589,11 +652,14 @@ class Task:
 
     @property
     def is_complete(self):
-        if self.worker.is_alive() or self.paused:
-            self.complete = False
+        if self.single:
+            if self.worker.is_alive() or self.paused:
+                self.complete = False
+            else:
+                self.complete = True
+                return self.complete
         else:
-            self.complete = True
-        return self.complete
+            self.complete = self.module_ready
 
     @property
     def is_paused(self):

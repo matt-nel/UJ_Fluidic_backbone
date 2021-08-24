@@ -1,5 +1,6 @@
 from UJ_FB.Modules import modules
 import time
+import logging
 
 DEFAULT_LOWER_LIMIT = 350
 DEFAULT_UPPER_LIMIT = 650
@@ -60,8 +61,9 @@ class SelectorValve(modules.Module):
         if 500 < reading < 550:
             self.steppers[0].move_steps(self.spr/10)
         max_read = self.he_sensors[0].analog_read()
-        if max_read < self.magnet_readings[0] - 10 and max_read < 600:
-            max_read = self.check_all_positions(max_read)
+        if max_read < self.magnet_readings[0] - 10:
+            if max_read < 600:
+                max_read = self.check_all_positions(max_read)
         if max_read < (self.magnet_readings[0] - 10):
             self.home_valve()
         self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
@@ -93,7 +95,7 @@ class SelectorValve(modules.Module):
                 self.move_to_pos(port[0])
                 break
         if not target_found:
-            self.write_to_gui(f"{target} not found on valve {self.name}")
+            self.write_log(f"{target} not found on valve {self.name}", level=logging.WARNING)
 
     def jog(self, steps, direction):
         self.ready = False
@@ -240,8 +242,7 @@ class SelectorValve(modules.Module):
 
     def he_read(self):
         reading = self.he_sensors[0].analog_read()
-        message = f'{self.name} he sensor reading is {reading}'
-        self.write_to_gui(message)
+        self.write_to_gui( f'{self.name} he sensor reading is {reading}', level=logging.INFO)
 
     @staticmethod
     def reverse_steps(steps, fwd):

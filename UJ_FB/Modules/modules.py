@@ -1,3 +1,4 @@
+import logging
 from UJ_FB.Devices import devices, steppermotor
 from threading import Lock
 
@@ -55,9 +56,8 @@ class Module:
                     temp_sensor = getattr(cmduino, assoc_devices[item]['cmd_id'])
                     self.temp_sensors.append(devices.TempSensor(temp_sensor, assoc_devices[item]["device_config"], manager.serial_lock))
 
-    def write_to_gui(self, message):
-        command_dict = {'mod_type': 'gui', 'module_name': 'gui', 'command': 'write', 'message': message, 'parameters': {}}
-        self.manager.q.put(command_dict)
+    def write_log(self, message, level):
+        self.manager.write_log(message, level)
 
     def stop(self):
         pass
@@ -94,11 +94,11 @@ class FBFlask(Module):
         vol = -vol
         if vol < 0:
             if self.cur_vol + vol < 0:
-                self.write_to_gui(f'Max volume of {self.name} would be exceeded')
+                self.write_log(f'Max volume of {self.name} would be exceeded', level=logging.WARNING)
                 return False
         else:
             if self.cur_vol + vol > self.max_volume:
-                self.write_to_gui(f'Insufficient {self.contents} in {self.name}')
+                self.write(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
                 return False
         return True
 
