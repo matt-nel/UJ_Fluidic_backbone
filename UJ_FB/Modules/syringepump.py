@@ -99,7 +99,6 @@ class SyringePump(modules.Module):
                 self.write_log(f'{self.name}: {direction_map[direction]} {int(abs(vol_change))}ul', level=logging.INFO)
                 self.change_volume(vol_change, target)
             self.ready = True
-            task.error = False
             return
         self.ready = True
         task.error = True
