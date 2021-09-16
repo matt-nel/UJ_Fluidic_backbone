@@ -9,7 +9,7 @@ from queue import Queue
 from threading import Thread, Lock
 from commanduino import CommandManager
 import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
-import UJ_FB.web_listener as web_listener
+import UJ_FB.web_listener as  web_listener
 from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules
 import UJ_FB.fbexceptions as fbexceptions
 
@@ -38,9 +38,6 @@ def object_hook_int(obj):
 class Manager(Thread):
     def __init__(self, gui=True, simulation=False, web_enabled=False):
         Thread.__init__(self)
-        self.name = "Manager"
-        logfile = 'UJ_FB/Logs/log' + datetime.datetime.today().strftime('%Y%m%d')
-        self.logger = logging.basicConfig(filename=logfile, level=logging.INFO)
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
         cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
@@ -50,6 +47,10 @@ class Manager(Thread):
         self.id = self.module_info['id']
         self.module_info = self.module_info['Modules']
         self.prev_run_config = self.json_loader("Configs/running_config.json", object_hook=object_hook_int)
+        self.name = "Manager" + self.id
+        logfile = 'UJ_FB/Logs/log' + datetime.datetime.today().strftime('%Y%m%d')
+        logging.basicConfig(filename=logfile, level=logging.INFO)
+        self.logger = logging.getLogger(self.id)
         self.q = Queue()
         self.pipeline = Queue()
         # list to hold current Task objects.
@@ -63,6 +64,8 @@ class Manager(Thread):
         self.pause_flag = False
         self.paused = False
         self.ready = True
+        self.reaction_ready = False
+        self.error = False
         self.valid_nodes = []
         self.valves = {}
         self.num_valves = 0
@@ -82,9 +85,9 @@ class Manager(Thread):
             self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
         else:
             self.gui_main = None
-        self.start()
         if web_enabled:
             self.listener.test_connection()
+        self.start()
 
     def mainloop(self):
         if self.gui_main is not None:
@@ -115,10 +118,11 @@ class Manager(Thread):
 
     def write_running_config(self, fp):
         fp = os.path.join(self.script_dir, fp)
-        rc_file = open(fp, 'w')
+        rc_file = open(fp, 'w+')
         running_config = json.dumps(self.prev_run_config, indent=4)
         rc_file.write(running_config)
         rc_file.close()
+        self.rc_changes = False
 
     def populate_modules(self):
         syringes = 0
@@ -183,8 +187,15 @@ class Manager(Thread):
 
     def run(self):
         while not self.exit_flag:
+            execute = self.listener.update_execution()
+            if self.error:
+                self.listener.update_status(self.ready, error=True)
             self.check_task_completion()
+            # interrupt lock used to synchronise access to pause, stop, and exit flags
             with self.interrupt_lock:
+                pause_flag = self.pause_flag
+                if not execute and execute is not None:
+                    self.pause_flag = True
                 if self.interrupt:
                     if self.exit_flag:
                         break
@@ -195,30 +206,34 @@ class Manager(Thread):
                     elif not self.pause_flag and self.paused:
                         self.resume()
                     self.interrupt = False
-                pause = self.pause_flag
-                waiting = self.waiting
-                if self.q.empty():
-                    self.ready = True
-                    self.listener.update_status(ready=self.ready)
-                    self.listener.request_reaction()
-                    continue
+            if self.q.empty():
+                self.ready = True
+                self.ensure_reactors_disabled()
+                self.listener.update_status(ready=self.ready)
+                if not self.reaction_ready:
+                    if self.listener.request_reaction():
+                        self.reaction_ready = True
                 else:
-                    self.ready = False
-            if not pause:
-                if waiting:
+                    if execute:
+                        self.start_queue()
+                        self.reaction_ready = False
+                continue
+            else:
+                self.ready = False
+            # execution ongoing
+            if not pause_flag:
+                if self.waiting:
                     if not self.tasks:
                         with self.interrupt_lock:
                             self.waiting = False
                 else:
                     command_dict = self.q.get()
                     if self.command_module(command_dict):
-                        # todo add log of sent command
-                        pass
+                        self.write_log(f"Added command {command_dict['command']} for {command_dict['module_name']}", level=logging.INFO)
                     else:
-                        pass
-                        # log failed command
-                if self.rc_changes:
-                    self.write_running_config("Configs\\running_config.json")
+                        self.write_log(f"Failed to add command {command_dict['command']} for {command_dict['module_name']}")
+            if self.rc_changes:
+                self.write_running_config("Configs\\running_config.json")
         self.pause_all()
         self.cmd_mng.commandhandlers[0].stop()
 
@@ -278,10 +293,16 @@ class Manager(Thread):
         incomplete_tasks = []
         for task in self.tasks:
             if task.is_complete and not task.is_paused:
-                pass
+                if task.error:
+                    self.pause_all()
+                    with self.interrupt_lock:
+                        self.pause_flag = True
+                    self.error = True
+                    self.listener.update_status(self.ready, self.error)
             else:
                 incomplete_tasks.append(task)
         self.tasks = incomplete_tasks
+        return True
 
     def pause_all(self):
         # should pause first then flush queue and tasks if required
@@ -336,6 +357,8 @@ class Manager(Thread):
             return False
 
     def command_syringe(self, name, command, parameters, command_dict):
+        new_task = Task(command_dict, self.syringes[name])
+        self.tasks.append(new_task)
         if command == 'move':
             target = parameters["target"]
             volume = parameters["volume"]
@@ -354,19 +377,19 @@ class Manager(Thread):
                 parameters['target'] = self.find_target(target)
                 target = parameters['target']
             cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name + 'move',
-                                args=(target, volume, flow_rate, direction))
+                                args=(target, volume, flow_rate, direction, new_task))
         elif command == 'home':
-            cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=())
+            cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=(new_task,))
         elif command == 'jog':
             cmd_thread = Thread(target=self.syringes[name].jog, name=name + 'jog',
-                                args=(parameters['steps'], parameters['direction']))
+                                args=(parameters['steps'], parameters['direction'], new_task))
         elif command == 'setpos':
             position = parameters['pos']
             cmd_thread = Thread(target=self.syringes[name].set_pos, name=name + 'setpos', args=(position,))
         else:
             self.gui_main.write_message(f"Command {command} is not recognised", level=logging.WARNING)
             return False
-        self.tasks.append(Task(command_dict, self.syringes[name], cmd_thread))
+        new_task.add_worker(cmd_thread)
         cmd_thread.start()
         if parameters['wait']:
             self.wait_until_ready()
@@ -380,30 +403,49 @@ class Manager(Thread):
         elif "flask" in target_name:
             target = self.flasks[target]
         elif "reactor" in target_name:
-            target = self.reactors[target]
+            reactor = self.reactors.get(target)
+            if reactor is not None:
+                target = self.reactors[target]
+            else:
+                target = self.reactors['Reactor1']
+        elif "camera" in target_name:
+            camera = self.cameras.get(target)
+            if camera is not None:
+                target = self.cameras[target]
+            else:
+                target = self.cameras['Camera1']
         return target
 
+    def find_reagent(self, reagent_name):
+        reagent_name = reagent_name.lower()
+        for flask in self.flasks:
+            if self.flasks[flask].contents == reagent_name:
+                return self.flasks[flask].name
+        return ""
+
     def command_valve(self, name, command, parameters, command_dict):
+        new_task = Task(command_dict, self.valves[name])
+        self.tasks.append(new_task)
         if type(command) is int and 0 <= command < 9:
             port = command
-            cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(port,))
+            cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(port, new_task))
         elif command == "target":
             target = parameters["target"]
-            cmd_thread = Thread(target=self.valves[name].move_to_target, name=name + "targetmove", args=(target,))
+            cmd_thread = Thread(target=self.valves[name].move_to_target, name=name + "targetmove", args=(target, new_task))
         elif command == 'home':
-            cmd_thread = Thread(target=self.valves[name].home_valve, name=name + 'home', args=())
+            cmd_thread = Thread(target=self.valves[name].home_valve, name=name + 'home', args=(new_task,))
         elif command == 'zero':
-            cmd_thread = Thread(target=self.valves[name].zero, name=name + 'zero', args=())
+            cmd_thread = Thread(target=self.valves[name].zero, name=name + 'zero', args=(new_task,))
         elif command == 'jog':
             steps = parameters['steps']
             direction = parameters['direction']
-            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, direction))
+            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, direction, new_task))
         elif command == 'he_sens':
             cmd_thread = Thread(target=self.valves[name].he_read, name=name + 'sens')
         else:
             self.gui_main.write_message(f"{command} is not a valid command", level=logging.WARNING)
             return False
-        self.tasks.append(Task(command_dict, self.valves[name], cmd_thread))
+        new_task.add_worker(cmd_thread)
         cmd_thread.start()
         if parameters['wait']:
             self.wait_until_ready()
@@ -411,23 +453,25 @@ class Manager(Thread):
         return True
 
     def command_reactor(self, name, command, parameters, command_dict):
+        new_task = Task(command_dict, self.reactors[name], single_action=False)
+        self.tasks.append(new_task)
         if command == 'start_stir':
             speed = parameters['speed']
             stir_secs = parameters['stir_secs']
-            self.reactors[name].start_stir(speed, stir_secs)
+            self.reactors[name].start_stir(speed, stir_secs, new_task)
         elif command == 'stop_stir':
-            self.reactors[name].stop_stir()
+            self.reactors[name].stop_stir(new_task)
         elif command == "start_heat":
             temp = parameters['temp']
             heat_secs = parameters['heat_secs']
             target = parameters['target']
-            self.reactors[name].start_heat(temp, heat_secs, target)
+            self.reactors[name].start_heat(temp, heat_secs, target, new_task)
         elif command == 'stop_heat':
-            self.reactors[name].stop_heat()
+            self.reactors[name].stop_heat(new_task)
         else:
             self.gui_main.write_message(f"{command} is not a valid command", level=logging.WARNING)
             return False
-        self.tasks.append(Task(command_dict, self.reactors[name], self.reactors[name].thread, single=False))
+        new_task.add_worker(self.reactors[name].thread)
         if parameters['wait']:
             self.wait_until_ready()
         self.q.task_done()
@@ -436,12 +480,6 @@ class Manager(Thread):
     def wait_until_ready(self):
         with self.interrupt_lock:
             self.waiting = True
-
-    def find_reagent(self, reagent_name):
-        for flask in self.flasks:
-            if flask.contents == reagent_name:
-                return flask.name
-        return ""
         
     def move_liquid(self, source, target, volume, flow_rate):
         """
@@ -499,7 +537,7 @@ class Manager(Thread):
         if not source_found:
             self.write_log(f"{source} not present", level=logging.WARNING)
         if not target_found:
-            self.gui_main.write_message(f"{target} not present", level=logging.WARNING)
+            self.gui_main.write_message(f"{target} not present")
         return []
 
     def generate_moves(self, source, target, valves, volume, flow_rate):
@@ -620,27 +658,36 @@ class Manager(Thread):
         return [{'mod_type': mod_type, 'module_name': mod_name, 'command': command,
                  "parameters": parameters}]
 
+    def ensure_reactors_disabled(self):
+        for reactor in self.reactors:
+            if self.reactors[reactor].heating:
+                reactor.stop_heat()
+                reactor.stop_stir()
 
 class Task:
     """
     Class to represent queued tasks. Primarily used to pause, resume, or stop all queued tasks.
     """
 
-    def __init__(self, command_dict, module, thread, single=True):
+    def __init__(self, command_dict, module, single_action=True):
         self.command_dict = command_dict
         self.command_dicts = [self.command_dict]
         self.module = module
-        self.worker = thread
-        self.single = single
+        self.worker = None
+        self.single_action = single_action
         self.complete = False
         self.paused = False
+        self.error = False
+        
+    def add_worker(self, thread):
+        self.worker = thread
 
     def pause(self):
         self.command_dict = self.module.stop()
         self.paused = True
 
     def wait_for_completion(self):
-        if self.single:
+        if self.single_action:
             self.worker.join()
         else:
             while not self.module.ready:
@@ -652,14 +699,14 @@ class Task:
 
     @property
     def is_complete(self):
-        if self.single:
+        if self.single_action:
             if self.worker.is_alive() or self.paused:
                 self.complete = False
             else:
                 self.complete = True
-                return self.complete
         else:
             self.complete = self.module_ready
+        return self.complete
 
     @property
     def is_paused(self):

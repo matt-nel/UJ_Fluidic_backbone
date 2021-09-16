@@ -2,8 +2,10 @@ from UJ_FB.Modules import modules
 import time
 import logging
 
-DEFAULT_LOWER_LIMIT = 350
-DEFAULT_UPPER_LIMIT = 650
+DIFF_THRESHOLD = 20
+ERROR_THRESHOLD = 20
+POS_THRESHOLD = 580
+NEG_THRESHOLD = 480
 HOMING_SPEED = 5000
 
 
@@ -33,15 +35,13 @@ class SelectorValve(modules.Module):
                       8: None, 9: None}
         self.magnet_readings = self.manager.prev_run_config['magnet_readings'][self.name]
         if self.magnet_readings[0] == 0:
-            self.magnet_readings = {0: DEFAULT_UPPER_LIMIT, 2: DEFAULT_LOWER_LIMIT, 4: DEFAULT_LOWER_LIMIT,
-                                    6: DEFAULT_LOWER_LIMIT, 8: DEFAULT_LOWER_LIMIT}
+            self.magnet_readings = {0: POS_THRESHOLD, 2: NEG_THRESHOLD, 4: NEG_THRESHOLD,
+                                    6: NEG_THRESHOLD, 8: NEG_THRESHOLD}
         self.adj_valves = []
         self.current_port = None
         # kd, kp
         self.pd_constants = [2, 0.5]
         self.check_spd = 3000
-        self.pos_threshold = 0
-        self.neg_threshold = 0
         self.pos_he = []
         geared = module_config['gear']
         self.spr = self.steppers[0].steps_per_rev
@@ -57,18 +57,31 @@ class SelectorValve(modules.Module):
                 self.pos_dict[position] = (self.spr / 10) * position
 
     def init_valve(self):
+        """
+        Homes the valve before use
+        """
         reading = self.he_sensors[0].analog_read()
+        #if stepper between magnets
         if 500 < reading < 550:
             self.steppers[0].move_steps(self.spr/10)
-        max_read = self.he_sensors[0].analog_read()
-        if max_read < self.magnet_readings[0] - 10:
-            if max_read < 600:
-                max_read = self.check_all_positions(max_read)
-        if max_read < (self.magnet_readings[0] - 10):
+            reading = self.he_sensors[0].analog_read()
+        # if valve is near one of the negative magnets
+        if (reading - max(self.magnet_readings[1:]) < DIFF_THRESHOLD):
+            reading = self.check_all_positions()
+        #if reading near positive magnet
+        elif self.magnet_readings[0] - reading <  DIFF_THRESHOLD:
+            self.find_opt(self.magnet_readings[0])
+        else:
             self.home_valve()
         self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
 
-    def move_to_pos(self, position):
+    def move_to_pos(self, position, task):
+        """Moves the valve to a specific port
+
+        Args:
+            position (int): The number of the destination port
+            task (Task object): Task associated with this function call
+        """
         if self.current_port != position:
             self.ready = False
             stepper = self.steppers[0]
@@ -80,11 +93,12 @@ class SelectorValve(modules.Module):
             self.current_port = position
             self.ready = True
 
-    def move_to_target(self, target):
-        """
+    def move_to_target(self, target, task):
+        """ 
         Gets the required port for movement and moves to that port using move_to_pos
-        :param target: string: name of module
-        :return:
+        string: name of module
+        Args:
+            target (string): name of the target module
         """
         target_found = False
         for port in self.ports.items():
@@ -92,19 +106,29 @@ class SelectorValve(modules.Module):
                 continue
             elif target in port[1].name:
                 target_found = True
-                self.move_to_pos(port[0])
+                self.move_to_pos(port[0], task)
                 break
         if not target_found:
             self.write_log(f"{target} not found on valve {self.name}", level=logging.WARNING)
+            task.error = True
 
-    def jog(self, steps, direction):
+    def jog(self, steps, direction, task):
+        """Jogs the pump a number of steps
+
+        Args:
+            steps (int): number of steps to move
+            direction (string): cc if counterclockwise
+        """
         self.ready = False
         if direction == 'cc':
             steps = -steps
         self.steppers[0].move_steps(steps)
         self.ready = True
 
-    def home_valve(self):
+    def home_valve(self,):
+        """
+        Homes the valve using the hall-effect sensor
+        """
         # todo add logging of information
         self.ready = False
         with self.stop_lock:
@@ -115,19 +139,19 @@ class SelectorValve(modules.Module):
         stepper.set_running_speed(HOMING_SPEED)
         stepper.set_current_position(0)
         max_reading = he_sens.analog_read()
-        # Keep looking for home pos (reading > 700)
-        while max_reading < self.magnet_readings[0] - 10:
+        # Keep looking for home pos (reading >= max saved reading)
+        while max_reading < self.magnet_readings[0] - DIFF_THRESHOLD:
             read = he_sens.analog_read()
-            # Close to home pos
-            if read > 600:
+            # if close to home pos
+            if read > POS_THRESHOLD:
                 if self.find_opt(self.magnet_readings[0]):
                     max_reading = he_sens.analog_read()
                     self.magnet_readings[0] = max_reading
                 else:
                     max_reading = he_sens.analog_read()
             # Close to one of the negative magnets
-            elif read < 500:
-                if self.find_opt(330):
+            elif read < max(self.magnet_readings[1:]):
+                if self.find_opt(NEG_THRESHOLD):
                     # Move between magnets until close to home position
                     max_reading = self.check_all_positions(max_reading)
             else:
@@ -144,6 +168,7 @@ class SelectorValve(modules.Module):
                     iterations += 1
             if self.check_stop:
                 break
+        #found the positive magnet
         if not self.check_stop:
             stepper.set_current_position(0)
             self.current_port = 0
@@ -161,69 +186,90 @@ class SelectorValve(modules.Module):
         self.ready = True
 
     def find_opt(self, target):
+        """Finds a local optimum for the magnet reading from the hall effect sensor using a PID controller
+
+        Args:
+            target (int): The target reading
+
+        Returns:
+            bool: True if optimum found, False otherwise
+        """
         kd, kp = self.pd_constants
         direction = True
+        dir_changes = 0
         iters = 0
         readings = [self.he_sensors[0].analog_read()]
         opt_pos = self.steppers[0].get_current_position()
         error = abs(target - readings[-1])
         last_error = error
-        last_u = 0
         prev_time = time.time()
         errors = [error]
-        while abs(error) > 20:
+        while abs(error) > ERROR_THRESHOLD:
             iters += 1
             dt = time.time() - prev_time
             if dt == 0.0:
                 dt += 0.1
             prop_error = kp * error
             # if error < last error, kd*de/dt = neg
-            derv_error = kd * ((error - last_error) / dt)
+            deriv_error = kd * ((error - last_error) / dt)
             # moving in wrong direction
-            if error - last_error > 20:
+            if error - last_error > ERROR_THRESHOLD:
                 direction = not direction
+                dir_changes += 1
+            #if stepper moving anticlockwise
             if direction is False:
                 prop_error = -prop_error
-            u = prop_error + derv_error
+            u = prop_error + deriv_error
             last_error = error
             prev_time = time.time()
-            self.steppers[0].move_steps(u, True)
+            self.steppers[0].move_steps(u)
             readings.append(self.he_sensors[0].analog_read())
             # Found new minimum
-            if target < 400 and readings[-1] < min(readings):
+            if target < NEG_THRESHOLD and readings[-1] < min(readings):
                 opt_pos = self.steppers[0].get_current_position()
-            # found new_maximum
+            # Found new_maximum
             elif readings[-1] > max(readings[0:-1]):
                 opt_pos = self.steppers[0].get_current_position()
             error = abs(target - readings[-1])
             errors.append(error)
-            last_u = u
             if self.check_stop:
                 return False
-            elif readings[-1] > self.magnet_readings[0] or readings[-1] < DEFAULT_LOWER_LIMIT:
-                break
-            if iters > 10:
+            if iters > 10 or dir_changes > 2:
                 self.steppers[0].move_to(opt_pos)
                 opt = self.he_sensors[0].analog_read()
-                if opt > 700:
+                if opt > self.magnet_readings[0]:
                     self.magnet_readings[0] = opt
                 break
         return True
 
-    def check_all_positions(self, max_reading):
+    def check_all_positions(self):
+        """Looks for the magnet at the home position (0), which has a reading above 600
+
+        Args:
+            max_reading (int): Current maximum reading
+
+        Returns:
+            int: Returns the max reading parameter if no new maximum found, or returns the new maximum reading
+        """
+        #keys are HE readings, values are stepper positions
+        readings = {}
         for i in range(0, 5):
             self.steppers[0].move_steps(self.spr / 5, True)
-            read = self.he_sensors[0].analog_read()
-            if read >= 600:
-                return read
+            readings[self.he_sensors[0].analog_read()] = self.steppers[0].get_current_position()
+            if readings[-1] >= 600:
+                return readings[-1]
             if self.check_stop:
                 break
+        # move to the maximum of these positions
+        max_reading = max(readings.keys())
+        self.steppers[0].move_to(readings[max_reading])
         return max_reading
 
     def check_pos(self, position):
-        """
-        :param position: position to move to
-        :return:
+        """Checks whether the magnet reading at position is within 20 of the reference value
+
+        Args:
+            position (int): The port number to check
         """
         if position in self.magnet_readings:
             reading = self.he_sensors[0].analog_read()
@@ -236,16 +282,31 @@ class SelectorValve(modules.Module):
             self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
             self.manager.rc_changes = True
 
-    def zero(self):
+    def zero(self, task):
+        """
+        Sets the position of the valve to zero, making this the home position
+        """
         self.steppers[0].set_current_position(0)
         self.current_port = 0
 
     def he_read(self):
+        """
+        Reads the hall effect sensor
+        """
         reading = self.he_sensors[0].analog_read()
         self.write_to_gui( f'{self.name} he sensor reading is {reading}', level=logging.INFO)
 
     @staticmethod
     def reverse_steps(steps, fwd):
+        """Reverses the steps if direction needs to be reversed
+
+        Args:
+            steps (int): The number of steps to move
+            fwd (bool): True if moving clockwise, False otherwise
+
+        Returns:
+            int: the steps, reversed if necessary.
+        """
         if not fwd:
             steps = -steps
         return steps
@@ -256,6 +317,9 @@ class SelectorValve(modules.Module):
             return self.stop_cmd
 
     def stop(self):
+        """
+        Stops the valve movement
+        """
         with self.stop_lock:
             self.stop_cmd = True
         with self.steppers[0].stop_lock:
@@ -263,6 +327,15 @@ class SelectorValve(modules.Module):
         self.steppers[0].stop()
 
     def resume(self, command_dicts):
+        """
+        Checks if the command can be resumed.
+
+        Args:
+            command_dicts (dictionary): The dictionaries representing the commands
+
+        Returns:
+            bool: True if resuming, False otherwise
+        """
         if command_dicts[0]['command'] == 'home':
             return True
         else:

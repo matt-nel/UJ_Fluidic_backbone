@@ -42,11 +42,11 @@ class Reactor(modules.FBFlask):
         self.thread = Thread(target=self.run, name=self.name, daemon=True)
         self.thread.start()
 
-    def start_heat(self, temp, heat_secs, target):
+    def start_heat(self, temp, heat_secs, target, task):
         cart_voltage = self.calc_voltage(temp)
         if cart_voltage == -273.15:
             self.write_log("Temperature sensor is not connected", level=logging.ERROR)
-            return False
+            task.error = True
         else:
             self.last_voltage = cart_voltage
         with self.stop_lock:
@@ -60,7 +60,7 @@ class Reactor(modules.FBFlask):
             heater.start_heat(cart_voltage)
         self.heat_time = heat_secs
 
-    def start_stir(self, speed, stir_secs):
+    def start_stir(self, speed, stir_secs, task):
         self.stirring = True
         if speed < 3000:
             self.mag_stirrers[0].start_stir(3000)
@@ -118,7 +118,7 @@ class Reactor(modules.FBFlask):
                         self.res_stirring = True
                     self.ready = True                 
 
-    def preheat(self, preheat_start):
+    def preheat(self, preheat_start, task):
         self.cur_temp = self.temp_sensors[0].read_temp()
         if self.cur_temp < self.target_temp:
             self.calc_voltage(self.target_temp)
@@ -172,12 +172,12 @@ class Reactor(modules.FBFlask):
         with self.stop_lock:
             self.stop_cmd = True 
     
-    def stop_stir(self):
+    def stop_stir(self, task):
         with self.stop_lock:
             self.stirring = False
             self.mag_stirrers[0].stop_stir()
 
-    def stop_heat(self):
+    def stop_heat(self, task):
         with self.stop_lock:
             self.heating = False
             for heater in self.heaters:

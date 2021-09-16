@@ -8,8 +8,6 @@
 #include <CommandHandler.h>
 #include <CommandManager.h>
 
-CommandManager cmdMng;
-
 //include module driver libraries
 #include <AccelStepper.h>
 #include <LinearAccelStepperActuator.h>
@@ -20,12 +18,22 @@ CommandManager cmdMng;
 #include <CommandDigitalWrite.h>
 #include <CommandDigitalRead.h>
 
+//motor encoder counters
+void motor1Count();
+void motor2Count();
+int encoder1Pin = 18, encoder2Pin = 19;
+int encoder1Count = 0, encoder2Count = 0;
+int* encoder1 = &encoder1Count;
+int* encoder2 = &encoder2Count;
+
+CommandManager cmdMng;
+
 //initialised module objects
 AccelStepper stpx(AccelStepper::DRIVER, 54, 55);
-CommandLinearAccelStepperActuator cmdStpx(stpx, 3, 38);
+CommandLinearAccelStepperActuator cmdStpx(stpx, 3, 38, encoder1);
 
 AccelStepper stpy(AccelStepper::DRIVER, 60, 61);
-CommandLinearAccelStepperActuator cmdStpy(stpy, 2, 56);
+CommandLinearAccelStepperActuator cmdStpy(stpy, 2, 56, encoder2);
 
 AccelStepper stpz(AccelStepper::DRIVER, 46, 48);
 CommandAccelStepper cmdStpz(stpz, 62);
@@ -75,10 +83,19 @@ void setup() {
 
   dr1.registerToCommandManager(cmdMng, "DR1");
   dr2.registerToCommandManager(cmdMng, "DR2");
-
+  attachInterrupt(digitalPinToInterrupt(encoder1Pin), motor1Count, RISING);
+  attachInterrupt(digitalPinToInterrupt(encoder2Pin), motor2Count, RISING);
   cmdMng.init();
 }
 
 void loop() {
   cmdMng.update();
+}
+
+void motor1Count(){
+  encoder1Count ++;
+}
+
+void motor2Count(){
+  encoder2Count ++;
 }

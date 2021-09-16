@@ -45,12 +45,14 @@ class SyringePump(modules.Module):
         self.contents = [substance, float(vol)]
         self.contents_history.append((substance, vol))
 
-    def move_syringe(self, target, volume, flow_rate, direction):
-        """
-        Determines the number of steps to send to the manager function for addressing stepper drivers
-        :param : parameters{volume: int, flow_rate: int, direction: string "A" for aspirate, "D" for dispense
-        target: FBflask, wait: boolean}
-        :return:
+    def move_syringe(self, target, volume, flow_rate, direction, task):
+        """Moves the syringe to aspirate (take in) or dispense fluid. Updates the target volume (if target is not None)
+        Args:
+            target (Module Object): Object representing the target module. Can be a SyringePump, Flask, or Reactor
+            volume (float): Volume in uL to be aspirated or dispensed
+            flow_rate (float): Flow rate in uL/s for pump
+            direction (str): 'A' - aspirate syringe, motor moves CCW. 'D' - dispense syringe, motor moves CW
+            task (Task Object): Object used to track task completion
         """
         self.ready = False
         speed = (flow_rate * self.steps_per_rev * self.syringe_length) / (self.screw_lead * self.max_volume * 60)
@@ -79,52 +81,96 @@ class SyringePump(modules.Module):
                 self.steppers[0].set_running_speed(round(speed))
                 self.steppers[0].move_steps(steps)
                 # Blocked until move complete or stop command received
-                new_step_pos = self.steppers[0].get_current_position()
+                if self.steppers[0].encoder_error:
+                    self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
+                    task.error = True
+                    # will have skipped steps, for at least two gap intervals. 
+                    new_step_pos = self.steppers[0].get_current_position() - 400
+                else:
+                    new_step_pos = self.steppers[0].get_current_position()
                 # if aspirating, step change is neg.
-                step_change = new_step_pos + self.cur_step_pos
+                step_change = new_step_pos - self.cur_step_pos
                 actual_travel = (step_change / self.steps_per_rev) * self.screw_lead
                 self.position += actual_travel
                 vol_change = self.calc_volume(actual_travel)
                 if direction == 'A':
                     vol_change = -vol_change
                 self.current_vol += vol_change
-                self.write_log(f'{self.name}: {direction_map[direction]} {abs(vol_change)}')
+                self.write_log(f'{self.name}: {direction_map[direction]} {int(abs(vol_change))}ul', level=logging.INFO)
                 self.change_volume(vol_change, target)
             self.ready = True
-            return True
+            task.error = False
+            return
         self.ready = True
-        return False
+        task.error = True
 
     def home(self):
+        """Moves the pump until the limit switch is triggered
+        Args:
+            task (Task): Task object that is associated with this function call
+        """
         with self.lock:
             self.ready = False
             self.steppers[0].home()
             self.position = 0.0
             self.ready = True
 
-    def jog(self, steps, direction):
+    def jog(self, steps, direction, task):
+        """Moves the pump manually 
+
+        Args:
+            steps (int): number of steps to move
+            direction (string): 'A' - aspirate the syringe, 'D' - Dispense the syringe
+            task (Task): Task object associated with this function call.
+        """
         self.ready = False
         if direction == "A":
             steps = -steps
         with self.lock:
             self.steppers[0].move_steps(steps)
+            if self.steppers[0].encoder_error:
+                task.error = True
         self.ready = True
 
     def stop(self):
+        """Stops the pump movement
+        """
         with self.steppers[0].stop_lock:
             self.steppers[0].stop_cmd = True
         self.steppers[0].stop()
 
     def calc_volume(self, travel):
+        """Calculates the volume change from the travel distance
+
+        Args:
+            travel ([float]): mm that the pump has moved
+
+        Returns:
+            [float ]: volume change for the syringe pump from this movement
+        """
         vol_change = (travel / self.syringe_length) * self.max_volume
         return vol_change
 
     def check_volume(self, volume):
+        """Checks whether the pump can aspirate/dispense the volume required
+
+        Args:
+            volume (float): Volume to be aspirated/dispensed
+
+        Returns:
+            bool: True if possible to aspirate/dispense. False otherwise
+        """
         if volume > self.max_volume:
             return False
         return True
 
     def change_volume(self, volume_change, target):
+        """Changes the volume of the syringe to reflect change from movement
+
+        Args:
+            volume_change (float): Volume that has been aspirated/dispensed
+            target (Module object): The module that is receiving/supplying the fluid
+        """
         self.contents[1] += volume_change
         if target is not None:
             if target.type != "SP":
@@ -141,12 +187,25 @@ class SyringePump(modules.Module):
             self.change_contents('empty', 0)
 
     def set_pos(self, position):
+        """Sets the syringe pump position in mm
+
+        Args:
+            position (float): Position of the pump relative to the limit switch
+        """
         vol = float(position)*1000
         self.contents[1] = vol
         self.position = self.syringe_length - ((self.max_volume - vol)/self.max_volume)*self.syringe_length
         self.steppers[0].set_current_position((self.position/8)*3200)
 
     def resume(self, command_dicts):
+        """Resumes a paused move
+
+        Args:
+            command_dicts (dictionary): dictionary containing the command and parameters
+
+        Returns:
+            bool: True if resuming, False otherwise
+        """
         params = command_dicts[0]['parameters']
         # if aspirating, and there is more liquid to take up
         if params['direction'] == 'A':

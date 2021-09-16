@@ -114,30 +114,26 @@ class StepperMotor:
             self.cmd_stepper.set_current_position(position)
         self.position = position
 
-    def move_steps(self, steps, subs_moves=False):
+    def move_steps(self, steps):
         """
         Moves the motor by a number of steps. :param steps: Integer: the number of steps for the motor to move.
-        :param subs_moves: Boolean: whether subsequent moves are expected. determines whether to disable motor after
-        movement complete.
         :param steps: Integer number of steps to move
         :return: True
         """
         with self.serial_lock:
             self.cmd_stepper.move(steps, False)
-        self.watch_move(subs_moves)
+        self.watch_move()
         return True
 
-    def move_to(self, position, subs_moves=False):
+    def move_to(self, position):
         """
         Moves the motor to a specific step position.
         :param position: Integer: the desired step position
-        :param subs_moves: Boolean: whether subsequent moves are expected. determines whether to disable motor after
-        movement complete.
         :return: True
         """
         with self.serial_lock:
             self.cmd_stepper.move_to(position, False)
-        self.watch_move(subs_moves)
+        self.watch_move()
         return True
 
     def stop(self):
@@ -147,7 +143,7 @@ class StepperMotor:
         with self.serial_lock:
             self.cmd_stepper.stop()
 
-    def watch_move(self, subs_moves=False):
+    def watch_move(self):
         """
         Forces the executing thread to wait until the motor is finished moving or is told to stop. This allows the
         thread to be monitored for Task completion.
@@ -169,9 +165,7 @@ class StepperMotor:
         Queries whether step pulses are still being sent to the motor.
         :return: Boolean: False - no pulses.
         """
-        with self.serial_lock:
-            moving = self.cmd_stepper.is_moving
-        return moving
+        return not self.cmd_stepper.get_move_complete()
 
 
 class LinearStepperMotor(StepperMotor):
@@ -186,6 +180,7 @@ class LinearStepperMotor(StepperMotor):
         """
         super(LinearStepperMotor, self).__init__(stepper_obj, device_config, serial_lock)
         self.switch_state = 0
+        self.encoder_error = False
 
     def check_endstop(self):
         """
@@ -205,3 +200,22 @@ class LinearStepperMotor(StepperMotor):
                 self.cmd_stepper.home(False)
             self.watch_move()
             self.set_running_speed(self.running_speed)
+
+    def watch_move(self):
+        """
+        Forces the executing thread to wait until the motor is finished moving or is told to stop. This allows the
+        thread to be monitored for Task completion.
+        """
+        moving = True
+        prev_time = time.time()
+        while moving:
+            if time.time() > prev_time + 2:
+                if not self.is_moving:
+                    moving = False
+                    self.encoder_error = self.cmd_stepper.encoder_error
+            with self.stop_lock:
+                if self.stop_cmd:
+                    self.stop_cmd = False
+                    break
+        # Delay to allow motor to catch up
+        time.sleep(2)

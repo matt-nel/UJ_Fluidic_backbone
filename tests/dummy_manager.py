@@ -34,3 +34,7 @@ class DummyManager(threading.Thread):
     def json_loader(fp):
         with open(fp) as file:
             return json.load(file)
+
+    @staticmethod
+    def write_log(message, level):
+        print(message)
