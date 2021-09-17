@@ -1,7 +1,7 @@
 {
     "ios": [
         {
-            "port": "COM4"
+            "port": "COM7"
         }
     ],
     "devices": {

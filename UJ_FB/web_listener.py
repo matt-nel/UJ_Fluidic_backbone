@@ -67,7 +67,8 @@ class WebListener():
                 error_state = int(json_args.get('error_state'))
                 self.last_error_update = time.time()
                 if not error_state:
-                    self.manager.error = False            
+                    self.manager.error = False 
+                    self.manager.resume()          
 
     def update_execution(self):
         time_elapsed = time.time() - self.last_execution_update
@@ -139,7 +140,8 @@ class WebListener():
                         volume = volume/1000
                 time = step.get('time')
                 if time is not None:
-                    flow_rate = volume/int(time.split(' ')[0])
+                    # uL/min
+                    flow_rate = (volume*1000)/int(time.split(' ')[0]) * 60
                 else:
                     flow_rate = 1000
                 self.manager.move_liquid(source, target, volume, flow_rate)
@@ -149,7 +151,8 @@ class WebListener():
                 volume = float(step.get('volume').split(' ')[0])
                 time = step.get('time')
                 if time is not None:
-                    flow_rate = volume/int(step['time'].split(' ')[0])
+                    #uL/min
+                    flow_rate = volume/int(time.split(' ')[0]) * 60
                 else:
                     flow_rate = 1000
                 self.manager.move_liquid(source, target, volume, flow_rate)

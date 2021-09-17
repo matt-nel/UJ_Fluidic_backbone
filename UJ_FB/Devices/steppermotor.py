@@ -23,6 +23,8 @@ class StepperMotor:
         self.running_speed = device_config['speed']
         self.max_speed = device_config['max_speed']
         self.acceleration = device_config["acceleration"]
+        self.set_max_speed(self.max_speed)
+        self.enable_acceleration(self.enabled_acceleration)
         self.reversed_direction = False
         self.position = 0
 
@@ -217,5 +219,3 @@ class LinearStepperMotor(StepperMotor):
                 if self.stop_cmd:
                     self.stop_cmd = False
                     break
-        # Delay to allow motor to catch up
-        time.sleep(2)

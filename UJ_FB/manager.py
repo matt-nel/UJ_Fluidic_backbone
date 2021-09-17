@@ -428,7 +428,7 @@ class Manager(Thread):
         self.tasks.append(new_task)
         if type(command) is int and 0 <= command < 9:
             port = command
-            cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(port, new_task))
+            cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(port,))
         elif command == "target":
             target = parameters["target"]
             cmd_thread = Thread(target=self.valves[name].move_to_target, name=name + "targetmove", args=(target, new_task))
@@ -608,6 +608,7 @@ class Manager(Thread):
         commands = []
         source_port = None
         target_port = None
+        #if flow_rate > 
         for adj_valve in source_valve.adj_valves:
             if target_valve.name in adj_valve[0]:
                 source_port = adj_valve[1]

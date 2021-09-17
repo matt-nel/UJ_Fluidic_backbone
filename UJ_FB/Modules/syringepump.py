@@ -50,11 +50,12 @@ class SyringePump(modules.Module):
         Args:
             target (Module Object): Object representing the target module. Can be a SyringePump, Flask, or Reactor
             volume (float): Volume in uL to be aspirated or dispensed
-            flow_rate (float): Flow rate in uL/s for pump
+            flow_rate (float): Flow rate in uL/min for pump
             direction (str): 'A' - aspirate syringe, motor moves CCW. 'D' - dispense syringe, motor moves CW
             task (Task Object): Object used to track task completion
         """
         self.ready = False
+        #speed in steps/sec
         speed = (flow_rate * self.steps_per_rev * self.syringe_length) / (self.screw_lead * self.max_volume * 60)
         # calculate number of steps to send to motor
         steps = (volume * self.syringe_length * self.steps_per_rev) / (self.max_volume * self.screw_lead)
@@ -65,11 +66,12 @@ class SyringePump(modules.Module):
             # Aspirate: Turn CCW, syringe filling
             steps = -steps
             travel = -travel
+            volume = -volume
             if self.position + travel < -self.syringe_length:
                 move_flag = False
         else:
             # Dispense: Turn CW, syringe emptying
-            if self.position + travel > 0:
+            if self.position + travel > 2:
                 move_flag = False
         # None target allows systems with simple routing to function.
         if target is not None:

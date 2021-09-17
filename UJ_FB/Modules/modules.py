@@ -90,16 +90,15 @@ class FBFlask(Module):
         return False
 
     def check_volume(self, vol):
-        # if syringe aspirating (+vol), flask volume reduces. If syringe dispensing (-vol), flask volume increases.
-        vol = -vol
+        # if syringe withdrawing from this vessel
         if vol < 0:
             if self.cur_vol + vol < 0:
-                self.write_log(f'Max volume of {self.name} would be exceeded', level=logging.WARNING)
+                self.write(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
                 return False
         else:
             if self.cur_vol + vol > self.max_volume:
-                self.write(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
-                return False
+                self.write_log(f'Max volume of {self.name} would be exceeded', level=logging.WARNING)
+                return False                
         return True
 
     def change_contents(self, new_contents, vol):
