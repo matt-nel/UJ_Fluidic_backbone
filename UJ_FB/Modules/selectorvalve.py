@@ -47,6 +47,7 @@ class SelectorValve(modules.Module):
         self.spr = self.steppers[0].steps_per_rev
         if geared[0] != 'D':
             gear_ratio = float(geared.split(':')[0])
+            # with 1/16 microstep ratio (3200 steps/rev) and 2:1 gear ratio, spr = 6400
             self.spr *= gear_ratio
             self.steppers[0].reverse_direction(True)
             self.geared = True
@@ -63,14 +64,8 @@ class SelectorValve(modules.Module):
         mag_readings_list = list(self.magnet_readings.values())
         reading = self.he_sensors[0].analog_read()
         #if stepper between magnets
-        if 500 < reading < 550:
-            self.steppers[0].move_steps(self.spr/10)
-            reading = self.he_sensors[0].analog_read()
-        # if valve is near one of the negative magnets
-        if (reading - max(mag_readings_list[1:]) < DIFF_THRESHOLD):
-            reading = self.check_all_positions()
         #if reading near positive magnet
-        elif self.magnet_readings[0] - reading <  DIFF_THRESHOLD:
+        if self.magnet_readings[0] - reading <  DIFF_THRESHOLD:
             self.find_opt(self.magnet_readings[0] + DIFF_THRESHOLD*2)
         else:
             self.home_valve()
@@ -145,7 +140,7 @@ class SelectorValve(modules.Module):
             reading = he_sens.analog_read()
             # if close to home pos
             if reading > POS_THRESHOLD:
-                if self.find_opt(self.magnet_readings[0]):
+                if self.find_opt(self.magnet_readings[0] + 100):
                     max_reading = he_sens.analog_read()
                     self.magnet_readings[0] = max_reading
                 else:
@@ -156,15 +151,10 @@ class SelectorValve(modules.Module):
                     # Move between magnets until close to home position
                     max_reading = self.check_all_positions()
             else:
-                # We must be between magnets. Move 1/2 magnet distance looking for magnet positions
-                move = self.spr / 20
-                stepper.move_steps(move)
-                reading = he_sens.analog_read()
+                # We must be between magnets. Move 1/4 magnet distance looking for magnet positions. Testing shows magnet detection at ~1/4 spr to either side
                 iterations = 0
-                # Move smaller increments looking for magnets
-                while NEG_THRESHOLD < reading < POS_THRESHOLD and iterations < 3:
-                    move = move / 2
-                    stepper.move_steps(move)
+                while NEG_THRESHOLD < reading < POS_THRESHOLD and iterations < 4:
+                    stepper.move_steps(self.spr/20)
                     reading = he_sens.analog_read()
                     iterations += 1
             if self.check_stop:

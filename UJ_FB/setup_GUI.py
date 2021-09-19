@@ -210,17 +210,20 @@ class SetupGUI:
         self.motor_configs = {"default": {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 1000,
                                           "max_speed": 10000, "acceleration": 1000},
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
-                                              "acceleration": 1000}}
+                                              "acceleration": 1000},
+                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": True, "speed": 1000,
+                             "max_speed": 3000, "acceleration": 1000}
+                            }
         self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
-                                                 'device_config': self.motor_configs['default']}},
+                                                 'device_config': {}}},
                               'Y': {'stepperY': {'cmd_id': 'STPY',
-                                                 'device_config': self.motor_configs['default']}},
+                                                 'device_config': {}}},
                               'Z': {'stepperZ': {'cmd_id': 'STPZ',
-                                                 'device_config': self.motor_configs['default']}},
+                                                 'device_config': {}}},
                               'E0': {'stepperE0': {'cmd_id': 'STPE0',
-                                                   'device_config': self.motor_configs['default']}},
+                                                   'device_config': {}}},
                               'E1': {'stepperE1': {'cmd_id': 'STPE1',
-                                                   'device_config': self.motor_configs['default']}}}
+                                                   'device_config': {}}}}
         self.default_running_config = {
             "url": "",
             "magnet_readings": {"valve1": {"0": 0, "2": 0, "4": 0, "6": 0, "8": 0}, "valve2": {"0": 0, "2": 0,
@@ -538,7 +541,7 @@ class SetupGUI:
                     module.mod_type = 'syringe'
                     module.class_type = 'SyringePump'
                     module.mod_config = {'screw_lead': 8, 'linear_stepper': True}
-                    self.motor_setup(syringe_name, stepper_name, motor_cxn)
+                    self.motor_setup(syringe_name, stepper_name, motor_cxn, config_type='default')
                     self.config_flags[0], self.config_flags[2] = False, False
                     self.read_fields(node_config)
                     node_dict = node_config.as_dict()
@@ -621,7 +624,7 @@ class SetupGUI:
                         if gear == '':
                             gear = 'Direct drive'
                         module.mod_config = {'ports': 10, "linear_stepper": False, 'gear': gear}
-                        self.motor_setup(valve_name, stepper_name, motor_cxn)
+                        self.motor_setup(valve_name, stepper_name, motor_cxn, config_type='valve')
                         module.devices['he_sens'] = {'name': he_sens_name, 'cmd_id': hall_sensor, 'device_config': {}}
                         self.cmd_devices.devices[hall_sensor] = {'command_id': hall_sensor}
                         self.config_flags[0], self.config_flags[2] = False, False
@@ -675,6 +678,13 @@ class SetupGUI:
         cancel_button.grid(row=offset + 1, column=1)
 
     def valve_link(self, node_config, window, button):
+        """Set up a link between two valves
+
+        Args:
+            node_config (NodeConfig Object): Object that describes the graph node
+            window (tkinter Window Object): Parent window of this menu
+            button (Tkinter Button): The button to colour once this method is run
+        """
         def accept_valve_link(sel_valve, valve_button):
             valve_name = sel_valve.get()
             if valve_name != "":
@@ -704,10 +714,12 @@ class SetupGUI:
         valve_ok.grid(row=3, column=1)
         cancel_butt.grid(row=3, column=2)
 
-    def motor_setup(self, name, stepper_name, motor_cn):
-        motor_config = {'name': stepper_name}
-        motor_config.update(self.motor_options[motor_cn][stepper_name])
-        mod_info_device = {'stepper': motor_config}
+    def motor_setup(self, name, stepper_name, motor_cn, config_type):
+        this_motor_config = {'name': stepper_name}
+        motor_options = self.motor_options[motor_cn][stepper_name]
+        motor_options['device_config'] = self.motor_configs[config_type]
+        this_motor_config.update(self.motor_options[motor_cn][stepper_name])
+        mod_info_device = {'stepper': this_motor_config}
         self.modules[name].devices.update(mod_info_device)
 
     def flask_setup(self, node_config, fields, window, button):
