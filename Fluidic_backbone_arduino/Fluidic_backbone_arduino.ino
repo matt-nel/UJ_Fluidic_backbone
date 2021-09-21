@@ -51,8 +51,8 @@ CommandAnalogRead t1(A13);
 CommandAnalogRead t2(A14);
 
 //PWM pins
-CommandAnalogWrite aw1(9);
-CommandAnalogWrite aw2(10);
+CommandAnalogWrite aw1(8);
+CommandAnalogWrite aw2(9);
 
 //Digital read pins
 CommandDigitalRead dr1(63);
@@ -83,6 +83,7 @@ void setup() {
 
   dr1.registerToCommandManager(cmdMng, "DR1");
   dr2.registerToCommandManager(cmdMng, "DR2");
+  
   attachInterrupt(digitalPinToInterrupt(encoder1Pin), motor1Count, RISING);
   attachInterrupt(digitalPinToInterrupt(encoder2Pin), motor2Count, RISING);
   cmdMng.init();

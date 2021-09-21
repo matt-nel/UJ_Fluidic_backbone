@@ -67,7 +67,7 @@ class Heater(Device):
 
     def stop_heat(self):
         self.voltage = 0.0
-        self.analog_write(0)
+        self.analog_write(0.0)
 
 
 class MagStirrer(Device):

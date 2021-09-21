@@ -65,7 +65,8 @@
                 "Contents": "empty",
                 "num_heaters": 1,
                 "Current volume": "0",
-                "Maximum volume": "300"
+                "Maximum volume": "300",
+                "aluminium_volume": "144e-6"
             },
             "devices": {
                 "heater": {

@@ -65,6 +65,7 @@ class Manager(Thread):
         self.paused = False
         self.ready = True
         self.reaction_ready = False
+        self.reaction_name = ""
         self.error = False
         self.valid_nodes = []
         self.valves = {}
@@ -78,6 +79,8 @@ class Manager(Thread):
         self.graph = load_graph(graph_config)
         self.check_connections()
         self.listener = web_listener.WebListener(self, self.id, self.key)
+        self.web_enabled = web_enabled
+        self.execute = False
         self.write_running_config("Configs/running_config.json")
         self.rc_changes = False
         self.xdl = ''
@@ -187,8 +190,11 @@ class Manager(Thread):
 
     def run(self):
         while not self.exit_flag:
-            execute = self.listener.update_execution()
-            if self.error:
+            if self.web_enabled:
+                execute = self.listener.update_execution()
+            else:
+                execute = self.execute
+            if self.error and self.web_enabled:
                 self.listener.update_status(self.ready, error=True)
             self.check_task_completion()
             # interrupt lock used to synchronise access to pause, stop, and exit flags
@@ -206,13 +212,22 @@ class Manager(Thread):
                     elif not self.pause_flag and self.paused:
                         self.resume()
                     self.interrupt = False
-            if self.q.empty():
+            if self.q.empty() and not self.tasks:
                 self.ready = True
                 self.ensure_reactors_disabled()
-                self.listener.update_status(ready=self.ready)
+                if self.web_enabled:
+                    self.listener.update_status(ready=self.ready)
                 if not self.reaction_ready:
-                    if self.listener.request_reaction():
-                        self.reaction_ready = True
+                    # log reaction completion once
+                    if self.reaction_name:
+                        self.write_log(f"Completed {self.reaction_name}")
+                        self.reaction_name = ""
+                    # Attempt to request reaction from server
+                    if self.web_enabled:
+                        if self.listener.request_reaction():
+                            self.reaction_ready = True
+                            self.write_log(f"Prepared to run {self.reaction_name} reaction.")
+                # a reaction has been queued
                 else:
                     if execute:
                         self.start_queue()
@@ -222,10 +237,12 @@ class Manager(Thread):
                 self.ready = False
             # execution ongoing
             if not pause_flag:
+                # waiting for task completion
                 if self.waiting:
                     if not self.tasks:
                         with self.interrupt_lock:
                             self.waiting = False
+                #  move on to next queued item
                 else:
                     command_dict = self.q.get()
                     if self.command_module(command_dict):
@@ -279,6 +296,7 @@ class Manager(Thread):
                 return False
 
     def start_queue(self):
+        self.execute = 1
         with self.interrupt_lock:
             self.pause_flag = True
             self.interrupt = True
@@ -302,7 +320,6 @@ class Manager(Thread):
             else:
                 incomplete_tasks.append(task)
         self.tasks = incomplete_tasks
-        return True
 
     def pause_all(self):
         # should pause first then flush queue and tasks if required
@@ -458,7 +475,8 @@ class Manager(Thread):
         if command == 'start_stir':
             speed = parameters['speed']
             stir_secs = parameters['stir_secs']
-            self.reactors[name].start_stir(speed, stir_secs, new_task)
+            self.reactors[name].start_stir(speed, stir_secs, new_task, new_task)
+            self.reactors[name].stir_task = new_task
         elif command == 'stop_stir':
             self.reactors[name].stop_stir(new_task)
         elif command == "start_heat":
@@ -466,6 +484,7 @@ class Manager(Thread):
             heat_secs = parameters['heat_secs']
             target = parameters['target']
             self.reactors[name].start_heat(temp, heat_secs, target, new_task)
+            self.reactors[name].heat_task = new_task
         elif command == 'stop_heat':
             self.reactors[name].stop_heat(new_task)
         else:
@@ -663,6 +682,7 @@ class Manager(Thread):
         for reactor in self.reactors:
             if self.reactors[reactor].heating:
                 reactor.stop_heat()
+            if self.reactos[reactor].stirring:
                 reactor.stop_stir()
 
 class Task:
@@ -687,13 +707,6 @@ class Task:
         self.command_dict = self.module.stop()
         self.paused = True
 
-    def wait_for_completion(self):
-        if self.single_action:
-            self.worker.join()
-        else:
-            while not self.module.ready:
-                time.sleep(2)
-
     def resume(self):
         resume_flag = self.module.resume(self.command_dicts)
         return resume_flag
@@ -705,8 +718,6 @@ class Task:
                 self.complete = False
             else:
                 self.complete = True
-        else:
-            self.complete = self.module_ready
         return self.complete
 
     @property

@@ -88,6 +88,9 @@ class WebListener():
             # get the xdl string
             protocol  = response.get('protocol')
             if protocol is not None:
+                reaction_name = response.get("name")
+                self.manager.write_log(f"Received reaction {reaction_name}", level=logging.INFO)
+                self.manager.reaction_name = reaction_name
                 self.load_xdl(protocol, is_file=False)
                 return True
         return False
@@ -114,7 +117,7 @@ class WebListener():
         req_reagents = tree.find('Reagents')
         procedure = tree.find('Procedure')
         for reagent in req_reagents:
-            reagent_name = reagent.get('name')
+            reagent_name = reagent.get('id')
             flask = self.manager.find_reagent(reagent_name)
             reagents[reagent_name]= flask
         for module in req_hardware:
@@ -148,7 +151,16 @@ class WebListener():
             elif step.tag == "Transfer":
                 source = step.get('from_vessel')
                 target = step.get('to_vessel')
-                volume = float(step.get('volume').split(' ')[0])
+                reagent_info = step.get('volume')
+                if reagent_info is None:
+                    reagent_info = step.get('mass')
+                    continue
+                else:
+                    reagent_info = reagent_info.split(' ')
+                    volume = float(reagent_info[0])
+                    unit = reagent_info[1]
+                    if unit != 'ml':
+                        volume=volume/1000
                 time = step.get('time')
                 if time is not None:
                     #uL/min
@@ -158,6 +170,8 @@ class WebListener():
                 self.manager.move_liquid(source, target, volume, flow_rate)
             elif 'Stir' in step.tag:
                 reactor_name = step.get('vessel')
+                if reactor_name.lower() == "reactor":
+                    reactor_name = "Reactor1"
                 speed = step.get('stir_speed')
                 speed = speed.split(' ')[0]
                 stir_secs = step.get('time')
@@ -173,20 +187,26 @@ class WebListener():
                     self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=int(stir_secs), wait=True)
             elif "HeatChill" in step.tag:
                 reactor_name = step.get('vessel')
+                if reactor_name.lower() == "reactor":
+                    reactor_name = "Reactor1"
                 temp = step.get('temp')
                 heat_secs = step.get('time')
                 # StopHeatChill
                 if 'Stop' in step.tag:
                     self.manager.stop_reactor(reactor_name, command='stop_heat')
                 # StartHeatChill
+                # Reactor will heat to specified temperature and stay on until end of reaction, or told to stop.
                 elif 'Start' in step.tag:
-                    temp = temp.split(' ')[0]
-                    self.manager.start_heating(reactor_name, command='start_heat', temp=float(temp), heat_secs=0, wait=False)
+                    temp = float(temp.split(' ')[0])
+                    self.manager.start_heating(reactor_name, command='start_heat', temp=temp, heat_secs=0, wait=False)
                 # HeatChillToTemp
+                # reactor will heat to required temperature and then turn off. 
                 elif 'To' in step.tag:
-                    temp = temp.split(' ')[0]
-                    self.manager.start_heating(reactor_name, command='start_heat', temp=float(temp), heat_secs=0, target=True, wait=True)
+                    temp = float(temp.split(' ')[0])
+                    self.manager.start_heating(reactor_name, command='start_heat', temp=float(temp), heat_secs=1, target=True, wait=True)
                 # HeatChill
+                # Reactor will heat to specified temperature for specified time.
                 else:
-                    temp = temp.split(' ')[0]
-                    self.manager.start_heating(reactor_name, command='start_heat', temp=float(temp), heat_secs=heat_secs, target=True, wait=True)
+                    temp = float(temp.split(' ')[0])
+                    heat_secs = int(heat_secs.split(' ')[0])
+                    self.manager.start_heating(reactor_name, command='start_heat', temp=temp, heat_secs=heat_secs, target=True, wait=True)

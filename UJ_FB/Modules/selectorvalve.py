@@ -61,11 +61,10 @@ class SelectorValve(modules.Module):
         """
         Homes the valve before use
         """
-        mag_readings_list = list(self.magnet_readings.values())
         reading = self.he_sensors[0].analog_read()
         #if stepper between magnets
         #if reading near positive magnet
-        if self.magnet_readings[0] - reading <  DIFF_THRESHOLD:
+        if self.magnet_readings[0] - reading >  DIFF_THRESHOLD:
             self.find_opt(self.magnet_readings[0] + DIFF_THRESHOLD*2)
         else:
             self.home_valve()

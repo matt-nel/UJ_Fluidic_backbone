@@ -19,8 +19,8 @@ class QueueTest(Thread):
 
     def main_menu(self):
         response = input("[1]: Move\n[2]: Heat and stir\n[3]: Show pipeline\n[4]: Execute pipeline\n"
-                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n[8]: Update URL\n"
-                         "[q] Quit")
+                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n"
+                         "[8]: Import XDL \n[9]: Update URL\n[q] Quit")
         if response == "1":
             self.move_menu()
         elif response == "2":
@@ -38,6 +38,9 @@ class QueueTest(Thread):
         elif response == "7":
             self.manager.export_queue()
         elif response == "8":
+            filepath = input("What is the path to the XDL file?")
+            self.listener.load_xdl(filepath, is_file=True)
+        elif response == "9":
             print("Please enter the IP address of the server")
             response = input("IP address:")
             self.listener.update_url(response)
@@ -82,7 +85,7 @@ class QueueTest(Thread):
         
 
 if __name__ == "__main__":
-    test = QueueTest(manager.Manager())
+    test = QueueTest(manager.Manager(web_enabled=False))
     test.start()
     test.manager.mainloop()
 
