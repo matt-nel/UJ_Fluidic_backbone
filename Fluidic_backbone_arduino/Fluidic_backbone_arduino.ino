@@ -36,13 +36,13 @@ AccelStepper stpy(AccelStepper::DRIVER, 60, 61);
 CommandLinearAccelStepperActuator cmdStpy(stpy, 2, 56, encoder2);
 
 AccelStepper stpz(AccelStepper::DRIVER, 46, 48);
-CommandAccelStepper cmdStpz(stpz, 62);
+CommandAccelStepper cmdStpz(stpz, 62, A3, 6400);
 
 AccelStepper stpe0(AccelStepper::DRIVER, 26, 28);
-CommandAccelStepper cmdStpe0(stpe0, 24);
+CommandAccelStepper cmdStpe0(stpe0, 24, A4, 6400);
 
 AccelStepper stpe1(AccelStepper::DRIVER, 36, 34);
-CommandAccelStepper cmdStpe1(stpe1, 30); 
+CommandAccelStepper cmdStpe1(stpe1, 30);
 
 CommandAnalogRead ar1(A3);
 CommandAnalogRead ar2(A4);

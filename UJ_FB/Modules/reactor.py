@@ -73,6 +73,8 @@ class Reactor(modules.FBFlask):
         self.stirring = True
         if speed < 3000:
             self.mag_stirrers[0].start_stir(3000)
+        if speed < 1400:
+            speed = 1400
         self.mag_stirrers[0].start_stir(speed)
         self.stir_start_time = time.time()
         self.stir_time = stir_secs

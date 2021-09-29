@@ -3,6 +3,7 @@ import time
 import logging
 import requests
 import socket
+import json
 
 # IP address of PI server
 DEFAULT_URL = "http://127.0.0.1:5000/robots_api"
@@ -41,7 +42,7 @@ class WebListener():
                 self.manager.rc_changes = True
             else:
                 self.manager.write_log('Connection refused. Please check robot ID and key in configuration files.',  level=logging.WARNING)
-        except requests.ConnectionError:
+        except (requests.ConnectionError, json.decoder.JSONDecodeError) as e:
             if self.url != DEFAULT_URL:
                 self.url = DEFAULT_URL
                 self.test_connection()
@@ -113,6 +114,8 @@ class WebListener():
     def parse_xdl(self, tree):
         reagents = {}
         modules = {}
+        if tree.find('Synthesis'):
+            tree = tree.find('Synthesis')
         req_hardware = tree.find('Hardware')
         req_reagents = tree.find('Reagents')
         procedure = tree.find('Procedure')
@@ -126,6 +129,8 @@ class WebListener():
         for step in procedure:
             if step.tag == "Add":
                 vessel = step.get('vessel')
+                if vessel.lower() == "reactor":
+                   vessel = self.manager.find_target(vessel.lower())
                 target = modules[vessel]
                 source = reagents[step.get('reagent')]
                 reagent_info = step.get('volume')
@@ -151,6 +156,10 @@ class WebListener():
             elif step.tag == "Transfer":
                 source = step.get('from_vessel')
                 target = step.get('to_vessel')
+                if source == "reactor":
+                    source = self.manager.find_target(source)
+                elif target == "reactor":
+                    target = self.manager.find_target(target)
                 reagent_info = step.get('volume')
                 if reagent_info is None:
                     reagent_info = step.get('mass')
@@ -171,24 +180,27 @@ class WebListener():
             elif 'Stir' in step.tag:
                 reactor_name = step.get('vessel')
                 if reactor_name.lower() == "reactor":
-                    reactor_name = "Reactor1"
+                    reactor_name = self.manager.find_target(reactor_name.lower())
                 speed = step.get('stir_speed')
                 speed = speed.split(' ')[0]
                 stir_secs = step.get('time')
-                stir_secs = stir_secs.split(' ')[0]
+                if stir_secs is None:
+                    stir_secs = 0
+                else:
+                    stir_secs = stir_secs.split(' ')[0]
                 # StopStir
                 if 'Stop' in step.tag:
                     self.manager.stop_reactor(reactor_name, command='stop_stir')
                 # StartStir
                 elif 'Start' in step.tag:
-                    self.manager.start_stir(reactor_name, command='start_stir', speed=float(speed), stir_secs=0, wait=False)
+                    self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=stir_secs, wait=False)
                 # Stir
                 else:
                     self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=int(stir_secs), wait=True)
             elif "HeatChill" in step.tag:
                 reactor_name = step.get('vessel')
                 if reactor_name.lower() == "reactor":
-                    reactor_name = "Reactor1"
+                    reactor_name = self.manager.find_target(reactor_name.lower())
                 temp = step.get('temp')
                 heat_secs = step.get('time')
                 # StopHeatChill

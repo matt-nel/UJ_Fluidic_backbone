@@ -127,7 +127,7 @@ class NodeConfig:
                      'mod_config': {'Contents': raw_dict['Contents'], "num_heaters": 1,
                                     'Current volume': raw_dict['Current volume in ml'],
                                     'Maximum volume': raw_dict['Maximum volume in ml'],
-                                    'aluminium_volume': raw_dict['Aluminium_volume']},
+                                    'aluminium_volume': raw_dict['Aluminium volume (m3)']},
                      'devices': {'heater': {"name": "heater1", "cmd_id": heater, "device_config": {}},
                                  "mag_stirrer": {"name": "stirrer1", "cmd_id": stirrer,
                                                  "device_config": {'fan_speed': int(raw_dict["Fan speed RPM"])}},
@@ -231,8 +231,8 @@ class SetupGUI:
                                                    'device_config': {}}}}
         self.default_running_config = {
             "url": "",
-            "magnet_readings": {"valve1": {"0": 0, "2": 0, "4": 0, "6": 0, "8": 0}, "valve2": {"0": 0, "2": 0,
-                                                                                               "4": 0, "6": 0, "8": 0}}}
+            "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
+                                                                                               "5": 0, "7": 0, "9": 0}, 'check_magnets': 0}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
         self.used_he_pins = []
@@ -374,19 +374,21 @@ class SetupGUI:
             else:
                 self.write_message("Required to configure at least one valve and syringe")
 
-        def populate_menus(frame, valve_no, count, port, col, span=False):
+        def populate_menus(frame, valve_no, row_count, port, col, pad=2, span=False):
+            new_frame = tk.Frame(frame)
             col_span = 1
             if span:
                 col_span = 2
-            row = count * 2
-            port_var = tk.StringVar(frame)
+            row = row_count * 2
+            new_frame.grid(row=row, column=col, columnspan=col_span, pady=pad)
+            port_var = tk.StringVar(new_frame)
             port_var.set('')
-            port_button = tk.Button(frame, text=f'Configure port {port}', bg='LightBlue3', fg='black')
+            port_button = tk.Button(new_frame, text=f'Configure port {port}', bg='LightBlue3', fg='black')
             port_button.configure(command=lambda v=valve_no,
                                                  pv=port_var, pn=port, pb=port_button: port_menu_start(v, pv, pn, pb))
-            port_button.grid(row=row, column=col, columnspan=col_span)
-            port_om = tk.OptionMenu(frame, port_var, *module_options)
-            port_om.grid(row=row + 1, column=col, columnspan=col_span)
+            port_button.grid(row=1, column=1)
+            port_om = tk.OptionMenu(new_frame, port_var, *module_options)
+            port_om.grid(row=2, column=1)
 
         def port_menu_start(valve_no, p_var, port_no, button):
             variable = p_var.get()
@@ -489,17 +491,17 @@ class SetupGUI:
                 left_ports.grid(row=1, column=0)
                 right_ports.grid(row=1, column=2)
 
-                for j, k in enumerate(range(6, 10)):
-                    populate_menus(left_ports, valve_no=i, count=j, port=k, col=0)
+                for j, k in enumerate(range(2, 6)):
+                    populate_menus(left_ports, valve_no=i, row_count=j, port=k, pad=5, col=0)
 
                 image = tk.Label(img_frame, image=self.valve_image)
                 image.grid(row=3, column=0, columnspan=2)
-                populate_menus(img_frame, valve_no=i, count=0, port=5, col=0)
-                populate_menus(img_frame, valve_no=i, count=0, port=-1, col=1)
-                populate_menus(img_frame, valve_no=i, count=3, port=0, col=0, span=True)
+                populate_menus(img_frame, valve_no=i, row_count=0, port=1, col=0)
+                populate_menus(img_frame, valve_no=i, row_count=0, port=-1, col=1)
+                populate_menus(img_frame, valve_no=i, row_count=3, port=6, col=0, span=True)
 
-                for j, k in enumerate(range(4, 0, -1)):
-                    populate_menus(right_ports, valve_no=i, count=j, port=k, col=2)
+                for j, k in enumerate(range(10, 6, -1)):
+                    populate_menus(right_ports, valve_no=i, row_count=j, port=k, pad=5, col=2)
 
                 valve_button = tk.Button(img_frame, text=f'Valve {i + 1} setup', font=self.fonts['buttons'],
                                          bg='LightBlue3',

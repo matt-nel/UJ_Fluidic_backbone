@@ -45,7 +45,7 @@ class Manager(Thread):
         self.module_info = self.json_loader("Configs/module_info.json")
         self.key = self.module_info['key']
         self.id = self.module_info['id']
-        self.module_info = self.module_info['Modules']
+        self.module_info = self.module_info['modules']
         self.prev_run_config = self.json_loader("Configs/running_config.json", object_hook=object_hook_int)
         self.name = "Manager" + self.id
         logfile = 'UJ_FB/Logs/log' + datetime.datetime.today().strftime('%Y%m%d')
@@ -78,6 +78,7 @@ class Manager(Thread):
         graph_config = self.json_loader("Configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
+        self.init_syringes()
         self.listener = web_listener.WebListener(self, self.id, self.key)
         self.web_enabled = web_enabled
         self.execute = False
@@ -148,10 +149,6 @@ class Manager(Thread):
             time.sleep(2)
             self.interrupt = True
             self.exit_flag = True
-        for valve in self.valves:
-            self.valves[valve].init_valve()
-        for syringe in self.syringes:
-            self.syringes[syringe].init_syringe()
 
     def check_connections(self):
         # todo update objects from graph config info
@@ -188,6 +185,34 @@ class Manager(Thread):
                     self.valves[name].adj_valves.append((node_name, port))
             self.valves[name].syringe = self.valves[name].ports[-1]
 
+    def init_syringes(self):
+        """
+            Initialises the syringes by moving them to their endstop, dispensing contents into the nearest
+            waste container. If no waste container is found,  prints a message warning the user.
+        """
+        for valve in self.valves:
+            # home and prepare valve for running
+            self.valves[valve].init_valve()
+            syringe = self.valves[valve].syringe
+            # check if syringe needs to be homed
+            if not syringe.stepper.check_endstop():
+                # search for waste containers looking for shortest path
+                waste_containers = [item for item in list(self.graph.nodes) if "waste" in item.lower()]
+                if not waste_containers:
+                    self.write_log(f"No waste containers are attached. Please manually empty {syringe.name} using the GUI", level=logging.WARNING)
+                    continue
+                shortest_waste_path = []
+                for waste in waste_containers:
+                    path_gen = nx.algorithms.simple_paths.all_simple_paths(self.graph, syringe.name, waste)
+                    path_list = [p for p in path_gen]
+                    if len(path_list[0]) < len(shortest_waste_path) or not shortest_waste_path:
+                        shortest_waste_path = path_list[0]
+                # Align valves without dispensing much liquid
+                self.move_liquid(source=syringe.name, target=shortest_waste_path[-1], volume=0.1, flow_rate=10000, init_move=True)
+            # with valves at waste can move to 0
+            self.add_to_queue(Manager.generate_cmd_dict('syringe', syringe.name, 'home', {'wait': True}))
+        self.start_queue()
+
     def run(self):
         while not self.exit_flag:
             if self.web_enabled:
@@ -201,7 +226,8 @@ class Manager(Thread):
             with self.interrupt_lock:
                 pause_flag = self.pause_flag
                 if not execute and execute is not None:
-                    self.pause_flag = True
+                    if not self.ready:
+                        self.pause_flag = True
                 if self.interrupt:
                     if self.exit_flag:
                         break
@@ -226,15 +252,14 @@ class Manager(Thread):
                     if self.web_enabled:
                         if self.listener.request_reaction():
                             self.reaction_ready = True
-                            self.write_log(f"Prepared to run {self.reaction_name} reaction.")
+                            self.write_log(f"Prepared to run {self.reaction_name} reaction.", level=logging.INFO)
                 # a reaction has been queued
                 else:
                     if execute:
                         self.start_queue()
                         self.reaction_ready = False
+                        self.ready = False
                 continue
-            else:
-                self.ready = False
             # execution ongoing
             if not pause_flag:
                 # waiting for task completion
@@ -416,21 +441,35 @@ class Manager(Thread):
     def find_target(self, target):
         target_name = target.lower()
         if "syringe" in target_name:
-            target = self.syringes[target]
+            target = self.syringes.get(target)
+            if target is None: 
+                for syringe in self.syringes:
+                    target = self.syringes[syringe]
+                    break
         elif "flask" in target_name:
-            target = self.flasks[target]
+            target = self.flasks.get(target)
+            if target is None: 
+                for flask in self.flasks:
+                    target = self.flasks[flask]
+                    break
         elif "reactor" in target_name:
-            reactor = self.reactors.get(target)
-            if reactor is not None:
-                target = self.reactors[target]
-            else:
-                target = self.reactors['Reactor1']
+            target = self.reactors.get(target)
+            if target is None: 
+                for reactor in self.reactors:
+                    target = self.reactors[reactor]
+                    break
         elif "camera" in target_name:
-            camera = self.cameras.get(target)
-            if camera is not None:
-                target = self.cameras[target]
-            else:
-                target = self.cameras['Camera1']
+            target = self.cameras.get(target)
+            if target is None: 
+                for camera in self.cameras:
+                    target = self.cameras[camera]
+                    break
+        elif "waste" in target_name:
+            target = self.flasks.get(target)
+            if target is None: 
+                for flask in self.flasks:
+                    target = self.flasks.get(flask)
+                    break
         return target
 
     def find_reagent(self, reagent_name):
@@ -455,8 +494,8 @@ class Manager(Thread):
             cmd_thread = Thread(target=self.valves[name].zero, name=name + 'zero', args=(new_task,))
         elif command == 'jog':
             steps = parameters['steps']
-            direction = parameters['direction']
-            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, direction, new_task))
+            invert_direction = parameters['invert_direction']
+            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, invert_direction, new_task))
         elif command == 'he_sens':
             cmd_thread = Thread(target=self.valves[name].he_read, name=name + 'sens')
         else:
@@ -500,7 +539,7 @@ class Manager(Thread):
         with self.interrupt_lock:
             self.waiting = True
         
-    def move_liquid(self, source, target, volume, flow_rate):
+    def move_liquid(self, source, target, volume, flow_rate, init_move=True):
         """
         Generates all the required commands to move liquid between two points in the robot
         :param source: String - name of the source
@@ -534,7 +573,7 @@ class Manager(Thread):
             for i in range(0, nr_full_moves):
                 pipelined_steps += full_move
         if remaining_volume > 0.0:
-            partial_move = self.generate_moves(source, target, valves, remaining_volume, flow_rate)
+            partial_move = self.generate_moves(source, target, valves, remaining_volume, flow_rate, init_move=True)
             pipelined_steps += partial_move
         self.add_to_queue(pipelined_steps, self.pipeline)
         return True
@@ -552,14 +591,13 @@ class Manager(Thread):
             path_list = [p for p in paths]
             if path_list:
                 return path_list[0]
-
         if not source_found:
             self.write_log(f"{source} not present", level=logging.WARNING)
         if not target_found:
             self.gui_main.write_message(f"{target} not present")
         return []
 
-    def generate_moves(self, source, target, valves, volume, flow_rate):
+    def generate_moves(self, source, target, valves, volume, flow_rate, init_move=False):
         """
         Generates the moves required to transfer liquid from source to target
         :param source: String - name of the source
@@ -574,8 +612,8 @@ class Manager(Thread):
         valve = self.valves[valves[0]]
         source = self.graph.nodes[source]["object"]
         target = self.graph.nodes[target]["object"]
-        moves += self.generate_sp_move(source, valve, valve.syringe, volume,
-                                       flow_rate)
+        if not init_move:
+            moves += self.generate_sp_move(source, valve, valve.syringe, volume, flow_rate)
         # transfer liquid along backbone
         if len(valves) > 1:
             # Go until second to last valve
@@ -682,7 +720,7 @@ class Manager(Thread):
         for reactor in self.reactors:
             if self.reactors[reactor].heating:
                 reactor.stop_heat()
-            if self.reactos[reactor].stirring:
+            if self.reactors[reactor].stirring:
                 reactor.stop_stir()
 
 class Task:

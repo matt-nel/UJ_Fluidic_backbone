@@ -1,7 +1,7 @@
 {
     "ios": [
         {
-            "port": "COM7"
+            "port": "COM4"
         }
     ],
     "devices": {
@@ -66,9 +66,6 @@
         },
         "AR1": {
             "command_id": "AR1"
-        },
-        "AR2": {
-            "command_id": "AR2"
         }
     }
 }

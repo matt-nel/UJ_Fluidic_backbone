@@ -27,6 +27,7 @@ class StepperMotor:
         self.enable_acceleration(self.enabled_acceleration)
         self.reversed_direction = False
         self.position = 0
+        self.magnets_passed = 0
 
     def enable_acceleration(self, enable=True):
         """
@@ -153,9 +154,10 @@ class StepperMotor:
         moving = True
         prev_time = time.time()
         while moving:
-            if time.time() > prev_time + 2:
+            if time.time() > prev_time + 0.2:
                 if not self.is_moving:
                     moving = False
+                    self.magnets_passed = self.cmd_stepper.magnets_passed
             with self.stop_lock:
                 if self.stop_cmd:
                     self.stop_cmd = False
@@ -211,7 +213,7 @@ class LinearStepperMotor(StepperMotor):
         moving = True
         prev_time = time.time()
         while moving:
-            if time.time() > prev_time + 2:
+            if time.time() > prev_time + 0.2:
                 if not self.is_moving:
                     moving = False
                     self.encoder_error = self.cmd_stepper.encoder_error

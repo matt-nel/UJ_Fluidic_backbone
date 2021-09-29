@@ -93,7 +93,7 @@ class FBFlask(Module):
         # if syringe withdrawing from this vessel
         if vol < 0:
             if self.cur_vol + vol < 0:
-                self.write(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
+                self.manager.write_log(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
                 return False
         else:
             if self.cur_vol + vol > self.max_volume:

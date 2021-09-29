@@ -30,11 +30,8 @@ class SyringePump(modules.Module):
         self.current_vol = 0.0
         self.contents = ['empty', 0.0]
         self.contents_history = []
-        self.steps_per_rev = self.steppers[0].steps_per_rev
-
-    def init_syringe(self):
-        if not self.steppers[0].check_endstop():
-            self.home()
+        self.stepper = self.steppers[0]
+        self.steps_per_rev = self.stepper.steps_per_rev
 
     def set_max_volume(self, volume):
         self.max_volume = float(volume) * 1000.0
@@ -79,17 +76,17 @@ class SyringePump(modules.Module):
                 move_flag = False
         if move_flag:
             with self.lock:
-                self.cur_step_pos = self.steppers[0].get_current_position()
-                self.steppers[0].set_running_speed(round(speed))
-                self.steppers[0].move_steps(steps)
+                self.cur_step_pos = self.stepper.get_current_position()
+                self.stepper.set_running_speed(round(speed))
+                self.stepper.move_steps(steps)
                 # Blocked until move complete or stop command received
-                if self.steppers[0].encoder_error:
+                if self.stepper.encoder_error:
                     self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
                     task.error = True
                     # will have skipped steps, for at least two gap intervals. 
-                    new_step_pos = self.steppers[0].get_current_position() - 400
+                    new_step_pos = self.stepper.get_current_position() - 400
                 else:
-                    new_step_pos = self.steppers[0].get_current_position()
+                    new_step_pos = self.stepper.get_current_position()
                 # if aspirating, step change is neg.
                 step_change = new_step_pos - self.cur_step_pos
                 actual_travel = (step_change / self.steps_per_rev) * self.screw_lead
@@ -105,14 +102,14 @@ class SyringePump(modules.Module):
         self.ready = True
         task.error = True
 
-    def home(self):
+    def home(self, task):
         """Moves the pump until the limit switch is triggered
         Args:
             task (Task): Task object that is associated with this function call
         """
         with self.lock:
             self.ready = False
-            self.steppers[0].home()
+            self.stepper.home()
             self.position = 0.0
             self.ready = True
 
@@ -128,17 +125,17 @@ class SyringePump(modules.Module):
         if direction == "A":
             steps = -steps
         with self.lock:
-            self.steppers[0].move_steps(steps)
-            if self.steppers[0].encoder_error:
+            self.stepper.move_steps(steps)
+            if self.stepper.encoder_error:
                 task.error = True
         self.ready = True
 
     def stop(self):
         """Stops the pump movement
         """
-        with self.steppers[0].stop_lock:
-            self.steppers[0].stop_cmd = True
-        self.steppers[0].stop()
+        with self.stepper.stop_lock:
+            self.stepper.stop_cmd = True
+        self.stepper.stop()
 
     def calc_volume(self, travel):
         """Calculates the volume change from the travel distance
@@ -196,7 +193,7 @@ class SyringePump(modules.Module):
         vol = float(position)*1000
         self.contents[1] = vol
         self.position = self.syringe_length - ((self.max_volume - vol)/self.max_volume)*self.syringe_length
-        self.steppers[0].set_current_position((self.position/8)*3200)
+        self.stepper.set_current_position((self.position/8)*3200)
 
     def resume(self, command_dicts):
         """Resumes a paused move

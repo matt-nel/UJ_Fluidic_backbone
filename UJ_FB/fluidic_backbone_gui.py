@@ -14,7 +14,6 @@ class FluidicBackboneUI:
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background='SteelBlue2')
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
-        self.direct_flag = True
         self.fonts = {'buttons': ('Verdana', 16), 'labels': ('Verdana', 16), 'default': ('Verdana', 16)}
 
         icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), 'Syringe.png'))
@@ -29,6 +28,7 @@ class FluidicBackboneUI:
         for syringe in self.manager.syringes.keys():
             self.populate_syringes(syringe)
 
+        self.invert_valve = False
         self.valves_labels = []
         self.valves_buttons = {}
         # valves_buttons[valve_no][port_no]
@@ -108,13 +108,13 @@ class FluidicBackboneUI:
         jog_button.grid(row=5, column=col + 1)
 
         for port_no in range(0, 5):
-            ports.append(tk.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5, bg='teal',
-                                   fg='white', command=lambda i=port_no: self.move_valve(valve_name, i)))
+            ports.append(tk.Button(self.button_frame, text=str(port_no + 1), font=self.fonts['default'], padx=5, bg='teal',
+                                   fg='white', command=lambda i=port_no + 1: self.move_valve(valve_name, i)))
             ports[port_no].grid(row=6 + port_no, column=col)
 
         for port_no in range(5, 10):
-            ports.append(tk.Button(self.button_frame, text=str(port_no), font=self.fonts['default'], padx=5, bg='teal',
-                                   fg='white', command=lambda i=port_no: self.move_valve(valve_name, i)))
+            ports.append(tk.Button(self.button_frame, text=str(port_no + 1), font=self.fonts['default'], padx=5, bg='teal',
+                                   fg='white', command=lambda i=port_no + 1: self.move_valve(valve_name, i)))
             ports[port_no].grid(row=1 + port_no, column=col + 1)
 
         # Append list of ports corresponding to valve_no to valves_buttons
@@ -250,18 +250,11 @@ class FluidicBackboneUI:
         self.send_command(command_dict)
 
     def jog_valve(self, valve_name, valve_print_name):
-        def check_direction():
-            if self.direct_flag:
-                dir_str = 'cw'
+        def change_direction(invert_direction):
+            if invert_direction:
+                self.invert_valve  = True
             else:
-                dir_str = 'cc'
-            return dir_str
-
-        def change_direction(direction):
-            if direction:
-                self.direct_flag = True
-            else:
-                self.direct_flag = False
+                self.invert_valve = False
 
         def zero_command():
             zero_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'zero',
@@ -277,13 +270,14 @@ class FluidicBackboneUI:
             if custom:
                 nr_steps = int(steps_entry.get())
                 command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
-                                "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
+                                "parameters": {'steps': nr_steps, 'invert_direction' : self.invert_valve, 'wait': False}}
             else:
                 nr_steps = steps
                 command_dict = {'mod_type': 'valve', 'module_name': valve_name, 'command': 'jog',
-                                "parameters": {'steps': nr_steps, 'direction': check_direction(), 'wait': False}}
+                                "parameters": {'steps': nr_steps, 'invert_direction':  self.invert_valve, 'wait': False}}
             self.send_command(command_dict)
 
+        self.invert_valve = False
         b_font = self.fonts['default']
         jog_popup = tk.Toplevel(self.primary)
         jog_popup.title('Jog ' + valve_print_name)
