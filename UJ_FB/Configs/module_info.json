@@ -1,6 +1,7 @@
 {
     "id": "UJFB1",
     "key": "ZQAB9645%",
+    "reaction_config": "Aspirin",
     "modules": {
         "Reactor1": {
             "name": "Reactor1",

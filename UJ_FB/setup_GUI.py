@@ -5,6 +5,8 @@ import subprocess
 import serial.tools.list_ports
 import json
 from PIL import ImageTk, Image
+import cv2 as cv
+import numpy as np
 
 
 def populate_ports():
@@ -59,12 +61,12 @@ class GraphConfig:
         self.next_id += 1
         self.nodes.append(node)
 
-    def add_link(self, source_name, source_id, target_name, target_id, target_port, dual):
+    def add_link(self, source_name, source_id, target_name, target_id, target_port, tubing_length, dual):
         self.links_tmp.append({'id': None, 'sourceInternal': source_id, 'targetInternal': target_id,
-                               'source': source_name, 'target': target_name, 'port': (source_id, target_port)})
+                               'source': source_name, 'target': target_name, 'tubing_length': tubing_length, 'port': (source_id, target_port)})
         if dual:
             self.links_tmp.append({'id': None, 'sourceInternal': target_id, 'targetInternal': source_id,
-                                   'source': target_name, 'target': source_name, 'port': (source_id, target_port)})
+                                   'source': target_name, 'target': source_name, 'tubing_length': tubing_length, 'port': (source_id, target_port)})
 
     def update_links(self):
         for link in self.links_tmp:
@@ -92,6 +94,7 @@ class NodeConfig:
         self.valve_id = None
         self.port_no = None
         self.add_params = []
+        self.tubing_length = 0
         self.dual = None
         self.entries = []
         self.fields = []
@@ -171,14 +174,17 @@ class SetupGUI:
         self.script_dir = os.path.dirname(__file__)
        
         self.fonts = {'buttons': ('Calibri', 12), 'labels': ('Calibri', 14), 'default': ('Calibri', 16),
-                      'heading': ('Calibri', 16), 'text': ('Calibri', 10)}
-        self.colours = {'form-background': "#9ab5d9", 'accept-button': 'Lawn green', 'cancel-button': 'Tomato2',
+                      'heading': ('Calibri', 16), 'text': ('Calibri', 14)}
+        self.colours = {'accept-button': '#4de60b', 'cancel-button': '#e6250b',
          'heading': '#e65525',  "other-button": "#45296e", "other-button-text": "#FFFFFF", 'form-bg': '#b5d5ff'}
         self.primary = primary
         self.primary.title("Fluidic backbone setup")
         self.primary.configure(background="#FFFFFF")
         self.key = ''
         self.id = ''
+        self.rxn_name = ""
+        self.frame = np.array([])
+        self.roi = []
 
         self.setup_frame = tk.Frame(self.primary, bg=self.colours['form-bg'], borderwidth=5)
         self.utilities_frame = tk.Frame(self.primary, bg=self.colours['form-bg'], borderwidth=2)
@@ -295,6 +301,9 @@ class SetupGUI:
             robot_id_entry.delete(0, 'end')
             self.write_message(f'Robot ID added')
 
+        def add_rxn_name():
+            self.rxn_name = self.reaction_name_entry.get()
+
         button_font = self.fonts['buttons']
         com_frame = tk.Frame(self.setup_frame, bg=self.colours['form-bg'], pady=4)
         com_frame.grid(row=2)
@@ -335,19 +344,24 @@ class SetupGUI:
         robot_key_entry.grid(row=6, column=1, padx=4)
         robot_key_button.grid(row=6, column=2, padx=4)
 
-        mod_frame = tk.Frame(self.setup_frame, bg='grey', pady=4)
-
-        mod_label = tk.Label(self.setup_frame, text='Backbone modules and connections setup', font=self.fonts['labels'],
+        mod_frame = tk.Frame(self.setup_frame, bg=self.colours['form-bg'])
+        mod_label = tk.Label(mod_frame, text='Backbone modules and connections setup', font=self.fonts['labels'],
                             bg=self.colours['form-bg'], fg=self.colours['heading'])
-        mod_button = tk.Button(self.setup_frame, text='Configure modules', font=button_font, bg=self.colours['other-button'],
+        mod_button = tk.Button(mod_frame, text='Configure modules', font=button_font, bg=self.colours['other-button'],
                                fg=self.colours['other-button-text'], command=self.graph_setup)
-        gen_button = tk.Button(self.setup_frame, text='Create config', font=button_font, bg='lawn green',
+        reaction_name_label = tk.Label(mod_frame, text="Please enter reaction name: ", font=self.fonts['labels'], bg=self.colours['form-bg'], fg=self.colours['heading'])
+        reaction_name_entry = tk.Entry(mod_frame, width=20)
+        reaction_name_butt = tk.Button(mod_frame, text="Accept name", font=self.fonts['buttons'], bg=self.colours['accept-button'], command=add_rxn_name)
+        gen_button = tk.Button(mod_frame, text='Create config', font=button_font, bg='lawn green',
                                fg='black', command=self.generate_config)
 
-        mod_frame.grid(row=4, column=0)
-        mod_label.grid(row=5, column=0)
-        mod_button.grid(row=6, column=0, pady=4)
-        gen_button.grid(row=7, column=0)
+        mod_frame.grid(row=3)
+        mod_label.grid(row=1, column=0, columnspan=3)
+        mod_button.grid(row=2, column=0, columnspan=3, pady=4)
+        reaction_name_label.grid(row=3, column=0)
+        reaction_name_entry.grid(row=3, column=1)
+        reaction_name_butt.grid(row=3, column=2, padx=5)
+        gen_button.grid(row=4, column=0, columnspan=3)
 
     def init_utilities_panel(self):
         button_font = self.fonts['buttons']
@@ -413,14 +427,14 @@ class SetupGUI:
                 elif variable == 'reactor':
                     node_config.mod_type = 'reactor'
                     node_config.class_type = "Reactor"
-                    fields += ['Contents', 'Fan speed RPM', "Number of heaters", "Aluminium volume (m3)"]
+                    fields += ['Contents', 'Fan speed RPM', "Number of heaters", "Aluminium volume (m3)", "Tubing length in mm"]
                     node_config.dual = True
                     self.reactor_setup(node_config, fields, port_options_window, button)
                 elif variable == 'syringe':
                     node_config.name = f"syringe{self.conf_syr + 1}"
                     node_config.mod_type = 'syringe'
                     node_config.class_type = 'SyringePump'
-                    fields += ['Contents']
+                    fields += ['Contents', "Tubing length in mm"]
                     fields.pop(0)
                     node_config.dual = True
                     self.syringe_setup(node_config, fields, port_options_window, button)
@@ -510,10 +524,13 @@ class SetupGUI:
                     command=lambda valve_butt=valve_button: self.valve_setup(valve_butt))
                 valve_button.grid(row=9, column=0, columnspan=2)
 
+            camera_butt = tk.Button(graph_setup, text="Set up camera", bg=self.colours['other-button'], fg="white")
+            camera_butt.configure(command=lambda: self.camera_setup(camera_butt))
             accept_butt = tk.Button(graph_setup, text='Accept', bg='lawn green', command=accept)
             cancel_butt = tk.Button(graph_setup, text='Cancel', bg='tomato2', command=graph_setup.destroy)
-            accept_butt.grid(row=2, column=1)
-            cancel_butt.grid(row=2, column=2)
+            camera_butt.grid(row=2, column =0)
+            accept_butt.grid(row=3, column=1)
+            cancel_butt.grid(row=3, column=2)
 
     def add_mod(self, mod_type, popup):
         if mod_type == 'sp':
@@ -643,7 +660,6 @@ class SetupGUI:
         window = tk.Toplevel(self.primary)
         label = tk.Label(window, text=f"Valve {self.conf_valves + 1}")
         label.grid(row=2, column=0, columnspan=2)
-        font = self.fonts['default']
         motor_connector = tk.StringVar(window)
         hall_connector = tk.StringVar(window)
         geared_motor = tk.StringVar(window)
@@ -684,6 +700,54 @@ class SetupGUI:
                                   command=window.destroy)
         accept_button.grid(row=offset + 1, column=0)
         cancel_button.grid(row=offset + 1, column=1)
+    
+    def camera_setup(self, camera_button):
+        def accept():
+            self.modules['camera1'] = ModConfig()
+            module = self.modules['camera1']
+            module.mod_type = 'camera'
+            module.class_type = "Camera"
+            module.mod_config = {"ROI": self.roi}
+            cv.destroyAllWindows()
+            window.destroy()
+
+        def cancel():
+            cv.destroyAllWindows()
+            window.destroy()
+
+        def video_stream():
+            _, self.frame = cap.read()
+            img = cv.cvtColor(self.frame, cv.COLOR_BGR2RGBA)
+            tkimg = Image.fromarray(img)
+            imgtk = ImageTk.PhotoImage(image=tkimg)
+            img_label.imgtk = imgtk
+            img_label.configure(image=imgtk)
+            img_label.after(1, video_stream)
+        
+        def setup_roi():
+            warning2 = tk.Toplevel(window)
+            warn_label2 = tk.Label(warning2, text="Press space or enter when done. Press c to cancel")
+            warn_label2.grid()
+            self.roi = cv.selectROI("Select ROI", self.frame)
+            warning2.destroy()
+            cv.destroyAllWindows()
+
+        window = tk.Toplevel(self.primary)
+        cap = cv.VideoCapture(0)
+        label = tk.Label(window, text="Camera", font=self.fonts['heading'], fg=self.colours['heading'])
+        label.grid(row=1, column=0, columnspan=2)
+        label = tk.Label(window, text="Please place the camera, then use the button to set the region of interest.", font=self.fonts['labels'])
+        img_label = tk.Label(window)
+        label.grid(row=2, column=0, columnspan=2)
+        img_label.grid(row=3, column=0, columnspan=2)
+        roi_butt = tk.Button(window, text="Configure ROI", font=self.fonts['buttons'], bg=self.colours['other-button'], command=setup_roi)
+        roi_butt.grid(row=4, column =0, columnspan=2)
+        accept_butt = tk.Button(window, text="Accept", font=self.fonts['buttons'], bg=self.colours['accept-button'], command=accept)
+        cancel_butt = tk.Button(window, text="Cancel", font=self.fonts['buttons'], bg=self.colours['cancel-button'], command=cancel)
+        accept_butt.grid(row=5, column=1)
+        cancel_butt.grid(row=5, column=3)
+        video_stream()
+        
 
     def valve_link(self, node_config, window, button):
         """Set up a link between two valves
@@ -852,8 +916,14 @@ class SetupGUI:
     def read_fields(node_config, start_field=0):
         for i in range(start_field, len(node_config.entries)):
             field = node_config.entries[i][0]
-            config = node_config.entries[i][1].get()
-            node_config.add_params.append((field, config))
+            if field == "Tubing length in mm":
+                try:
+                    node_config.tubing_length = float(node_config.entries[i][1].get())
+                except ValueError:
+                    node_config.tubing_length = 0
+            else:
+                config = node_config.entries[i][1].get()
+                node_config.add_params.append((field, config))
 
     @staticmethod
     def delete_fields(o_frame):
@@ -886,7 +956,7 @@ class SetupGUI:
         modules = {}
         for k in self.modules:
             modules.update(self.modules[k].as_dict())
-        module_config = {"id": self.id, "key": self.key, "modules": modules}
+        module_config = {"id": self.id, "key": self.key, "rxn_name": self.rxn_name, "modules": modules}
         module_config = json.dumps(module_config, indent=4)
         config_files[2].write(module_config)
         prev_running_config = json.dumps(self.default_running_config, indent=4)

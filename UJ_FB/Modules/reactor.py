@@ -1,5 +1,6 @@
 from UJ_FB.Modules import modules
 from threading import Thread
+from commanduino import exceptions
 import math
 import time
 import logging
@@ -71,11 +72,10 @@ class Reactor(modules.FBFlask):
 
     def start_stir(self, speed, stir_secs, task):
         self.stirring = True
-        if speed < 3000:
-            self.mag_stirrers[0].start_stir(3000)
-        if speed < 1400:
-            speed = 1400
-        self.mag_stirrers[0].start_stir(speed)
+        if speed < 2000:
+            self.mag_stirrers[0].start_stir(2000)
+        else:
+            self.mag_stirrers[0].start_stir(speed)
         self.stir_start_time = time.time()
         self.stir_time = stir_secs
         self.write_log(f'{self.name} started stirring at {speed}', level=logging.INFO)
@@ -105,6 +105,9 @@ class Reactor(modules.FBFlask):
                 if self.heat_time > 0:
                     if time.time() - self.heat_start_time > self.heat_time:
                         self.stop_heat()
+                else:
+                    if self.heat_task:
+                        self.heat_task.complete = True
                 new_voltage = self.calc_voltage(self.target_temp)
                 if new_voltage != self.last_voltage:
                     for heater in self.heaters:
@@ -114,6 +117,9 @@ class Reactor(modules.FBFlask):
                 if self.stir_time > 0:
                     if time.time() - self.stir_start_time > self.stir_time:
                         self.stirring = False
+                else:
+                    if self.stir_task:
+                        self.stir_task.complete = True
             with self.stop_lock:
                 if self.stop_cmd:
                     self.stop_cmd = False
@@ -134,7 +140,9 @@ class Reactor(modules.FBFlask):
     def preheat(self, preheat_start):
         self.cur_temp = self.temp_sensors[0].read_temp()
         if self.cur_temp < self.target_temp:
-            self.calc_voltage(self.target_temp)
+            cart_voltage = self.calc_voltage(self.target_temp)
+            for heater in self.heaters:
+                heater.start_heat(cart_voltage)
         else:
             self.preheating = False
             self.heat_start_time = time.time()
@@ -151,7 +159,10 @@ class Reactor(modules.FBFlask):
         :return: voltage: the new required voltage for the heater element.
         """
         kd, ki, kp,  = self.pid_constants
-        self.cur_temp = self.temp_sensors[0].read_temp()
+        try:
+            self.cur_temp = self.temp_sensors[0].read_temp()
+        except exceptions.CMDeviceReplyTimeout:
+            return self.last_voltage
         if self.cur_temp == -273.15:
             return self.cur_temp
         cur_time = time.time()
@@ -186,7 +197,7 @@ class Reactor(modules.FBFlask):
     def stop_stir(self):
         self.stirring = False
         self.mag_stirrers[0].stop_stir()
-        self.stir_task.complete =True
+        self.stir_task.complete = True
 
     def stop_heat(self):
         self.heating = False

@@ -29,7 +29,8 @@ class Module:
         self.stop_lock = Lock()
         self.stop_cmd = False
         self.ready = True
-        if module_info['mod_type'] != 'flask':
+        mod_type = module_info['mod_type']
+        if mod_type != 'flask' and mod_type != 'camera':
             for item in assoc_devices.keys():
                 if 'stepper' in item:
                     # stepper dict: {..."stepper" : [ "cmd_stepper", "cmd_enabler"]...}
