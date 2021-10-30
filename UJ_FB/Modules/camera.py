@@ -20,7 +20,8 @@ class Camera(modules.Module):
         ret, frame = self.cap.read()
         if not ret:
             self.write_log("Unable to receive frame from video stream", level=logging.ERROR)
-        self.last_image = frame
+        else:
+            self.last_image = frame
 
     def encode_image(self):
         ret, enc_image = cv.imencode('.png', self.last_image)

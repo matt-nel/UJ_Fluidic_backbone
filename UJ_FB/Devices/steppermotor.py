@@ -125,6 +125,7 @@ class StepperMotor:
         """
         with self.serial_lock:
             self.cmd_stepper.move(steps, False)
+        self.position = self.position + steps
         self.watch_move()
         return True
 

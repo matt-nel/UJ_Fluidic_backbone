@@ -82,7 +82,7 @@ class FBFlask(Module):
         self.max_volume = float(module_config['Maximum volume'])*1000
 
     def change_volume(self, vol):
-        vol = -vol
+        # neg vol means syringe aspirated from this vessel (volume decreased)
         if self.check_volume(vol):
             self.cur_vol += vol
             if self.cur_vol == 0:

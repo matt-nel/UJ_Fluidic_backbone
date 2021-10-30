@@ -238,13 +238,14 @@ class SetupGUI:
         self.default_running_config = {
             "url": "",
             "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
-                                                                                               "5": 0, "7": 0, "9": 0}, 'check_magnets': 0}}
+                                                                                               "5": 0, "7": 0, "9": 0}, 'check_magnets': 0},
+            "backlash": {"check_backlash": 0, 'backlash_steps': 0}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
         self.used_he_pins = []
         self.used_valves = []
-        self.config_filenames = ['UJ_FB/Configs/cmd_config.json', 'UJ_FB/Configs/module_connections.json',
-                                 'UJ_FB/Configs/module_info.json', 'UJ_FB/Configs/running_config.json']
+        self.config_filenames = ['Configs/cmd_config.json', 'Configs/module_connections.json',
+                                 'Configs/module_info.json', 'Configs/running_config.json']
         for file in self.config_filenames:
             file = os.path.join(self.script_dir, file)
 
@@ -278,7 +279,6 @@ class SetupGUI:
             else:
                 ports = populate_ports()
                 if ports and refresh:
-                    refresh_button.destroy()
                     display_ports(ports)
 
         def add_com_port(port_name=''):
@@ -302,7 +302,9 @@ class SetupGUI:
             self.write_message(f'Robot ID added')
 
         def add_rxn_name():
-            self.rxn_name = self.reaction_name_entry.get()
+            self.rxn_name = reaction_name_entry.get()
+            reaction_name_entry.delete(0, 'end')
+            self.write_message(f"Reaction name {self.rxn_name} added")
 
         button_font = self.fonts['buttons']
         com_frame = tk.Frame(self.setup_frame, bg=self.colours['form-bg'], pady=4)
@@ -313,10 +315,9 @@ class SetupGUI:
                                   font=self.fonts['labels'], fg=self.colours['heading'], bg=self.colours['form-bg'])
         com_port_label.grid(row=1, column=0)
         avail_ports = populate_ports()
-        if not avail_ports:
-            refresh_button = tk.Button(self.setup_frame, text="Refresh", font=button_font, bg="LemonChiffon2",
-                                       fg="black", command=lambda: display_ports(avail_ports, refresh=True))
-            refresh_button.grid(row=3, column=0)
+        refresh_button = tk.Button(com_frame, text="Refresh", font=button_font, bg="LemonChiffon2",
+                                    fg="black", command=lambda: display_ports(avail_ports, refresh=True))
+        refresh_button.grid(row=4, column=2)
         display_ports(avail_ports)
 
         val_text = self.primary.register(self.validate_text)
@@ -421,7 +422,7 @@ class SetupGUI:
                 if variable == 'flask':
                     node_config.mod_type = 'flask'
                     node_config.class_type = 'FBFlask'
-                    fields += ['Contents']
+                    fields += ['Contents', 'Tubing length in mm']
                     node_config.dual = True
                     self.flask_setup(node_config, fields, port_options_window, button)
                 elif variable == 'reactor':
@@ -575,7 +576,7 @@ class SetupGUI:
                     target_id = self.graph_tmp.internalId
                     self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
                                             target_name=node_config.name, target_id=target_id,
-                                            target_port=node_config.port_no, dual=node_config.dual)
+                                            target_port=node_config.port_no, tubing_length=node_config.tubing_length, dual=node_config.dual)
                     button.configure(bg='lawn green')
                     window.destroy()
             else:
@@ -705,6 +706,7 @@ class SetupGUI:
         def accept():
             self.modules['camera1'] = ModConfig()
             module = self.modules['camera1']
+            module.name = "camera1"
             module.mod_type = 'camera'
             module.class_type = "Camera"
             module.mod_config = {"ROI": self.roi}
@@ -763,7 +765,7 @@ class SetupGUI:
                 valve = self.graph_tmp.valves[valve_name]
                 self.used_valves.append(valve_name)
                 self.graph_tmp.add_link(node_config.valve_name, node_config.valve_id, valve["name"],
-                                        valve["internalId"], node_config.port_no, node_config.dual)
+                                        valve["internalId"], node_config.port_no, node_config.tubing_length, node_config.dual)
                 valve_button.configure(bg="lawn green")
                 window.destroy()
             else:
@@ -805,7 +807,7 @@ class SetupGUI:
             self.modules[flask.name] = flask
             self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
                                     target_name=node_config.name, target_id=target_id,
-                                    target_port=node_config.port_no, dual=node_config.dual)
+                                    target_port=node_config.port_no, tubing_length=node_config.tubing_length, dual=node_config.dual)
             flask_button.configure(bg='lawn green')
             window.destroy()
 
@@ -947,8 +949,14 @@ class SetupGUI:
 
     def generate_config(self):
         config_files = []
-        for filename in self.config_filenames:
+        for filename in self.config_filenames[:3]:
+            filename = os.path.join(self.script_dir, filename)
             config_files.append(open(filename, 'w'))
+        # only write running config if it doesn't already exist.
+        if not os.path.exists(self.config_filenames[3]):
+            running_config = open(self.config_filenames[3], 'w')
+            prev_running_config = json.dumps(self.default_running_config, indent=4)
+            running_config.write(prev_running_config)
         cmd_config = json.dumps(self.cmd_devices.as_dict(), indent=4)
         config_files[0].write(cmd_config)
         module_connections = json.dumps(self.graph.as_dict(), indent=4)
@@ -959,8 +967,6 @@ class SetupGUI:
         module_config = {"id": self.id, "key": self.key, "rxn_name": self.rxn_name, "modules": modules}
         module_config = json.dumps(module_config, indent=4)
         config_files[2].write(module_config)
-        prev_running_config = json.dumps(self.default_running_config, indent=4)
-        config_files[3].write(prev_running_config)
         for file in config_files:
             file.close()
         self.write_message("Config files written")

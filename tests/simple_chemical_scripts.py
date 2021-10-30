@@ -58,7 +58,7 @@ class QueueTest(Thread):
         print(f"Move {volume}ml from {source} to {destination} at {speed} ul/min.\n")
         response = input("Is this correct? (y/n)")
         if response == 'y':
-            self.manager.move_liquid(source, destination, volume, speed)
+            self.manager.move_fluid(source, destination, volume, speed)
 
     def reactor_menu(self):
         avail_reactors = self.manager.reactors.keys()

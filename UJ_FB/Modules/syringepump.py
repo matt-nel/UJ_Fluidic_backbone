@@ -3,6 +3,7 @@ from UJ_FB.Modules import modules
 
 direction_map = {'A': "aspirate", "D": "dispense"}
 
+
 class SyringePump(modules.Module):
     """
     Syringe pump module class for managing all equipment required for a syringe pump. 0 position corresponds to syringe
@@ -92,8 +93,8 @@ class SyringePump(modules.Module):
                 actual_travel = (step_change / self.steps_per_rev) * self.screw_lead
                 self.position += actual_travel
                 vol_change = self.calc_volume(actual_travel)
-                if direction == 'A':
-                    vol_change = -vol_change
+                # syringe volume change is inverted relative to stepper direction - ie clockwise (+) when emptying (-)
+                vol_change = -vol_change
                 self.current_vol += vol_change
                 self.write_log(f'{self.name}: {direction_map[direction]} {int(abs(vol_change))}ul', level=logging.INFO)
                 self.change_volume(vol_change, target)
@@ -175,7 +176,7 @@ class SyringePump(modules.Module):
                 # target is not a syringe pump
                 if volume_change > 0 and target.contents != self.contents[0]:
                     self.change_contents(target.contents, self.contents[1])
-                target.change_volume(volume_change)
+                target.change_volume(-volume_change)
             else:
                 # target is a syringe pump
                 if volume_change < 0:

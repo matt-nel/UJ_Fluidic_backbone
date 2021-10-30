@@ -14,6 +14,7 @@ import UJ_FB.web_listener as  web_listener
 from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules, camera
 import UJ_FB.fbexceptions as fbexceptions
 
+
 def load_graph(graph_config):
     graph = node_link_graph(graph_config, directed=True, multigraph=True)
     return graph
@@ -69,7 +70,6 @@ class Manager(Thread):
         self.reaction_ready = False
         self.reaction_name = ""
         self.reaction_id = None
-        self.clean_step = False
         self.error = False
         self.error_start = None
         self.valid_nodes = []
@@ -79,6 +79,7 @@ class Manager(Thread):
         self.reactors = {}
         self.flasks = {}
         self.cameras ={}
+        self.gui_main = None
         self.populate_modules()
         graph_config = self.json_loader("Configs/module_connections.json")
         self.graph = load_graph(graph_config)
@@ -152,7 +153,7 @@ class Manager(Thread):
             elif module_type == "flask":
                 self.flasks[module_name] = modules.FBFlask(module_name, module_info, self.cmd_mng, self)
             elif module_type == "camera":
-                self.cameras[module_name] = camera.Camera(module_name, module_info, None, self)
+                self.cameras[module_name] = camera.Camera(module_name, module_info, self)
         if syringes == 0:
             self.write_log('No pumps configured', level=logging.WARNING)
             time.sleep(2)
@@ -220,7 +221,7 @@ class Manager(Thread):
                     if len(path_list[0]) < len(shortest_waste_path) or not shortest_waste_path:
                         shortest_waste_path = path_list[0]
                 # Align valves without dispensing much liquid
-                self.move_liquid(source=syringe.name, target=shortest_waste_path[-1], volume=0.1, flow_rate=10000, init_move=True)
+                self.move_fluid(source=syringe.name, target=shortest_waste_path[-1], volume=0.1, flow_rate=10000, init_move=True)
                 # with valves at waste can move to 0
                 self.add_to_queue(Manager.generate_cmd_dict('syringe', syringe.name, 'home', {'wait': True}))
             self.start_queue()
@@ -234,8 +235,6 @@ class Manager(Thread):
         while not self.exit_flag:
             if self.web_enabled:
                 execute = self.listener.update_execution()
-                if self.clean_step:
-                    self.execute = False
             else:
                 execute = self.execute
             if self.error:
@@ -247,7 +246,9 @@ class Manager(Thread):
             # interrupt lock used to synchronise access to pause, stop, and exit flags
             with self.interrupt_lock:
                 pause_flag = self.pause_flag
+                # We have received a command to stop or start execution
                 if not execute and execute is not None:
+                    # if not ready then we must pause the current execution
                     if not self.ready:
                         self.pause_flag = True
                 if self.interrupt:
@@ -268,8 +269,10 @@ class Manager(Thread):
                 if not self.reaction_ready:
                     # log reaction completion once
                     if self.reaction_name:
-                        self.write_log(f"Completed {self.reaction_name}")
+                        self.write_log(f"Completed {self.reaction_name}", level=logging.INFO)
+                        self.listener.update_status(True, reaction_complete=True)
                         self.reaction_name = ""
+                        self.reaction_id = None
                     # Attempt to request reaction from server
                     if self.web_enabled:
                         if self.listener.request_reaction():
@@ -281,7 +284,8 @@ class Manager(Thread):
                         self.start_queue()
                         self.reaction_ready = False
                         self.ready = False
-                continue
+                        self.listener.update_status(False)
+                        continue
             # execution ongoing
             if not pause_flag:
                 # waiting for task completion
@@ -290,12 +294,12 @@ class Manager(Thread):
                         with self.interrupt_lock:
                             self.waiting = False
                 #  move on to next queued item
-                else:
-                    command_dict = self.q.get()
+                elif not self.q.empty():
+                    command_dict = self.q.get(block=False)
                     if self.command_module(command_dict):
                         self.write_log(f"Added command {command_dict['command']} for {command_dict['module_name']}", level=logging.INFO)
                     else:
-                        self.write_log(f"Failed to add command {command_dict['command']} for {command_dict['module_name']}")
+                        self.write_log(f"Failed to add command {command_dict['command']} for {command_dict['module_name']}", level=logging.ERROR)
             if self.rc_changes:
                 self.write_running_config("Configs\\running_config.json")
         self.pause_all()
@@ -383,6 +387,7 @@ class Manager(Thread):
             self.tasks.pop(i)
         with self.q.mutex:
             self.q.queue.clear()
+        self.paused = False
 
     def resume(self):
         new_q = Queue()
@@ -450,7 +455,7 @@ class Manager(Thread):
             cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=(new_task,))
         elif command == 'jog':
             cmd_thread = Thread(target=self.syringes[name].jog, name=name + 'jog',
-                                args=(parameters['steps'], parameters['direction'], new_task))
+                                args=(parameters['steps'], parameters['direction']))
         elif command == 'setpos':
             position = parameters['pos']
             cmd_thread = Thread(target=self.syringes[name].set_pos, name=name + 'setpos', args=(position,))
@@ -467,20 +472,20 @@ class Manager(Thread):
     def command_valve(self, name, command, parameters, command_dict):
         new_task = Task(command_dict, self.valves[name])
         self.tasks.append(new_task)
-        if type(command) is int and 0 <= command < 9:
+        if type(command) is int and 0 <= command < 11:
             port = command
             cmd_thread = Thread(target=self.valves[name].move_to_pos, name=name + 'movepos', args=(port,))
         elif command == "target":
             target = parameters["target"]
             cmd_thread = Thread(target=self.valves[name].move_to_target, name=name + "targetmove", args=(target, new_task))
         elif command == 'home':
-            cmd_thread = Thread(target=self.valves[name].home_valve, name=name + 'home', args=(new_task,))
+            cmd_thread = Thread(target=self.valves[name].home_valve, name=name + 'home')
         elif command == 'zero':
             cmd_thread = Thread(target=self.valves[name].zero, name=name + 'zero', args=(new_task,))
         elif command == 'jog':
             steps = parameters['steps']
             invert_direction = parameters['invert_direction']
-            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, invert_direction, new_task))
+            cmd_thread = Thread(target=self.valves[name].jog, name=name + 'jog', args=(steps, invert_direction))
         elif command == 'he_sens':
             cmd_thread = Thread(target=self.valves[name].he_read, name=name + 'sens')
         else:
@@ -510,14 +515,14 @@ class Manager(Thread):
         elif "reactor" in target_name:
             target = self.reactors.get(target)
             if target is None: 
-                for reactor in self.reactors:
-                    target = self.reactors[reactor]
+                for r in self.reactors:
+                    target = self.reactors[r]
                     break
         elif "camera" in target_name:
             target = self.cameras.get(target)
             if target is None: 
-                for camera in self.cameras:
-                    target = self.cameras[camera]
+                for cam in self.cameras:
+                    target = self.cameras[cam]
                     break
         elif "waste" in target_name:
             target = self.flasks.get(target)
@@ -530,7 +535,7 @@ class Manager(Thread):
     def find_reagent(self, reagent_name):
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if self.flasks[flask].contents == reagent_name:
+            if self.flasks[flask].contents in reagent_name:
                 return self.flasks[flask].name
         return ""
 
@@ -568,7 +573,10 @@ class Manager(Thread):
             img_num = parameters['img_num']
             img_processing = parameters['img_processing']
             cmd_thread = Thread(target=self.send_image, name=name+'send_image', args=(img_num, img_processing))
-        self.write_log(f"Taking image {img_num}", level=logging.INFO)
+            self.write_log(f"Taking image {img_num}", level=logging.INFO)
+        else:
+            self.write_log(f"Unknown command {command}", level=logging.ERROR)
+            return False
         new_task.add_worker(cmd_thread)
         cmd_thread.start()
         if parameters['wait']:
@@ -587,7 +595,7 @@ class Manager(Thread):
         elif command == "wait":
             wait_time = parameters['time']
             cmd_thread = Thread(target=self.wait_until, name=name+"wait_until", args=(wait_time,))
-            self.write_log(f"Waiting for {wait_time} s, reason: {wait_reason}")
+            self.write_log(f"Waiting for {wait_time} s, reason: {wait_reason}", level=logging.INFO)
         new_task.add_worker(cmd_thread)
         cmd_thread.start()
         if parameters['wait']:
@@ -600,19 +608,20 @@ class Manager(Thread):
             self.waiting = True
     
     def wait_user(self):
-        if self.gui_main is not None:
+        if self.gui_main is None:
             ans = input('Ready to resume? Press any key')
         else:
             self.gui_main.wait_user()
             while not self.user_wait_flag:
                 time.sleep(1)
 
+    @staticmethod
     def wait_until(self, wait_time):
         start_time = time.time()
         while time.time() - start_time < wait_time:
             time.sleep(1)
         
-    def move_liquid(self, source, target, volume, flow_rate, init_move=False):
+    def move_fluid(self, source, target, volume, flow_rate, init_move=False, account_for_dead_volume=True):
         """
         Generates all the required commands to move liquid between two points in the robot
         :param source: String - name of the source
@@ -631,8 +640,9 @@ class Manager(Thread):
             return False
         # Grab intervening valves between source and target
         valves = path[1:-1]
-        #find the dead volume between the source and target
-        volume += self.dead_volume(path)*1000
+        # prime dead volume between valves
+        if len(valves) > 1:
+            self.flush_valve_dead_volume(source, valves)
         # Find lowest maximum volume amongst syringes
         for valve in valves:
             cur_max_vol = self.valves[valve].syringe.max_volume
@@ -650,6 +660,9 @@ class Manager(Thread):
         if remaining_volume > 0.0:
             partial_move = self.generate_moves(source, target, valves, remaining_volume, flow_rate, init_move)
             pipelined_steps += partial_move
+        # this assumes we have an air source on the valve with the final vessel
+        if not init_move and account_for_dead_volume:
+            pipelined_steps += self.flush_sp_dead_volume(valves[-1], target)
         self.add_to_queue(pipelined_steps, self.pipeline)
         return True
 
@@ -661,7 +674,6 @@ class Manager(Thread):
         if target in self.valid_nodes:
             target_found = True
         if source_found and target_found:
-            valid_path = []
             paths = nx.algorithms.all_simple_paths(self.graph, source, target)
             path_list = [p for p in paths]
             if path_list:
@@ -669,36 +681,46 @@ class Manager(Thread):
         if not source_found:
             self.write_log(f"{source} not present", level=logging.WARNING)
         if not target_found:
-            self.write_log(f"{target} not present")
+            self.write_log(f"{target} not present", level=logging.ERROR)
         return []
 
-    def dead_volume(self, path):
+    def flush_sp_dead_volume(self, valve, target):
         """Find the dead volume between two points in the network along path
 
         Args:
             path (list): list giving the path that the liquid will follow along the backbone.
         Return:
-            dead_volume (float): the dead volume in ml between the 
+            dead_volume (float): the dead volume in ml between the nodes
         """
-        def calc_volume(tubing_length):
-            #assume 1/16" tubing ID
-            mm3 = math.pow((1.5875/2), 2) * math.pi * tubing_length
+        def calc_volume(t_length):
+            # assume 1/16" tubing ID
+            mm3 = math.pow((1.5875/2), 2) * math.pi * t_length
             return mm3/1000
-        # along path, syringe lines, valve-valve lines, and output lines will hold dead volume,
+        pipelined_steps = []
+        # along path, syringe lines and valve-valve lines will hold dead volume,
         #  assuming input lines have been primed before operation.
-        dead_volume = 0.0
-        # get dead volume for intervening nodes between source and target
-        for i, node in enumerate(path[1:]):
-            if 'syringe' in node:
-                tubing_length = self.graph.adj[node][path[i-1]][0]['tubing_length']
-                dead_volume += calc_volume(tubing_length)
-            elif 'valve' in node:
-                if 'valve' in path[i-1]:
-                    tubing_length = self.graph.adj[node][path[i-1]][0]['tubing_length']
-                    dead_volume += calc_volume(tubing_length)
-        tubing_length = self.graph.adj[node][path[i-1]][0]['tubing_length']
-        dead_volume += calc_volume(tubing_length)
-        return dead_volume
+        # find an unused port for air
+        valve = self.valves[valve]
+        air_port = None
+        for i in range(len(valve.ports)-1):
+            if valve.ports[i+1] is None:
+                air_port = i+1
+                break
+        if air_port is None:
+            return
+        tubing_length = self.graph.adj[valve.name][target][0]['tubing_length']
+        dead_volume = calc_volume(tubing_length)
+        # Command to index valve to required position
+        pipelined_steps.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
+                         'parameters': {'target': 'empty', 'wait': True}})
+        # Command to dispense air to remove dead volume
+        pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
+                         'parameters': {'volume': dead_volume, 'flow_rate': 1000, 'target': None,
+                                        'direction': 'A', 'wait': True}})
+        return pipelined_steps
+
+    def flush_valve_dead_volume(self, source, valves):
+        pass
 
     def generate_moves(self, source, target, valves, volume, flow_rate, init_move=False):
         """
@@ -714,7 +736,8 @@ class Manager(Thread):
         # Move liquid into first syringe pump
         valve = self.valves[valves[0]]
         source = self.graph.nodes[source]["object"]
-        target = self.graph.nodes[target]["object"]
+        if target is not None:
+            target = self.graph.nodes[target]["object"]
         # does syringe need to fill?
         if not init_move:
             moves += self.generate_sp_move(source, valve, valve.syringe, volume, flow_rate)
@@ -742,17 +765,26 @@ class Manager(Thread):
             name = source.name
             valve_target = target
             syringe_target = target
+            if not syringe_target:
+                target_name = "empty"
+            else:
+                target_name = syringe_target.name
         else:
             direction = "A"
             name = target.name
             valve_target = source
             syringe_target = source
+            if not valve_target:
+                target_name = "empty"
+            else:
+                target_name = valve_target.name
+
         # Command to index valve to required position
         commands.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
-                         'parameters': {'target': valve_target.name, 'wait': True}})
+                         'parameters': {'target': target_name, 'wait': True}})
         # Command to dispense/withdraw syringe
         commands.append({'mod_type': 'syringe', 'module_name': name, 'command': 'move',
-                         'parameters': {'volume': volume, 'flow_rate': flow_rate, 'target': syringe_target.name,
+                         'parameters': {'volume': volume, 'flow_rate': flow_rate, 'target': target_name,
                                         'direction': direction, 'wait': True}})
         return commands
 
@@ -769,7 +801,7 @@ class Manager(Thread):
         commands = []
         source_port = None
         target_port = None
-        #if flow_rate > 
+        # if flow_rate >
         for adj_valve in source_valve.adj_valves:
             if target_valve.name in adj_valve[0]:
                 source_port = adj_valve[1]
@@ -826,11 +858,11 @@ class Manager(Thread):
             self.add_to_queue(command_dict)
     
     def send_image(self, img_num, img_processing):
-        camera = self.cameras['camera1']
-        camera.capture_image()
-        data = camera.encode_image()
+        cam = self.cameras['camera1']
+        cam.capture_image()
+        data = cam.encode_image()
         image_metadata = {'robot_id': self.id, 'robot_key': self.key, 'reaction_id': self.reaction_id, 'img_number': img_num,
-                                        'reaction_name': self.reaction_name, 'img_processing': img_processing, 'img_roi': camera.roi}
+                                        'reaction_name': self.reaction_name, 'img_processing': img_processing, 'img_roi': cam.roi}
         response = self.listener.send_image(image_metadata, data)
         # add error checking?
     
@@ -838,15 +870,19 @@ class Manager(Thread):
         pic_info = actions.get('picture')
         wait_info = actions.get('wait_user')
         wait_reason = actions.get('wait_reason')
+        img_processing = actions.get('img_processing')
         if wait_reason is None:
             wait_reason = ""
         if pic_info is not None:
             command_dict = Manager.generate_cmd_dict(mod_type='camera', mod_name='camera1', command="send_img",
-                                                                             parameters={"img_num": pic_info, 'wait': True})
+                                                                             parameters={"img_num": pic_info, "img_processing": img_processing,'wait': True})
             self.add_to_queue(command_dict)
         if wait_info is not None:
+            manager_wait = True
+            if wait_reason == 'cleaning':
+                manager_wait = False
             command_dict = Manager.generate_cmd_dict(mod_type='wait', mod_name='wait', command="wait_user",
-                                                                                    parameters={'wait': True, 'wait_reason': wait_reason})
+                                                                                    parameters={'wait': manager_wait, 'wait_reason': wait_reason})
             self.add_to_queue(command_dict)
         else:
             command_dict = Manager.generate_cmd_dict(mod_type='wait', mod_name='wait', command='wait', 
@@ -859,11 +895,12 @@ class Manager(Thread):
                  "parameters": parameters}]
 
     def ensure_reactors_disabled(self):
-        for reactor in self.reactors:
+        for r in self.reactors:
             if self.reactors[reactor].heating:
-                reactor.stop_heat()
+                r.stop_heat()
             if self.reactors[reactor].stirring:
-                reactor.stop_stir()
+                r.stop_stir()
+
 
 class Task:
     """

@@ -2,7 +2,7 @@ from UJ_FB.Modules import modules
 import time
 import logging
 
-DIFF_THRESHOLD = 10
+DIFF_THRESHOLD = 20
 ERROR_THRESHOLD = 20
 POS_THRESHOLD = 580
 NEG_THRESHOLD = 500
@@ -50,12 +50,15 @@ class SelectorValve(modules.Module):
         self.he_sensor = self.he_sensors[0]
         self.reading = self.he_sensor.analog_read()
         self.spr = self.stepper.steps_per_rev
+        self.last_direction = 'F'
+        self.current_direction = 'F'
         if geared[0] != 'D':
             gear_ratio = float(geared.split(':')[0])
             # with 1/16 microstep ratio (3200 steps/rev) and 2:1 gear ratio, spr = 6400
             self.spr *= gear_ratio
             self.stepper.reverse_direction(True)
             self.geared = True
+            self.backlash = self.manager.prev_run_config['backlash']['backlash_steps']
         else:
             self.geared = False
         if self.spr != 3200:
@@ -89,7 +92,11 @@ class SelectorValve(modules.Module):
         # Counter goes up each time robot started or homes. When counter at 5, check the magnet positions
         if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 5 == 0 and not check_value:
             self.check_magnets()
+        if self.geared:
+            if self.manager.prev_run_config['backlash']['check_backlash'] % 10 == 0 or self.backlash == 0:
+                self.check_backlash()
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
+        self.manager.prev_run_config['backlash']['check_backlash'] += 1
         self.current_port = 1
         self.stepper.set_current_position(0)
 
@@ -101,13 +108,24 @@ class SelectorValve(modules.Module):
             task (Task object): Task associated with this function call
         """
         if self.current_port != position:
+            backlash = 0
+            # we need to move backwards
+            if self.current_port > position:
+                self.last_direction = self.current_direction
+                self.current_direction = 'R'
+            elif self.current_port < position:
+                self.last_direction = self.current_direction
+                self.current_direction = 'F'
+            if self.last_direction != self.current_direction:
+                backlash = self.backlash
+                if self.current_direction == 'R':
+                    backlash = -backlash
             self.ready = False
-            stepper = self.stepper
-            stepper.move_to(self.pos_dict[position])
+            self.stepper.move_to(self.pos_dict[position] + backlash)
             self.check_pos(position)
-            cur_stepper_pos = int(stepper.get_current_position())
-            if cur_stepper_pos != self.pos_dict[position]:
-                self.pos_dict[position] = cur_stepper_pos
+            cur_stepper_pos = int(self.stepper.get_current_position())
+            if cur_stepper_pos != self.pos_dict[position] and self.backlash > 0:
+                self.stepper.set_current_position(-self.pos_dict[position])
             self.current_port = position
             self.ready = True
 
@@ -118,8 +136,11 @@ class SelectorValve(modules.Module):
         Args:
             target (string): name of the target module
         """
-        for port in self.ports.items():
+        for i, port in enumerate(self.ports.items()):
             if port[1] is None:
+                if target == 'empty':
+                    self.move_to_pos(i)
+                    return
                 continue
             elif target in port[1].name:
                 self.move_to_pos(port[0])
@@ -136,7 +157,7 @@ class SelectorValve(modules.Module):
                 target_found = True
         return target_found
 
-    def jog(self, steps, invert_direction, task):
+    def jog(self, steps, invert_direction):
         """Jogs the pump a number of steps
 
         Args:
@@ -222,12 +243,12 @@ class SelectorValve(modules.Module):
             prop_error = kp * error
             # if error < last error, kd*de/dt = neg
             deriv_error = kd * ((error - last_error) / dt)
+            u = prop_error + deriv_error
             # moving in wrong direction
             if error > last_error + 10:
                 direction = not direction
                 dir_changes += 1
-            #if stepper moving anticlockwise
-            u = prop_error + deriv_error
+                u += self.backlash
             if direction is False:
                 u = -u
             last_error = error
@@ -323,7 +344,7 @@ class SelectorValve(modules.Module):
             positions_moved += 2 * i
             rem_ports = pos_diff - positions_moved
             # move remaining distance
-            self.jog((self.spr/10) * rem_ports)
+            self.jog((self.spr/10) * rem_ports, False)
             # Reset stepper position after adjusting position 
             self.stepper.set_current_position(self.pos_dict[position])
         # If position has a magnet, check against the magnets dictionary. 
@@ -364,6 +385,22 @@ class SelectorValve(modules.Module):
             self.stepper.move_steps(steps)
             reading = self.he_sensor.analog_read()
             iterations += 1
+
+    def check_backlash(self):
+        i = 0
+        # we start at zero.
+        # move in fwd direction to next magnet
+        self.stepper.move_steps(self.spr/5)
+        # move back
+        self.stepper.move_steps(-self.spr/5)
+        # get within 10 of reading
+        reading = self.he_sensor.analog_read()
+        while reading < (self.magnet_readings[1] - 10):
+            self.stepper.move_steps(-10)
+            i += 1
+            reading = self.he_sensor.analog_read()
+        self.backlash = i * 10
+        self.manager.prev_run_config['backlash']['backlash'] = self.backlash
 
     def zero(self):
         """

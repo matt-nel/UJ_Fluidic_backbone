@@ -8,6 +8,7 @@ import json
 # IP address of PI server
 DEFAULT_URL = "http://127.0.0.1:5000/robots_api"
 
+
 class WebListener():
     def __init__(self, robot_manager, robot_id,  robot_key):
         self.manager = robot_manager
@@ -50,7 +51,7 @@ class WebListener():
                 self.url = ""
                 print("Could not connect to server, running offline. Update URL to connect\n")
 
-    def update_status(self, ready, error=False):
+    def update_status(self, ready, error=False, reaction_complete=False):
         time_elapsed = time.time() - self.last_error_update
         if self.valid_connection:
             if error:
@@ -59,8 +60,11 @@ class WebListener():
                 status = 'IDLE'
             else:
                 status = 'BUSY'
-            if status != self.last_set_status:
-                response = requests.post(self.url + '/status', json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'robot_state', 'robot_status': status})
+            if status != self.last_set_status or reaction_complete:
+                json_data = {'robot_id': self.id, 'robot_key': self.key, 'cmd': 'robot_status', 'robot_status': status}
+                if reaction_complete:
+                    json_data.update({'reaction_complete': True, 'reaction_id': self.manager.reaction_id})
+                response = requests.post(self.url + '/status', json=json_data)
                 self.last_set_status = status
             elif error and time_elapsed > self.polling_time:
                 response = requests.get(self.url + '/status', json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'error_state'})
@@ -84,7 +88,7 @@ class WebListener():
     def send_image(self, image_metadata, img_data):
         r = requests.post(self.url + '/send_image', json=image_metadata)
         request_id = r.json().get('request_id')
-        r = requests.post(self.url + '/send_image', data=img_data, params={'request_id': request_id})
+        r = requests.post(self.url + '/send_image', data=img_data.tobytes(), params={'request_id': request_id})
         return r
 
     def request_reaction(self):
@@ -95,15 +99,15 @@ class WebListener():
             # get the xdl string
             protocol  = response.get('protocol')
             if protocol is not None:
-                reaction_name = response.get("name")
-                self.manager.write_log(f"Received reaction {reaction_name}", level=logging.INFO)
-                self.manager.reaction_name = reaction_name
-                self.load_xdl(protocol, is_file=False)
-                self.manager.clean_step = response.get("clean_step")
+                self.manager.write_log(f"Received reaction {response.get('name')}", level=logging.INFO)
+                self.manager.reaction_name = response.get("name")
+                self.manager.reaction_id = response.get("reaction_id")
+                clean_step = response.get("clean_step")
+                self.load_xdl(protocol, is_file=False, clean_step=clean_step)
                 return True
         return False
 
-    def load_xdl(self, xdl, is_file=True):
+    def load_xdl(self, xdl, is_file=True, clean_step=False):
         if is_file:
             try:
                 tree = et.parse(xdl)
@@ -116,13 +120,15 @@ class WebListener():
                 tree = et.fromstring(xdl)
             except et.ParseError:
                 self.manager.write_log(f"The XDL provided is not formatted correctly", level=logging.ERROR)
-        self.parse_xdl(tree)
+                return False
+        self.parse_xdl(tree, clean_step=clean_step)
 
-    def parse_xdl(self, tree):
+    def parse_xdl(self, tree, clean_step=False):
         reagents = {}
         modules = {}
         if tree.find('Synthesis'):
             tree = tree.find('Synthesis')
+        metadata = tree.find("Metadata")
         req_hardware = tree.find('Hardware')
         req_reagents = tree.find('Reagents')
         procedure = tree.find('Procedure')
@@ -137,19 +143,19 @@ class WebListener():
             if step.tag == "Add":
                 self.process_xdl_add(modules, reagents, step)               
             elif step.tag == "Transfer":
-                self.process_xdl_transfer(modules, reagents, step)
+                self.process_xdl_transfer(step)
             elif 'Stir' in step.tag:
                 self.process_xdl_stir(step)
             elif "HeatChill" in step.tag:
                 self.process_xdl_heatchill(step)
             elif "Wait" in step.tag:
-                self.process_xdl_wait(step)
+                self.process_xdl_wait(step, metadata)
+        if clean_step:
+            self.manager.wait(0, {'wait_user': True, "wait_reason": "cleaning"})
 
     def process_xdl_add(self, modules, reagents, add_info):
         vessel = add_info.get('vessel')
-        if vessel.lower() == "reactor":
-            vessel = self.manager.find_target(vessel.lower()).name
-        target = modules[vessel]
+        target = self.manager.find_target(vessel.lower()).name
         source = reagents[add_info.get('reagent')]
         reagent_info = add_info.get('volume')
         if reagent_info is None:
@@ -166,15 +172,15 @@ class WebListener():
                 # assume uL
                 # todo: update this to check a mapping
                 volume = volume/1000
-        time = add_info.get('time')
-        if time is not None:
+        a_time = add_info.get('time')
+        if a_time is not None:
             # uL/min
-            flow_rate = (volume*1000)/int(time.split(' ')[0]) * 60
+            flow_rate = (volume*1000)/int(a_time.split(' ')[0]) * 60
         else:
             flow_rate = 1000
-        self.manager.move_liquid(source, target, volume, flow_rate)
+        self.manager.move_fluid(source, target, volume, flow_rate)
     
-    def  process_xdl_transfer(self, modules, reagents, transfer_info):
+    def process_xdl_transfer(self, transfer_info):
         source = transfer_info.get('from_vessel')
         target = transfer_info.get('to_vessel')
         if source == "reactor":
@@ -192,16 +198,16 @@ class WebListener():
                 return
             unit = reagent_info[1]
             if unit != 'ml':
-                volume=volume/1000
-        time = transfer_info.get('time')
+                volume = volume/1000
+        t_time = transfer_info.get('time')
         if time is not None:
-            #uL/min
-            flow_rate = volume/int(time.split(' ')[0]) * 60
+            # uL/min
+            flow_rate = volume/int(t_time.split(' ')[0]) * 60
         else:
             flow_rate = 1000
-        self.manager.move_liquid(source, target, volume, flow_rate)
+        self.manager.move_fluid(source, target, volume, flow_rate, account_for_dead_volume=False, account_for_final_dead_volume=False)
 
-    def process_xdl_stri(self, stir_info):
+    def process_xdl_stir(self, stir_info):
         reactor_name = stir_info.get('vessel')
         if reactor_name.lower() == "reactor":
             reactor_name = self.manager.find_target(reactor_name.lower()).name
@@ -248,20 +254,21 @@ class WebListener():
             heat_secs = int(heat_secs.split(' ')[0])
             self.manager.start_heating(reactor_name, command='start_heat', temp=temp, heat_secs=heat_secs, target= True, wait=True)
 
-    def process_xdl_wait(self, wait_info):
-        time = wait_info.get('time')
-        if time is None:
-            self.manager.wait(time=30, actions={})
+    def process_xdl_wait(self, wait_info, metadata):
+        wait_time = wait_info.get('time')
+        img_processing = metadata.get("img_processing")
+        if wait_time is None:
+            self.manager.wait(wait_time=30, actions={})
         else:
-            unit = time[1]
+            unit = wait_time[1]
             if unit == 's' or unit == 'seconds':
-                time = int(time)
+                wait_time = int(wait_time)
             elif unit == 'min' or unit == 'minutes':
-                time=float(time) * 60
+                wait_time=float(wait_time) * 60
             # comments: "Picture<picture_no>, wait_user, wait_reason(reason)"
             comments = wait_info.get('comments')
             if comments is None:
-                self.manager.wait(time=time)
+                self.manager.wait(wait_time=wait_time)
             else:
                 add_actions = {}
                 comments = comments.lower()
@@ -270,9 +277,11 @@ class WebListener():
                     if "picture" in comment:
                         pic_no = comment.split('picture')[1]
                         add_actions["picture"] = int(pic_no)
+                        if img_processing is not None:
+                            add_actions['img_processing'] = img_processing
                     elif "wait_user" in comment:
                         add_actions['wait_user'] =True
                     elif "wait_reason" in comment:
                         reason = comment[comment.index('('):-1]
                         add_actions['wait_reason'] = reason
-                self.manager.wait(time=time, actions=add_actions)
+                self.manager.wait(wait_time=wait_time, actions=add_actions)

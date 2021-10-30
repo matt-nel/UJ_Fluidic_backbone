@@ -110,12 +110,12 @@ class FluidicBackboneUI:
         :return:
         """
         ports = []
-        valve_no = int(valve_name[-1]) - 1
-        col = valve_no * 2
-        valve_print_name = "Valve " + str(valve_no + 1)
-        self.valves_labels.append(tk.Label(self.valve_pump_frame, text=valve_print_name, font=self.fonts['labels'],
-                                           bg='white'))
-        self.valves_labels[valve_no].grid(row=4, column=col, columnspan=2)
+        valve_no = int(valve_name[-1])
+        col = (valve_no - 1)*2
+        valve_print_name = "Valve " + str(valve_no)
+        valve_label = tk.Label(self.valve_pump_frame, text=valve_print_name, font=self.fonts['labels'],
+                                           bg='white')
+        valve_label.grid(row=4, column=col, columnspan=2)
 
         home_button = tk.Button(self.valve_pump_frame, text='Home', font=self.fonts['buttons'], padx=5, bg=self.colours['accept-button'],
                                 fg='white',
@@ -137,7 +137,7 @@ class FluidicBackboneUI:
             ports[port_no].grid(row=1 + port_no, column=col + 1)
 
         # Append list of ports corresponding to valve_no to valves_buttons
-        self.valves_buttons[f"valve{valve_no}"] = ports
+        self.valves_buttons[valve_name] = ports
 
     def populate_reactors(self, reactor_name):
         reactor_no = int(reactor_name[-1])
@@ -156,10 +156,14 @@ class FluidicBackboneUI:
         stir_button.grid(row=row, column=2)
 
     def v_button_colour(self, command_dict):
-        port_no = command_dict["command"]
-        valve = int(command_dict["module_name"][-1]) - 1
-        for item in self.valves_buttons:
-            item[port_no].configure(bg=self.colours['other-button'])
+        command = command_dict["command"]
+        if command == "home":
+            port_no = 0
+        else:
+            port_no = command_dict["command"] - 1
+        valve = command_dict["module_name"]
+        for item in self.valves_buttons[valve]:
+            item.configure(bg=self.colours['other-button'])
         self.valves_buttons[valve][port_no].configure(bg=self.colours['heading'])
     
     def update_url(self):
@@ -443,7 +447,9 @@ class FluidicBackboneUI:
             elif command == 'home':
                 self.write_message(f'Sent command to home {name}')
         elif command_dict['mod_type'] == 'syringe':
-            if command == 'home' or command == 'jog':
+            if command == 'home':
+                message = f"Sent command to home {name}"
+            elif command == "jog":
                 message = f'Sent command to jog {name} by {params["steps"]}'
             elif command == 'move':
                 vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
