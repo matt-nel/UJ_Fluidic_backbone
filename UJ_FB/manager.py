@@ -38,6 +38,10 @@ def object_hook_int(obj):
 
 
 class Manager(Thread):
+    """
+    Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
+    tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules
+    """
     def __init__(self, gui=True, simulation=False, web_enabled=False):
         Thread.__init__(self)
         # get absolute directory of script
@@ -138,6 +142,9 @@ class Manager(Thread):
         self.rc_changes = False
 
     def populate_modules(self):
+        """
+        Iterates through the modules in the config and adds them to the robot
+        """
         syringes = 0
         for module_name in self.module_info.keys():
             module_type = self.module_info[module_name]['mod_type']
@@ -164,7 +171,9 @@ class Manager(Thread):
             self.write_log(f"Robot {self.id} is configured for reaction {self.reaction_name}")
 
     def check_connections(self):
-        # todo update objects from graph config info
+        """
+        Reads the graph, appending node data to the required objects.
+        """
         g = self.graph
         valves_list = []
         for n in list(g.nodes):
@@ -232,6 +241,10 @@ class Manager(Thread):
         self.check_connections()
 
     def run(self):
+        """
+        This is the primary loop of the program. This loop monitors for errors or interrupts, dispatches tasks,
+         updates the server and has logic to handle pauses.
+        """
         while not self.exit_flag:
             if self.web_enabled:
                 execute = self.listener.update_execution()
@@ -306,6 +319,9 @@ class Manager(Thread):
         self.cmd_mng.commandhandlers[0].stop()
 
     def add_to_queue(self, commands, queue=None):
+        """
+        Adds a command(s) to the queue or pipeline.
+        """
         if queue is None:
             queue = self.pipeline
         for command in commands:
@@ -328,6 +344,9 @@ class Manager(Thread):
         file.close()
 
     def import_queue(self, file, overwrite=False):
+        """
+        Imports a saved queue from a JSON file.
+        """
         file = os.path.join(self.script_dir, file)
         try:
             with open(file) as queue_file:
@@ -347,6 +366,9 @@ class Manager(Thread):
                 return False
 
     def start_queue(self):
+        """
+        Begins execution of the queued actions
+        """
         self.execute = 1
         with self.interrupt_lock:
             self.pause_flag = True
@@ -359,6 +381,9 @@ class Manager(Thread):
             self.pause_flag = False
 
     def check_task_completion(self):
+        """
+        Checks whether the tasks currently running are complete.
+        """
         incomplete_tasks = []
         for task in self.tasks:
             if task.is_complete and not task.is_paused:
@@ -374,7 +399,9 @@ class Manager(Thread):
         self.tasks = incomplete_tasks
 
     def pause_all(self):
-        # should pause first then flush queue and tasks if required
+        """
+        Pauses all currently running tasks and queue execution.
+        """
         self.paused = True
         for task in self.tasks:
             if not task.module_ready:
@@ -383,6 +410,9 @@ class Manager(Thread):
             self.stop_all()
 
     def stop_all(self):
+        """
+        Removes all queued actions, should be called after pause if stopping.
+        """
         for i in range(len(self.tasks)):
             self.tasks.pop(i)
         with self.q.mutex:
@@ -390,6 +420,9 @@ class Manager(Thread):
         self.paused = False
 
     def resume(self):
+        """
+        Resumes all tasks in the task list
+        """
         new_q = Queue()
         for cnt, task in enumerate(self.tasks):
             # module's resume method determines appropriate resume command based on module type.
@@ -405,9 +438,12 @@ class Manager(Thread):
 
     def command_module(self, command_dict):
         """
-        :param command_dict:dictionary containing module type, module name, command, and other module specific
-                parameters
-        :return: Boolean - successful/unsuccessful
+        Interprets the command dict to command the necessary module
+
+        Args:
+            command_dict (dict): dictionary containing all necessary information for the action
+        Returns:
+            Function call to necessary module, or False if no suitable modules can be found.
         """
         try:
             mod_type, name = command_dict['mod_type'], command_dict['module_name']
@@ -430,6 +466,15 @@ class Manager(Thread):
             return False
 
     def command_syringe(self, name, command, parameters, command_dict):
+        """
+        Interprets the command dictionary for syringe actions
+
+        Args:
+            name (str): The syringe name
+            command (str): The action to be performed
+            parameters (dict): Contains the parameters for the action
+            command_dict (dict): the full command dictionary for the action
+        """
         new_task = Task(command_dict, self.syringes[name])
         self.tasks.append(new_task)
         if command == 'move':
@@ -470,6 +515,17 @@ class Manager(Thread):
         return True
 
     def command_valve(self, name, command, parameters, command_dict):
+        """
+        Interprets the command dictionary for the valve
+
+        Args:
+            name (str): the name of the valve
+            command (str): the command type
+            parameters (dict): parameters for the action
+            command_dict (dict): the full dictionary for the action
+        Returns:
+            bool - True if command successfully sent, otherwise False
+        """
         new_task = Task(command_dict, self.valves[name])
         self.tasks.append(new_task)
         if type(command) is int and 0 <= command < 11:
@@ -499,6 +555,12 @@ class Manager(Thread):
         return True
 
     def find_target(self, target):
+        """
+        Finds a module on the robot
+
+        Args:
+            target (str): the name of the target, or the name of the module type, e.g., "reactor"
+        """
         target_name = target.lower()
         if "syringe" in target_name:
             target = self.syringes.get(target)
@@ -533,6 +595,14 @@ class Manager(Thread):
         return target
 
     def find_reagent(self, reagent_name):
+        """
+        Finds a reagent in the attached flasks
+
+        Args:
+            reagent_name (str): the name of the reagent to search for
+        Returns:
+            reagent name or empty string if nothing found
+        """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
             if self.flasks[flask].contents in reagent_name:
@@ -540,6 +610,15 @@ class Manager(Thread):
         return ""
 
     def command_reactor(self, name, command, parameters, command_dict):
+        """
+        Interprets the command dictionary for a reactor action
+
+        Args:
+            name (str): the name of the reactor
+            command (str): the name of the action
+            parameters (dict): dictionary containing parameters for the action
+            command_dict (dict): full dictionary for the action
+        """
         new_task = Task(command_dict, self.reactors[name], single_action=False)
         self.tasks.append(new_task)
         if command == 'start_stir':
@@ -567,6 +646,15 @@ class Manager(Thread):
         return True
 
     def command_camera(self, name, command, parameters, command_dict):
+        """
+        Interprets the command dictionary for a camera action
+
+        Args:
+            name (str): the name of the reactor
+            command (str): the name of the action
+            parameters (dict): dictionary containing parameters for the action
+            command_dict (dict): full dictionary for the action
+        """
         new_task = Task(command_dict, self.cameras[name])
         self.tasks.append(new_task)
         if command == "send_img":
@@ -585,6 +673,15 @@ class Manager(Thread):
         return True        
 
     def command_wait(self, name, command, parameters, command_dict):
+        """
+        Interprets the command dictionary for a wait action
+
+        Args:
+            name (str): the name of the manager
+            command (str): the name of the action
+            parameters (dict): dictionary containing parameters for the action
+            command_dict (dict): full dictionary for the action
+        """
         new_task = Task(command_dict, name)
         self.tasks.append(new_task)
         wait_reason = parameters['wait_reason']
@@ -604,10 +701,16 @@ class Manager(Thread):
         return True
 
     def wait_until_ready(self):
+        """
+        Waits for the last sent action to complete
+        """
         with self.interrupt_lock:
             self.waiting = True
     
     def wait_user(self):
+        """
+        Waits for user input, either via the console or GUI
+        """
         if self.gui_main is None:
             ans = input('Ready to resume? Press any key')
         else:
@@ -616,19 +719,27 @@ class Manager(Thread):
                 time.sleep(1)
 
     @staticmethod
-    def wait_until(self, wait_time):
+    def wait_until(wait_time):
+        """
+        Waits for a specified time before getting new actions from the queue
+        """
         start_time = time.time()
         while time.time() - start_time < wait_time:
             time.sleep(1)
         
     def move_fluid(self, source, target, volume, flow_rate, init_move=False, account_for_dead_volume=True):
         """
-        Generates all the required commands to move liquid between two points in the robot
-        :param source: String - name of the source
-        :param target: String - name of the target
-        :param volume: Float - volume to be moved (ml)
-        :param flow_rate: Int - flow rate in ul/min
-        :return: Boolean - successful or unsuccessful
+        Adds the necessary command dicts to the pipeline to enact a fluid movement from source to target
+
+        Args:
+            source (str): the name of the source module
+            target (str): the name of the target module
+            volume (float): the volume of fluid to be moved
+            flow_rate (int): uL per second to move
+            init_move (bool): whether this is an initialisation move (clearing previous contents or not
+            account_for_dead_volume (bool): Whether to account for dead volume in tubing
+        Returns:
+            True if successfully queued or False otherwise
         """
         volume *= 1000
         pipelined_steps = []
@@ -643,13 +754,16 @@ class Manager(Thread):
         # prime dead volume between valves
         if len(valves) > 1:
             self.flush_valve_dead_volume(source, valves)
+        if account_for_dead_volume:
+            steps, dead_volume = self.flush_sp_dead_volume(valves[-1], target, intake=True)
+            pipelined_steps += steps
         # Find lowest maximum volume amongst syringes
         for valve in valves:
             cur_max_vol = self.valves[valve].syringe.max_volume
             if cur_max_vol < prev_max_vol:
                 max_vol = cur_max_vol
                 min_vol = self.valves[valve].syringe.min_volume
-        max_volume = max_vol - min_vol
+        max_volume = max_vol - min_vol - dead_volume
         # Determine number of moves required
         nr_full_moves = int(volume / max_volume)
         remaining_volume = volume % max_volume
@@ -661,12 +775,19 @@ class Manager(Thread):
             partial_move = self.generate_moves(source, target, valves, remaining_volume, flow_rate, init_move)
             pipelined_steps += partial_move
         # this assumes we have an air source on the valve with the final vessel
-        if not init_move and account_for_dead_volume:
-            pipelined_steps += self.flush_sp_dead_volume(valves[-1], target)
+        if account_for_dead_volume:
+            pipelined_steps += self.flush_sp_dead_volume(valves[-1], target, intake=False)
         self.add_to_queue(pipelined_steps, self.pipeline)
         return True
 
     def find_path(self, source, target):
+        """
+        Finds a path using networkx graph from source to target
+
+        Args:
+            source (str): the name of the source module
+            target (str): the name of the target module
+        """
         source_found = False
         target_found = False
         if source in self.valid_nodes:
@@ -684,13 +805,18 @@ class Manager(Thread):
             self.write_log(f"{target} not present", level=logging.ERROR)
         return []
 
-    def flush_sp_dead_volume(self, valve, target):
-        """Find the dead volume between two points in the network along path
+    def flush_sp_dead_volume(self, valve, target, intake):
+        """Remove the dead volume in the tubing using air. Called twice to add necessary steps, first call intake=True
+        lets syringe take in necessary volume of air to empty tubing, second call intake=False dispense the air into
+        the target, clearing the tubing.
 
         Args:
-            path (list): list giving the path that the liquid will follow along the backbone.
+            valve (SelectorValve): The last valve in the chain
+            target (str): The name of the target
+            intake (bool): Whether we are aspirating the dead volume or dispensing it
         Return:
-            dead_volume (float): the dead volume in ml between the nodes
+            pipelined_steps (list): List containing the necessary steps as command dictionaries
+            dead_volume (float): The amount of dead volume between the valve and the target.
         """
         def calc_volume(t_length):
             # assume 1/16" tubing ID
@@ -701,23 +827,33 @@ class Manager(Thread):
         #  assuming input lines have been primed before operation.
         # find an unused port for air
         valve = self.valves[valve]
-        air_port = None
-        for i in range(len(valve.ports)-1):
-            if valve.ports[i+1] is None:
-                air_port = i+1
-                break
-        if air_port is None:
-            return
         tubing_length = self.graph.adj[valve.name][target][0]['tubing_length']
         dead_volume = calc_volume(tubing_length)
-        # Command to index valve to required position
-        pipelined_steps.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
-                         'parameters': {'target': 'empty', 'wait': True}})
-        # Command to dispense air to remove dead volume
-        pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                         'parameters': {'volume': dead_volume, 'flow_rate': 1000, 'target': None,
-                                        'direction': 'A', 'wait': True}})
-        return pipelined_steps
+
+        if intake:
+            air_port = None
+            for i in range(len(valve.ports)-1):
+                if valve.ports[i+1] is None:
+                    air_port = i+1
+                    break
+            if air_port is None:
+                return
+            # Command to index valve to required position for air
+            pipelined_steps.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
+                                    'parameters': {'target': 'empty', 'wait': True}})
+            # Command to aspirate air to fill dead volume
+            pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
+                                    'parameters': {'volume': dead_volume, 'flow_rate': 2000, 'target': None,
+                                                   'direction': 'A', 'wait': True}})
+        else:
+            # index valve to target
+            pipelined_steps.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
+                                    'parameters': {'target': target, 'wait': True}})
+            # dispense dead volume of air into target, emptying the dead volume in the tube
+            pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
+                                    'parameters': {'volume': dead_volume, 'flow_rate': 2000, 'target': target,
+                                                   'direction': 'D', 'wait': True}})
+        return pipelined_steps, dead_volume
 
     def flush_valve_dead_volume(self, source, valves):
         pass
@@ -725,12 +861,16 @@ class Manager(Thread):
     def generate_moves(self, source, target, valves, volume, flow_rate, init_move=False):
         """
         Generates the moves required to transfer liquid from source to target
-        :param source: String - name of the source
-        :param target: String - name of the target
-        :param valves: List - Intervening valves between source and target
-        :param volume: Float - Volume to be moved
-        :param flow_rate: Int - Flow rate in ul/min
-        :return:
+
+        Args:
+            source (str): name of the source
+            target (str): name of the target
+            valves (list): Intervening valves between source and target
+            volume (float): Volume to be moved
+            flow_rate (int): Flow rate in ul/min
+            init_move (bool): whether this is an initialisation move or not
+        Returns:
+            moves (list): the moves to queue
         """
         moves = []
         # Move liquid into first syringe pump
@@ -756,8 +896,14 @@ class Manager(Thread):
     @staticmethod
     def generate_sp_move(source, valve, target, volume, flow_rate):
         """
-        Generates the command to dispense or aspirate a syringe
-        :return: list of command dicts
+        Generates the commands to dispense or aspirate a syringe
+        Args:
+            source (Module): Module object for the source
+            target (Module): Module object for the target
+            volume (float): volume to move in uL
+            flow_rate (int): flow rate in uL/min
+        Returns:
+            commands (list): List containing the command dictionaries for the move
         """
         commands = []
         if source.type == "SP":
@@ -792,11 +938,15 @@ class Manager(Thread):
     def generate_sp_transfer(source_valve, target_valve, volume, flow_rate):
         """
         Generates the commands necessary to transfer liquid between two adjacent valves
-        :param source_valve: SelectorValve - source valve object
-        :param target_valve: SelectorValve - target valve object
-        :param volume: Float - volume to be transferred
-        :param flow_rate: Int - flow rate in ul/min
-        :return: list of command dicts
+
+        Args:
+        source_valve (SelectorValve): source valve object
+        target_valve (SelectorValve): target valve object
+        volume (float): volume to be transferred in uL
+        flow_rate (int): flow rate in ul/min
+
+        Returns:
+         list of command dicts
         """
         commands = []
         source_port = None
