@@ -185,19 +185,17 @@ class SelectorValve(modules.Module):
         self.stepper.set_current_position(0)
         max_reading = self.he_sensor.analog_read()
         # Keep looking for home pos (reading >= max saved reading)
-        while (max_reading < self.magnet_readings[1] - DIFF_THRESHOLD) or (max_reading > 1000) or max_reading < POS_THRESHOLD :
+        while (self.reading < self.magnet_readings[1] - DIFF_THRESHOLD) or (self.reading > 1000) or self.reading < POS_THRESHOLD :
             self.reading = self.he_sensor.analog_read()
             # if close to home pos
             if self.reading > POS_THRESHOLD:
                 if self.find_opt(POS_THRESHOLD + 150):
-                    self.magnet_readings[1] = max_reading
-                else:
-                    max_reading = self.he_sensor.analog_read()
+                    self.magnet_readings[1] = self.reading
             # Close to one of the negative magnets
             elif self.reading < NEG_THRESHOLD:
                 if self.find_opt(NEG_THRESHOLD - 150):
                     # Move between magnets until close to home position
-                    max_reading = self.check_all_positions()
+                    self.reading = self.check_all_positions()
             else:
                 # We must be between magnets. Move 1/4 magnet distance looking for magnet positions. Testing shows magnet detection at ~1/4 spr to either side
                 self.find_next_magnet()

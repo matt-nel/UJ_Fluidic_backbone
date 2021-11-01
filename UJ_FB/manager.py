@@ -435,6 +435,8 @@ class Manager(Thread):
             command_dict = self.q.get(block=False)
             new_q.put(command_dict)
         self.q = new_q
+        self.pause_flag = False
+        self.paused = False
 
     def command_module(self, command_dict):
         """
@@ -482,7 +484,10 @@ class Manager(Thread):
             volume = parameters["volume"]
             flow_rate = parameters["flow_rate"]
             direction = parameters["direction"]
-            if target is None:
+            track_volume = parameters.get("track_volume")
+            if not track_volume and track_volume is not None:
+                target = None
+            elif target is None:
                 adj = [key for key in self.graph.adj[name].keys()]
                 try:
                     valve = adj[0]
@@ -734,7 +739,7 @@ class Manager(Thread):
         Args:
             source (str): the name of the source module
             target (str): the name of the target module
-            volume (float): the volume of fluid to be moved
+            volume (float): the volume of fluid in uL to be moved
             flow_rate (int): uL per second to move
             init_move (bool): whether this is an initialisation move (clearing previous contents or not
             account_for_dead_volume (bool): Whether to account for dead volume in tubing
@@ -776,7 +781,8 @@ class Manager(Thread):
             pipelined_steps += partial_move
         # this assumes we have an air source on the valve with the final vessel
         if account_for_dead_volume:
-            pipelined_steps += self.flush_sp_dead_volume(valves[-1], target, intake=False)
+            steps, dead_volume = self.flush_sp_dead_volume(valves[-1], target, intake=False)
+            pipelined_steps += steps
         self.add_to_queue(pipelined_steps, self.pipeline)
         return True
 
@@ -816,12 +822,12 @@ class Manager(Thread):
             intake (bool): Whether we are aspirating the dead volume or dispensing it
         Return:
             pipelined_steps (list): List containing the necessary steps as command dictionaries
-            dead_volume (float): The amount of dead volume between the valve and the target.
+            dead_volume (float): The amount of dead volume between the valve and the target in uL
         """
         def calc_volume(t_length):
             # assume 1/16" tubing ID
             mm3 = math.pow((1.5875/2), 2) * math.pi * t_length
-            return mm3/1000
+            return mm3
         pipelined_steps = []
         # along path, syringe lines and valve-valve lines will hold dead volume,
         #  assuming input lines have been primed before operation.
@@ -846,9 +852,6 @@ class Manager(Thread):
                                     'parameters': {'volume': dead_volume, 'flow_rate': 2000, 'target': None,
                                                    'direction': 'A', 'wait': True}})
         else:
-            # index valve to target
-            pipelined_steps.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
-                                    'parameters': {'target': target, 'wait': True}})
             # dispense dead volume of air into target, emptying the dead volume in the tube
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
                                     'parameters': {'volume': dead_volume, 'flow_rate': 2000, 'target': target,

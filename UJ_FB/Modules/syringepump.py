@@ -29,6 +29,8 @@ class SyringePump(modules.Module):
         self.position = 0
         self.cur_step_pos = 0
         self.current_vol = 0.0
+        self.last_dir = "D"
+        self.backlash = 780
         self.contents = ['empty', 0.0]
         self.contents_history = []
         self.stepper = self.steppers[0]
@@ -53,16 +55,21 @@ class SyringePump(modules.Module):
             task (Task Object): Object used to track task completion
         """
         self.ready = False
-        #speed in steps/sec
+        # speed in steps/sec
         speed = (flow_rate * self.steps_per_rev * self.syringe_length) / (self.screw_lead * self.max_volume * 60)
         # calculate number of steps to send to motor
         steps = (volume * self.syringe_length * self.steps_per_rev) / (self.max_volume * self.screw_lead)
+        adj_steps = False
+        actual_steps = steps
+        if direction != self.last_dir:
+            adj_steps = True
+            actual_steps += self.backlash
         # calculate distance travelled after steps
         travel = (steps / self.steps_per_rev) * self.screw_lead
         move_flag = True
         if direction == "A":
             # Aspirate: Turn CCW, syringe filling
-            steps = -steps
+            actual_steps = -actual_steps
             travel = -travel
             volume = -volume
             if self.position + travel < -self.syringe_length:
@@ -79,7 +86,7 @@ class SyringePump(modules.Module):
             with self.lock:
                 self.cur_step_pos = self.stepper.get_current_position()
                 self.stepper.set_running_speed(round(speed))
-                self.stepper.move_steps(steps)
+                self.stepper.move_steps(actual_steps)
                 # Blocked until move complete or stop command received
                 if self.stepper.encoder_error:
                     self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
@@ -90,6 +97,11 @@ class SyringePump(modules.Module):
                     new_step_pos = self.stepper.get_current_position()
                 # if aspirating, step change is neg.
                 step_change = new_step_pos - self.cur_step_pos
+                if adj_steps:
+                    if direction == 'A':
+                        step_change += self.backlash
+                    else:
+                        step_change -= self.backlash
                 actual_travel = (step_change / self.steps_per_rev) * self.screw_lead
                 self.position += actual_travel
                 vol_change = self.calc_volume(actual_travel)
@@ -98,6 +110,7 @@ class SyringePump(modules.Module):
                 self.current_vol += vol_change
                 self.write_log(f'{self.name}: {direction_map[direction]} {int(abs(vol_change))}ul', level=logging.INFO)
                 self.change_volume(vol_change, target)
+                self.last_dir = direction
             self.ready = True
             return
         self.ready = True
@@ -112,6 +125,7 @@ class SyringePump(modules.Module):
             self.ready = False
             self.stepper.home()
             self.position = 0.0
+            self.last_dir = 'D'
             self.ready = True
 
     def jog(self, steps, direction, task):
@@ -129,6 +143,7 @@ class SyringePump(modules.Module):
             self.stepper.move_steps(steps)
             if self.stepper.encoder_error:
                 task.error = True
+        self.last_dir = direction
         self.ready = True
 
     def stop(self):

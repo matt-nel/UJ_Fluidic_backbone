@@ -183,9 +183,8 @@ class FluidicBackboneUI:
 
         url_label.grid(row=0, column=0)
         url_entry.grid(row=0, column=1)
-        url_buttonA.grid(row=1, column = 0)
+        url_buttonA.grid(row=1, column=0)
         url_buttonC.grid(row=1, column=1)
-
 
     def move_syringe(self, syringe_name, syringe_print_name, direction):
         """
@@ -199,7 +198,7 @@ class FluidicBackboneUI:
         def dispense(syr_name):
             command_dict = {'mod_type': 'syringe', 'module_name': syr_name, 'command': 'move',
                             'parameters': {'volume': self.volume_tmp * 1000, 'flow_rate': self.flow_rate_tmp,
-                                           'direction': direction, 'wait': False, 'target': None}}
+                                           'direction': direction, 'wait': False, 'target': None, 'track_volume': False}}
             sp_move_menu.destroy()
             self.send_command(command_dict)
 
@@ -453,7 +452,7 @@ class FluidicBackboneUI:
                 message = f'Sent command to jog {name} by {params["steps"]}'
             elif command == 'move':
                 vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
-                if params['direction']:
+                if params['direction'] == "D":
                     message = f'Sent command to {name} to aspirate {vol / 1000}ml at {flow} \u03BCL/min'
                 else:
                     message = f'Sent command to {name} to dispense {vol / 1000}ml at {flow} \u03BCL/min'
