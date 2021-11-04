@@ -61,7 +61,7 @@ class GraphConfig:
         self.next_id += 1
         self.nodes.append(node)
 
-    def add_link(self, source_name, source_id, target_name, target_id, target_port, tubing_length, dual):
+    def add_link(self, source_name, source_id, target_name, target_id, target_port, dual, tubing_length=0):
         self.links_tmp.append({'id': None, 'sourceInternal': source_id, 'targetInternal': target_id,
                                'source': source_name, 'target': target_name, 'tubing_length': tubing_length, 'port': (source_id, target_port)})
         if dual:
@@ -435,7 +435,7 @@ class SetupGUI:
                     node_config.name = f"syringe{self.conf_syr + 1}"
                     node_config.mod_type = 'syringe'
                     node_config.class_type = 'SyringePump'
-                    fields += ['Contents', "Tubing length in mm"]
+                    fields += ['Contents']
                     fields.pop(0)
                     node_config.dual = True
                     self.syringe_setup(node_config, fields, port_options_window, button)
@@ -445,6 +445,7 @@ class SetupGUI:
                 elif variable == 'waste':
                     node_config.mod_type = 'waste'
                     node_config.class_type = 'FBFlask'
+                    node_config.add_params.append(("Contents", "Waste"))
                     node_config.dual = False
                     self.flask_setup(node_config, fields, port_options_window, button)
                 elif variable == 'filter':
@@ -838,7 +839,7 @@ class SetupGUI:
                 self.modules[reactor.name] = reactor
                 self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
                                         target_name=node_config.name, target_id=target_id,
-                                        target_port=node_config.port_no, dual=node_config.dual)
+                                        target_port=node_config.port_no, dual=node_config.dual, tubing_length=node_config.tubing_length)
                 self.cmd_devices.devices[thermistor] = {'command_id': thermistor}
                 self.cmd_devices.devices[stirrer] = {'command_id': stirrer}
                 self.cmd_devices.devices[heater] = {'command_id': heater}

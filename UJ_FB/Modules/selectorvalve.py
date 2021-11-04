@@ -4,8 +4,8 @@ import logging
 
 DIFF_THRESHOLD = 20
 ERROR_THRESHOLD = 20
-POS_THRESHOLD = 580
-NEG_THRESHOLD = 500
+POS_THRESHOLD = 600
+NEG_THRESHOLD = 490
 HOMING_SPEED = 5000
 
 
@@ -170,7 +170,7 @@ class SelectorValve(modules.Module):
         self.stepper.move_steps(steps)
         self.ready = True
 
-    def home_valve(self,):
+    def home_valve(self):
         """
         Homes the valve using the hall-effect sensor
         """
@@ -183,7 +183,7 @@ class SelectorValve(modules.Module):
         prev_speed = self.stepper.running_speed
         self.stepper.set_max_speed(HOMING_SPEED)
         self.stepper.set_current_position(0)
-        max_reading = self.he_sensor.analog_read()
+        self.reading = self.he_sensor.analog_read()
         # Keep looking for home pos (reading >= max saved reading)
         while (self.reading < self.magnet_readings[1] - DIFF_THRESHOLD) or (self.reading > 1000) or self.reading < POS_THRESHOLD :
             self.reading = self.he_sensor.analog_read()
@@ -386,6 +386,8 @@ class SelectorValve(modules.Module):
 
     def check_backlash(self):
         i = 0
+        direction = -1
+        start_pos = self.stepper.get_current_position()
         # we start at zero.
         # move in fwd direction to next magnet
         self.stepper.move_steps(self.spr/5)
@@ -393,11 +395,15 @@ class SelectorValve(modules.Module):
         self.stepper.move_steps(-self.spr/5)
         # get within 10 of reading
         reading = self.he_sensor.analog_read()
-        while reading < (self.magnet_readings[1] - 10):
-            self.stepper.move_steps(-10)
+        last_reading = reading
+        while reading < (self.magnet_readings[1] - 20):
+            self.stepper.move_steps(10*direction)
+            if (last_reading > reading):
+                direction = -direction
+                i = 0
             i += 1
             reading = self.he_sensor.analog_read()
-        self.backlash = i * 10
+        self.backlash = i * direction * 10
         self.manager.prev_run_config['backlash']['backlash'] = self.backlash
 
     def zero(self):

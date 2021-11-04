@@ -94,17 +94,20 @@ class WebListener():
     def request_reaction(self):
         time_elapsed = time.time() - self.last_reaction_update
         if self.valid_connection and time_elapsed > self.polling_time:
-            response = requests.get(self.url + '/reaction', json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'get_reaction'})
-            response = response.json()
-            # get the xdl string
-            protocol  = response.get('protocol')
-            if protocol is not None:
-                self.manager.write_log(f"Received reaction {response.get('name')}", level=logging.INFO)
-                self.manager.reaction_name = response.get("name")
-                self.manager.reaction_id = response.get("reaction_id")
-                clean_step = response.get("clean_step")
-                self.load_xdl(protocol, is_file=False, clean_step=clean_step)
-                return True
+            try:
+                response = requests.get(self.url + '/reaction', json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'get_reaction'})
+                response = response.json()
+                # get the xdl string
+                protocol  = response.get('protocol')
+                if protocol is not None:
+                    self.manager.write_log(f"Received reaction {response.get('name')}", level=logging.INFO)
+                    self.manager.reaction_name = response.get("name")
+                    self.manager.reaction_id = response.get("reaction_id")
+                    clean_step = response.get("clean_step")
+                    self.load_xdl(protocol, is_file=False, clean_step=clean_step)
+                    return True
+            except requests.exceptions.ConnectionError as e:
+                self.manager.write_log(f"Connection failed, {e}", level=logging.INFO)
         return False
 
     def load_xdl(self, xdl, is_file=True, clean_step=False):
@@ -200,12 +203,12 @@ class WebListener():
             if unit != 'ml':
                 volume = volume/1000
         t_time = transfer_info.get('time')
-        if time is not None:
+        if t_time is not None:
             # uL/min
             flow_rate = volume/int(t_time.split(' ')[0]) * 60
         else:
             flow_rate = 1000
-        self.manager.move_fluid(source, target, volume, flow_rate, account_for_dead_volume=False, account_for_final_dead_volume=False)
+        self.manager.move_fluid(source, target, volume, flow_rate)
 
     def process_xdl_stir(self, stir_info):
         reactor_name = stir_info.get('vessel')

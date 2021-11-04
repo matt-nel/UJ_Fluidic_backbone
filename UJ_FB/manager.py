@@ -157,7 +157,7 @@ class Manager(Thread):
                 self.syringes[module_name] = syringepump.SyringePump(module_name, module_info, self.cmd_mng, self)
             elif module_type == "reactor":
                 self.reactors[module_name] = reactor.Reactor(module_name, module_info, self.cmd_mng, self)
-            elif module_type == "flask":
+            elif module_type == "flask" or module_type == "waste":
                 self.flasks[module_name] = modules.FBFlask(module_name, module_info, self.cmd_mng, self)
             elif module_type == "camera":
                 self.cameras[module_name] = camera.Camera(module_name, module_info, self)
@@ -193,7 +193,7 @@ class Manager(Thread):
                 elif 'valve' in mod_type:
                     valves_list.append(n)
                     g.nodes[n]['object'] = self.valves[name]
-                elif 'flask' in mod_type:
+                elif 'flask' in mod_type or 'waste' in mod_type:
                     g.nodes[n]['object'] = self.flasks[name]
                 elif 'reactor' in mod_type:
                     g.nodes[n]['object'] = self.reactors[name]
@@ -286,6 +286,7 @@ class Manager(Thread):
                         self.listener.update_status(True, reaction_complete=True)
                         self.reaction_name = ""
                         self.reaction_id = None
+                        self.home_all_valves()
                     # Attempt to request reaction from server
                     if self.web_enabled:
                         if self.listener.request_reaction():
@@ -295,6 +296,7 @@ class Manager(Thread):
                 else:
                     if execute:
                         self.start_queue()
+                        self.write_log(f"Started running {self.reaction_name}", level=logging.INFO)
                         self.reaction_ready = False
                         self.ready = False
                         self.listener.update_status(False)
@@ -418,6 +420,7 @@ class Manager(Thread):
         with self.q.mutex:
             self.q.queue.clear()
         self.paused = False
+        self.pause_flag = False
 
     def resume(self):
         """
@@ -632,7 +635,7 @@ class Manager(Thread):
             self.reactors[name].start_stir(speed, stir_secs, new_task)
             self.reactors[name].stir_task = new_task
         elif command == 'stop_stir':
-            self.reactors[name].stop_stir(new_task)
+            self.reactors[name].stop_stir()
         elif command == "start_heat":
             temp = parameters['temp']
             heat_secs = parameters['heat_secs']
@@ -640,7 +643,7 @@ class Manager(Thread):
             self.reactors[name].start_heat(temp, heat_secs, target, new_task)
             self.reactors[name].heat_task = new_task
         elif command == 'stop_heat':
-            self.reactors[name].stop_heat(new_task)
+            self.reactors[name].stop_heat()
         else:
             self.write_log(f"{command} is not a valid command", level=logging.WARNING)
             return False
@@ -750,6 +753,7 @@ class Manager(Thread):
         pipelined_steps = []
         prev_max_vol = 999999.00
         min_vol = 0
+        dead_volume = 0
         # Returns a simple path from source to target. No nodes are repeated.
         path = self.find_path(source, target)
         if len(path) < 1:
@@ -759,7 +763,7 @@ class Manager(Thread):
         # prime dead volume between valves
         if len(valves) > 1:
             self.flush_valve_dead_volume(source, valves)
-        if account_for_dead_volume:
+        if account_for_dead_volume and not init_move:
             steps, dead_volume = self.flush_sp_dead_volume(valves[-1], target, intake=True)
             pipelined_steps += steps
         # Find lowest maximum volume amongst syringes
@@ -780,7 +784,7 @@ class Manager(Thread):
             partial_move = self.generate_moves(source, target, valves, remaining_volume, flow_rate, init_move)
             pipelined_steps += partial_move
         # this assumes we have an air source on the valve with the final vessel
-        if account_for_dead_volume:
+        if account_for_dead_volume and not init_move:
             steps, dead_volume = self.flush_sp_dead_volume(valves[-1], target, intake=False)
             pipelined_steps += steps
         self.add_to_queue(pipelined_steps, self.pipeline)
@@ -822,7 +826,7 @@ class Manager(Thread):
             intake (bool): Whether we are aspirating the dead volume or dispensing it
         Return:
             pipelined_steps (list): List containing the necessary steps as command dictionaries
-            dead_volume (float): The amount of dead volume between the valve and the target in uL
+            dead_volume (float): The amount of dead volume (uL) between the valve and the target
         """
         def calc_volume(t_length):
             # assume 1/16" tubing ID
@@ -834,7 +838,7 @@ class Manager(Thread):
         # find an unused port for air
         valve = self.valves[valve]
         tubing_length = self.graph.adj[valve.name][target][0]['tubing_length']
-        dead_volume = calc_volume(tubing_length)
+        dead_volume = calc_volume(tubing_length) + 50
 
         if intake:
             air_port = None
@@ -1049,11 +1053,17 @@ class Manager(Thread):
 
     def ensure_reactors_disabled(self):
         for r in self.reactors:
-            if self.reactors[reactor].heating:
+            if self.reactors[r].heating and self.reactors[r].heat_start_time - time.time() > 300:
                 r.stop_heat()
-            if self.reactors[reactor].stirring:
-                r.stop_stir()
+            if self.reactors[r].stirring and self.reactors[r].stir_start_time - time.time() > 300:
+                self.reactors[r].stop_stir()
 
+    def home_all_valves(self):
+        home_cmds = []
+        for valve in self.valves:
+            home_cmds.append({'mod_type': 'valve', 'module_name': valve,
+                            'command': 'home', 'parameters': {'wait': True}})
+        self.add_to_queue(home_cmds, self.q)
 
 class Task:
     """

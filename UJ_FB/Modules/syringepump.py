@@ -82,6 +82,7 @@ class SyringePump(modules.Module):
         if target is not None:
             if not target.check_volume(volume):
                 move_flag = False
+        self.stepper.encoder_error = False
         if move_flag:
             with self.lock:
                 self.cur_step_pos = self.stepper.get_current_position()

@@ -18,7 +18,7 @@ class Reactor(modules.FBFlask):
         volume = module_info['mod_config']['aluminium_volume']
         split_num = volume.split('e')
         if len(split_num) > 1:
-            volume = int(split_num[0]) * math.pow(10, int(split_num[1]))
+            volume = float(split_num[0]) * math.pow(10, int(split_num[1]))
         else:
             volume = float(split_num[0])
         # Joule/K
@@ -203,6 +203,7 @@ class Reactor(modules.FBFlask):
         self.heating = False
         for heater in self.heaters:
             heater.stop_heat()
+        self.preheating = False
         self.integral_error = 0
         self.heat_task.complete = True
 

@@ -376,7 +376,7 @@ class FluidicBackboneUI:
 
         def stop_heat():
             command_dict = {"mod_type": "reactor", "module_name": reactor_name, "command": "stop_heat",
-                                        "parameters": {}}
+                                        "parameters": {'wait': False}}
             self.send_command(command_dict)
 
         heat_popup = tk.Toplevel(self.primary)
@@ -405,17 +405,17 @@ class FluidicBackboneUI:
 
         def stop_stir():
             command_dict = {"mod_type": "reactor", "module_name": reactor_name, "command": "stop_stir",
-                                        "parameters": {}}
+                                        "parameters": {'wait': False}}
             self.send_command(command_dict)
 
         stir_popup = tk.Toplevel(self.primary)
         stir_popup.title = reactor_print_name + " stirring"
         stir_popup.configure(bg=self.colours['form-background'])
-        reactor_label = tk.Label(stir_popup, text=f'Heating options for {reactor_print_name}', font=self.fonts['heading'], fg=self.colours['heading'], bg=self.colours['form-background'])
-        temp_label = tk.Label(stir_popup, text="Temperature (°C):", font=self.fonts['labels'], bg=self.colours['form-background'])
+        reactor_label = tk.Label(stir_popup, text=f'Stirring options for {reactor_print_name}', font=self.fonts['heading'], fg=self.colours['heading'], bg=self.colours['form-background'])
+        temp_label = tk.Label(stir_popup, text="Speed (RPM):", font=self.fonts['labels'], bg=self.colours['form-background'])
         reactor_entry = tk.Entry(stir_popup)
-        start_butt = tk.Button(stir_popup, text="Start heating", font=self.fonts['buttons'], bg=self.colours['accept-button'], command=start_stir)
-        stop_butt = tk.Button(stir_popup, text='Stop heating', font=self.fonts['buttons'], bg=self.colours['cancel-button'], command=stop_stir)
+        start_butt = tk.Button(stir_popup, text="Start stirring", font=self.fonts['buttons'], bg=self.colours['accept-button'], command=start_stir)
+        stop_butt = tk.Button(stir_popup, text='Stop stirring', font=self.fonts['buttons'], bg=self.colours['cancel-button'], command=stop_stir)
         cancel_butt = tk.Button(stir_popup, text="Close", font=self.fonts['buttons'], bg=self.colours['cancel-button'], command=stir_popup.destroy)
 
         reactor_label.grid(row=0, columnspan=2)
@@ -453,15 +453,15 @@ class FluidicBackboneUI:
             elif command == 'move':
                 vol, flow = command_dict['parameters']['volume'], command_dict['parameters']['flow_rate']
                 if params['direction'] == "D":
-                    message = f'Sent command to {name} to aspirate {vol / 1000}ml at {flow} \u03BCL/min'
-                else:
                     message = f'Sent command to {name} to dispense {vol / 1000}ml at {flow} \u03BCL/min'
+                else:
+                    message = f'Sent command to {name} to aspirate {vol / 1000}ml at {flow} \u03BCL/min'
             elif command == 'setpos':
                 message = f"Sent command to {name} to set position to {params['pos']}"
             else:
                 message = f'Unrecognised command: {command}'
             self.write_message(message)
-        elif command_dict['mod_type']=='reactor':
+        elif command_dict['mod_type'] == 'reactor':
             if command == "start_heat":
                 self.write_message(f"Started heating {name} to {params['temp']}")
             elif command == "stop_heat":
@@ -484,15 +484,16 @@ class FluidicBackboneUI:
 
     def stop(self):
         self.stop_butt.configure(state='disabled')
-        self.send_interrupt({'pause': True, 'stop': True, 'resume': False, 'exit': True})
+        self.send_interrupt({'pause': True, 'stop': True, 'resume': False, 'exit': False})
 
     def pause(self):
+        self.stop_butt.configure(state='normal')
         self.pause_butt.configure(text='Resume', bg='lawn green', command=self.resume)
-        self.send_interrupt({'pause': True, 'stop': False, 'resume': False, 'exit': True})
+        self.send_interrupt({'pause': True, 'stop': False, 'resume': False, 'exit': False})
 
     def resume(self):
         self.pause_butt.configure(text='pause', bg='sky blue', command=self.pause)
-        self.send_interrupt({'pause': False, 'stop': False, 'resume': True, 'exit': True})
+        self.send_interrupt({'pause': False, 'stop': False, 'resume': True, 'exit': False})
 
     def clean_done(self):
         self.manager.clean_step = False

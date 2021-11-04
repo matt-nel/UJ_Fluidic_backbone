@@ -2,9 +2,9 @@
 
 void* globalCommandLinearAccelStepperActuatorPt2Object;
 
-CommandLinearAccelStepperActuator::CommandLinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin) {
+CommandLinearAccelStepperActuator::CommandLinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin, int* myEncoderCount) {
 
-  LinearAccelStepperActuator my_linearactuator = LinearAccelStepperActuator(mystepper, myHomeSwitchPin, myEnablePin);
+  LinearAccelStepperActuator my_linearactuator = LinearAccelStepperActuator(mystepper, myHomeSwitchPin, myEnablePin, myEncoderCount);
 
   linearactuator = my_linearactuator;
 }
@@ -127,6 +127,10 @@ void CommandLinearAccelStepperActuator::update() {
   // do whatever you need to do here, non-blocking things!!
   // update should be fast
   linearactuator.update();
+  if ((!moveCompleteSent) && (!linearactuator.isMoving())){
+    moveCompleteSent = true;
+    moveCompleteUpdate();
+  }
 }
 
 
@@ -333,6 +337,7 @@ void CommandLinearAccelStepperActuator::wrapper_home() {
 }
 
 void CommandLinearAccelStepperActuator::home() {
+    moveCompleteSent = false;
     linearactuator.home();
 }
 
@@ -346,6 +351,7 @@ void CommandLinearAccelStepperActuator::wrapper_moveTo() {
 void CommandLinearAccelStepperActuator::moveTo() {
   long steps = cmdHdl.readLongArg();
   if (cmdHdl.argOk) {
+    moveCompleteSent = false;
     linearactuator.moveTo(steps);
   }
 }
@@ -360,6 +366,7 @@ void CommandLinearAccelStepperActuator::wrapper_move() {
 void CommandLinearAccelStepperActuator::move() {
   long steps = cmdHdl.readLongArg();
   if (cmdHdl.argOk) {
+    moveCompleteSent = false;
     linearactuator.move(steps);
   }
 }
@@ -451,6 +458,17 @@ void CommandLinearAccelStepperActuator::currentPosition() {
   cmdHdl.addCmdString(COMMANDLINEARACCELSTEPPER_POSITION);
   cmdHdl.addCmdDelim();
   cmdHdl.addCmdLong(linearactuator.currentPosition());
+  cmdHdl.addCmdTerm();
+  cmdHdl.sendCmdSerial();
+}
+
+void CommandLinearAccelStepperActuator::moveCompleteUpdate(){
+  cmdHdl.initCmd();
+  cmdHdl.addCmdString(COMMANDLINEARACCELSTEPPER_MOVE_COMPLETE);
+  cmdHdl.addCmdDelim();
+  cmdHdl.addCmdInt(*linearactuator.encoderCount);
+  cmdHdl.addCmdDelim();
+  cmdHdl.addCmdInt(linearactuator.reqEncoderCount);
   cmdHdl.addCmdTerm();
   cmdHdl.sendCmdSerial();
 }

@@ -38,6 +38,8 @@
 #define COMMANDACCELSTEPPER_REQUEST_TARGET "RT"
 #define COMMANDACCELSTEPPER_REQUEST_POSITION "RP"
 
+#define COMMANDACCELSTEPPER_MOVE_COMPLETE "MC"
+
 #define COMMANDACCELSTEPPER_REQUEST_SPEED "RIS"
 #define COMMANDACCELSTEPPER_REQUEST_MAXSPEED "RIMS"
 #define COMMANDACCELSTEPPER_REQUEST_ACCELERATION "RIA"
@@ -63,7 +65,7 @@
 class CommandAccelStepper {
 public:
 
-    CommandAccelStepper(AccelStepper &myStepper, int myEnablePin = -1);
+    CommandAccelStepper(AccelStepper &myStepper, int myEnablePin = -1, int myHeSensor=-1, int myStepsPerRev=3200);
 
     AccelStepper *stepper;
 
@@ -84,6 +86,22 @@ public:
     void update();
 
 private:
+    int hePin;
+    int stepsPerRev;
+    int stepsPerPort;
+    bool fwd;
+
+    int magnetsPassed;
+    int posCount;
+    int numPositions;
+    bool subsMoves;
+
+    long distanceLeft;
+
+    void checkHeSensor();
+
+    bool moveCompleteSent = true;
+    void moveCompleteUpdate();
 
     static void wrapper_bonjour();
     void bonjour();
@@ -139,8 +157,10 @@ private:
     static void wrapper_disableAcceleration();
     void disableAcceleration();
 
-    boolean moving;
-    boolean accelerationEnabled;
+    unsigned long curTime, stopTime;
+
+    bool moving;
+    bool accelerationEnabled;
     float lastSetSpeed;
 };
 
