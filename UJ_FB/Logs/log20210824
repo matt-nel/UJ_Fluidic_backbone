@@ -1,0 +1,1 @@
+WARNING:commanduino.commandmanager.CommandManager:No command handler type provided in configuration. Falling back to serial.

@@ -1,14 +1,13 @@
-from Manager import Manager
-from web_listener import WebListener
+import context
+import UJ_FB.manager as manager
 from threading import Thread
-from Fluidic_backbone_GUI import FluidicBackboneUI
 
 
-class GraphTest(Thread):
-    def __init__(self, gui_main):
+class QueueTest(Thread):
+    def __init__(self, manager):
         Thread.__init__(self)
-        self.gui = gui_main
-        self.listener = self.gui.manager.listener
+        self.manager = manager
+        self.listener = self.manager.listener
         self.quit_flag = False
 
     def run(self):
@@ -20,31 +19,37 @@ class GraphTest(Thread):
 
     def main_menu(self):
         response = input("[1]: Move\n[2]: Heat and stir\n[3]: Show pipeline\n[4]: Execute pipeline\n"
-                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n[8]: Update URL\n")
+                         "[5]: Clear pipeline\n[6]: Import pipeline\n[7]: Export pipeline\n"
+                         "[8]: Import XDL \n[9]: Update URL\n[q] Quit")
         if response == "1":
             self.move_menu()
         elif response == "2":
             self.reactor_menu()
         elif response == "3":
-            pipeline = self.gui.manager.echo_queue()
+            pipeline = self.manager.echo_queue()
             for command in pipeline:
                 print(f"{command['module_name']}: {command['command']}")
         elif response == "4":
-            self.gui.manager.start_queue()
+            self.manager.start_queue()
         elif response == "5":
-            self.gui.manager.pipeline.queue.clear()
+            self.manager.pipeline.queue.clear()
         elif response == "6":
-            self.gui.manager.import_queue("Configs/Pipeline.json")
+            self.manager.import_queue("Configs/Pipeline.json")
         elif response == "7":
-            self.gui.manager.export_queue()
+            self.manager.export_queue()
         elif response == "8":
+            filepath = input("What is the path to the XDL file?")
+            self.listener.load_xdl(filepath, is_file=True)
+        elif response == "9":
             print("Please enter the IP address of the server")
             response = input("IP address:")
             self.listener.update_url(response)
+        elif response == 'q':
+            self.quit_flag = True
 
     def move_menu(self):
         print("The following nodes are connected:")
-        for node in self.gui.manager.valid_nodes:
+        for node in self.manager.valid_nodes:
             print(node)
         source = input('What is the source?')
         destination = input('What is the destination?')
@@ -53,37 +58,34 @@ class GraphTest(Thread):
         print(f"Move {volume}ml from {source} to {destination} at {speed} ul/min.\n")
         response = input("Is this correct? (y/n)")
         if response == 'y':
-            self.gui.manager.move_liquid(source, destination, volume, speed)
+            self.manager.move_fluid(source, destination, volume, speed)
 
     def reactor_menu(self):
-        avail_reactors = self.gui.manager.reactors.keys()
+        avail_reactors = self.manager.reactors.keys()
         print("The following reactors are available:\n")
         for reactor in avail_reactors:
             print(reactor, '\n')
         reactor = input("Which reactor?")
-        response = input("Heat, stir, or heat and stir?")
+        command = input("Heat, stir, or heat and stir?")
         speed, temp = 0, 0.0
         heat_secs, stir_secs = 0.0, 0.0
         preheat = False
-        if 'heat' in response.lower():
+        if 'heat' in command.lower():
             print("Heating parameters:")
             temp = float(input("Temperature?"))
             heat_secs = int(input("For how many seconds?"))
             preheat = input("Would you like the reactor to preheat?")
             if preheat == 'y' or preheat == 'Y':
                 preheat = True
-        if 'stir' in response.lower():
+        if 'stir' in command.lower():
             print("Stirring parameters:")
             speed = float(input("What speed"))
             stir_secs = float(input("For how many seconds?"))
-        params = {'preheat': preheat, 'temp': temp, 'heat_secs': heat_secs, 'speed': speed, 'stir_secs': stir_secs, "wait": True}
-        command = Manager.generate_cmd_dict('reactor', reactor, response, params)
-        self.gui.manager.add_to_queue(command)
+        self.manager.heat_stir(reactor, command, preheat, temp, heat_secs, speed, stir_secs)
+        
 
+if __name__ == "__main__":
+    test = QueueTest(manager.Manager(web_enabled=False))
+    test.start()
+    test.manager.mainloop()
 
-gui = FluidicBackboneUI(False)
-listener = WebListener(gui.manager)
-test = GraphTest(gui)
-test.start()
-listener.start()
-gui.primary.mainloop()

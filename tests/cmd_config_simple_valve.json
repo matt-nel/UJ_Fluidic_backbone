@@ -1,7 +1,7 @@
 {
     "ios": [
         {
-            "port": "COM4"
+            "port": "COM3"
         }
     ],
     "devices": {
@@ -25,6 +25,15 @@
                 "acceleration": 1000
             }
         },
+        "T1": {
+            "command_id": "T1"
+        },
+        "AW2": {
+            "command_id": "AW2"
+        },
+        "AW1": {
+            "command_id": "AW1"
+        },
         "stepperZ": {
             "command_id": "STPZ",
             "config": {
@@ -34,6 +43,9 @@
                 "max_speed": 10000,
                 "acceleration": 1000
             }
+        },
+        "AR1": {
+            "command_id": "AR1"
         },
         "stepperE0": {
             "command_id": "STPE0",
@@ -45,6 +57,9 @@
                 "acceleration": 1000
             }
         },
+        "AR2": {
+            "command_id": "AR2"
+        },
         "stepperE1": {
             "command_id": "STPE1",
             "config": {
@@ -54,21 +69,6 @@
                 "max_speed": 10000,
                 "acceleration": 1000
             }
-        },
-        "T1": {
-            "command_id": "T1"
-        },
-        "AW2": {
-            "command_id": "AW2"
-        },
-        "AW1": {
-            "command_id": "AW1"
-        },
-        "AR1": {
-            "command_id": "AR1"
-        },
-        "AR2": {
-            "command_id": "AR2"
         }
-    }
+}
 }

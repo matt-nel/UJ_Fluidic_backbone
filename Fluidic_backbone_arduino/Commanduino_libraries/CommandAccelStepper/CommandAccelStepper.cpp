@@ -2,11 +2,14 @@
 
 void* globalCommandAccelStepperPt2Object;
 
-CommandAccelStepper::CommandAccelStepper(AccelStepper &myStepper, int myEnablePin)
+CommandAccelStepper::CommandAccelStepper(AccelStepper &myStepper, int myEnablePin, int myHeSensor, int myStepsPerRev)
 {
     moving = false;
 
     stepper = &myStepper;
+    hePin = myHeSensor;
+    stepsPerRev = myStepsPerRev;
+    stepsPerPort = stepsPerRev/10;
 
     stepper->setSpeed(5000);
     stepper->setMaxSpeed(5000);
@@ -135,6 +138,7 @@ void CommandAccelStepper::wrapper_update(void* pt2Object)
 */
 void CommandAccelStepper::update()
 {
+    curTime = millis();
     if(accelerationEnabled)
     {
         stepper->run();
@@ -143,11 +147,36 @@ void CommandAccelStepper::update()
     {
         stepper->runSpeedToPosition();
     }
-
-    if(stepper->distanceToGo() == 0)
+    if (!moving && !subsMoves){
+        if (!moveCompleteSent){
+            moveCompleteUpdate();
+        }
+        if ((curTime - stopTime) > 5000){
+            stepper->disableOutputs();
+        }
+    }
+    distanceLeft = stepper->distanceToGo();
+    //Check HE sensor at each port position for positioning movements
+    if (subsMoves && distanceLeft == 0){
+        //valve has reached end of current move
+        checkHeSensor();
+        posCount++;
+        if (posCount < numPositions){
+            if (fwd){
+                stepper->move(stepsPerPort);
+            }else{
+                stepper->move(-stepsPerPort);
+            }
+        }else {
+            subsMoves = false;
+        }
+    }
+    if(distanceLeft == 0 && !subsMoves)
     {
+        if (moving){
+            stopTime = millis();
+        }
         moving = false;
-        stepper->disableOutputs();
     }
 }
 
@@ -208,13 +237,30 @@ void CommandAccelStepper::wrapper_moveTo()
 void CommandAccelStepper::moveTo()
 {
     long steps = cmdHdl.readLongArg();
+    float distance = abs(abs(stepper->currentPosition()) - abs(steps));
 
     if(cmdHdl.argOk)
     {
         stepper->enableOutputs();
-        stepper->moveTo(steps);
+        //Should only check HEsensor if is a valve and movement is large enough to cover a port distance.
+        if (distance >= stepsPerPort && hePin > 0){
+            subsMoves = true;
+            numPositions = round(distance/stepsPerPort);
+            if (steps > stepper->currentPosition()){
+                fwd = true;
+                stepper->move(stepsPerPort);
+            }else {
+                fwd = false;
+                stepper->move(-stepsPerPort);
+            }
+        }else{
+            subsMoves = false;
+            stepper->moveTo(steps);
+        }
         moving = true;
-
+        moveCompleteSent = false;
+        magnetsPassed = 0;
+        posCount = 0;
         if(!accelerationEnabled)
         {
             stepper->setSpeed(lastSetSpeed);
@@ -238,7 +284,7 @@ void CommandAccelStepper::move()
         stepper->enableOutputs();
         stepper->move(steps);
         moving = true;
-
+        moveCompleteSent = false;
         if(!accelerationEnabled)
         {
             stepper->setSpeed(lastSetSpeed);
@@ -469,3 +515,22 @@ void CommandAccelStepper::disableAcceleration()
 {
     accelerationEnabled = false;
 }
+
+void CommandAccelStepper::moveCompleteUpdate(){
+    moveCompleteSent = true;
+    cmdHdl.initCmd();
+    cmdHdl.addCmdString(COMMANDACCELSTEPPER_MOVE_COMPLETE);
+    cmdHdl.addCmdDelim();
+    cmdHdl.addCmdInt(magnetsPassed);
+    cmdHdl.addCmdTerm();
+    cmdHdl.sendCmdSerial();
+}
+
+void CommandAccelStepper::checkHeSensor(){
+    if (hePin > 0){
+            int reading = analogRead(hePin);
+            if (reading <= 510 || reading >= 580)
+                magnetsPassed++;
+    }
+}
+

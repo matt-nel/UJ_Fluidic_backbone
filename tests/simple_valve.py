@@ -3,10 +3,14 @@ import os
 from dummy_manager import DummyManager
 from commanduino import CommandManager
 from threading import Lock
-from Devices import stepperMotor
-from Modules import syringePump
-from Modules import modules
+import context
+from UJ_FB.Devices import devices, steppermotor
+from UJ_FB.Modules import modules, syringepump
 import time
+
+class Task:
+    def __init__(self):
+        self.error = None
 
 SYRINGE_DICT = {"syringe1": {
     "name": "syringe1",
@@ -52,30 +56,23 @@ FLASK_CONFIG = {"Flask1": {
         "class_type": "FBFlask",
         "mod_config": {
             "Contents": "water",
-            "Current volume": "80",
-            "Maximum volume": "100"
+            "Current volume": "200",
+            "Maximum volume": "400"
         },
-        "devices": {}},
+        "devices": {}
+        },
     "Flask2": {
         "name": "Flask2",
         "mod_type": "flask",
         "class_type": "FBFlask",
         "mod_config": {
             "Contents": "water",
-            "Current volume": "0",
-            "Maximum volume": "100"
+            "Current volume": "200",
+            "Maximum volume": "400"
         },
         "devices": {}
     }
 }
-
-
-def disable_all_motors(cmduino):
-    cmduino.ENX.high()
-    cmduino.ENY.high()
-    cmduino.ENZ.high()
-    cmduino.ENE0.high()
-    cmduino.ENE1.high()
 
 
 stdout_mutex = Lock()
@@ -86,13 +83,12 @@ cmd_mng = CommandManager.from_configfile(cm_config, False)
 manager = DummyManager(stdout_mutex)
 manager.start()
 module_info = SYRINGE_DICT['syringe1']
-pump = syringePump.SyringePump('syringe1', module_info, cmd_mng, manager)
+pump = syringepump.SyringePump('syringe1', module_info, cmd_mng, manager)
 pump.set_max_volume(10)
-pump.change_contents("water", 1000)
-pump.set_pos(1)
+# pump.change_contents("water", 1000)
+pump.set_pos(5)
 valve_step = getattr(cmd_mng, "stepperE1")
-valve_en = getattr(cmd_mng, "ENE1")
-valve = stepperMotor.StepperMotor(valve_step, valve_en, MOTOR_CONFIG["device_config"], manager.serial_lock)
+valve = steppermotor.StepperMotor(valve_step, MOTOR_CONFIG["device_config"], manager.serial_lock)
 flask1 = modules.FBFlask("Flask1", FLASK_CONFIG["Flask1"], cmd_mng, manager)
 flask2 = modules.FBFlask("Flask2", FLASK_CONFIG["Flask2"], cmd_mng, manager)
 
@@ -100,33 +96,43 @@ while True:
     print("Press A to aspirate syringe", "Press D to dispense syringe", "Press V to move valve motor")
     response = input()
     response = response.capitalize()
+    task = Task()
     if response == "A":
         parameters = {}
         response = input("Current target?")
         if response == "Flask1":
-            parameters["target"] = flask1
+            target = flask1
         elif response == "Flask2":
-            parameters["target"] = flask2
+            target = flask2
         else:
             continue
-        parameters["volume"] = 2000
-        parameters["flow_rate"] = 5000
-        parameters["direction"] = "A"
-        pump.move_syringe(parameters)
+        volume = 2000
+        flow_rate = 5000
+        direction = "A"
+        pump.move_syringe(target, volume, flow_rate, direction, task)
     elif response == "D":
         parameters = {}
         response = input("Current target?")
         if response == "Flask1":
-            parameters["target"] = flask1
+            target = flask1
         elif response == "Flask2":
-            parameters["target"] = flask2
+            target = flask2
         else:
             continue
-        parameters["volume"] = 2000
-        parameters["flow_rate"] = 5000
-        parameters["direction"] = "D"
-        pump.move_syringe(parameters)
+        volume = 2000
+        flow_rate = 5000
+        direction = "D"
+        pump.move_syringe(target, volume, flow_rate, direction, task)
     elif response == "V":
         response2 = input("How many steps?")
         steps = int(response2)
         valve.move_steps(steps)
+    elif response == "X":
+        response2 = float(input("how many ul?"))
+        pump.move_syringe(None, response2, 5000, "A", task)
+    elif response == "C":
+        response2 = float(input("how many ul?"))
+        pump.move_syringe(None, response2, 5000, "D", task)
+    elif response == "H":
+        pump.home()
+

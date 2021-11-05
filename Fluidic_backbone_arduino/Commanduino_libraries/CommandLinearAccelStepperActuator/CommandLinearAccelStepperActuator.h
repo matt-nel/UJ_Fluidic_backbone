@@ -41,6 +41,8 @@
 #define COMMANDLINEARACCELSTEPPER_REQUEST_TARGET "RT"
 #define COMMANDLINEARACCELSTEPPER_REQUEST_POSITION "RP"
 
+#define COMMANDLINEARACCELSTEPPER_MOVE_COMPLETE "MC"
+
 #define COMMANDLINEARACCELSTEPPER_REQUEST_SPEED "RIS"
 #define COMMANDLINEARACCELSTEPPER_REQUEST_MAXSPEED "RIMS"
 #define COMMANDLINEARACCELSTEPPER_REQUEST_ACCELERATION "RIA"
@@ -62,7 +64,7 @@
 class CommandLinearAccelStepperActuator {
   public:
     
-    CommandLinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin=-1);
+    CommandLinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin, int* myEncoderCount);
 
     CommandHandler cmdHdl;
 
@@ -83,6 +85,7 @@ class CommandLinearAccelStepperActuator {
     void update();
 
   private:
+    bool moveCompleteSent = true;
 
     static void wrapper_bonjour();
     void bonjour();
@@ -149,6 +152,8 @@ class CommandLinearAccelStepperActuator {
 
     static void wrapper_currentPosition();
     void currentPosition();
+
+    void moveCompleteUpdate();
 };
 
 #endif
