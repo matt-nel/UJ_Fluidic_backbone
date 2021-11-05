@@ -119,6 +119,7 @@ class Manager(Thread):
             raise fbexceptions.FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
     def write_log(self, message, level):
+        message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
         if self.gui_main is not None:
             if level > 9:
                 self.gui_main.write_message(message)

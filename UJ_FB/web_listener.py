@@ -7,6 +7,7 @@ import json
 
 # IP address of PI server
 DEFAULT_URL = "http://127.0.0.1:5000/robots_api"
+DEFAULT_FLOW = 2500
 
 
 class WebListener():
@@ -180,16 +181,16 @@ class WebListener():
             # uL/min
             flow_rate = (volume*1000)/int(a_time.split(' ')[0]) * 60
         else:
-            flow_rate = 1000
+            flow_rate = DEFAULT_FLOW
         self.manager.move_fluid(source, target, volume, flow_rate)
     
     def process_xdl_transfer(self, transfer_info):
         source = transfer_info.get('from_vessel')
         target = transfer_info.get('to_vessel')
         if source == "reactor":
-            source = self.manager.find_target(source)
+            source = self.manager.find_target(source).name
         elif target == "reactor":
-            target = self.manager.find_target(target)
+            target = self.manager.find_target(target).name
         reagent_info = transfer_info.get('volume')
         if reagent_info is None:
             reagent_info = transfer_info.get('mass')
@@ -207,13 +208,12 @@ class WebListener():
             # uL/min
             flow_rate = volume/int(t_time.split(' ')[0]) * 60
         else:
-            flow_rate = 1000
+            flow_rate = DEFAULT_FLOW
         self.manager.move_fluid(source, target, volume, flow_rate)
 
     def process_xdl_stir(self, stir_info):
         reactor_name = stir_info.get('vessel')
-        if reactor_name.lower() == "reactor":
-            reactor_name = self.manager.find_target(reactor_name.lower()).name
+        reactor_name = self.manager.find_target(reactor_name.lower()).name
         speed = stir_info.get('stir_speed')
         speed = speed.split(' ')[0]
         stir_secs = stir_info.get('time')
@@ -233,8 +233,7 @@ class WebListener():
     
     def process_xdl_heatchill(self, heatchill_info):
         reactor_name = heatchill_info.get('vessel')
-        if reactor_name.lower() == "reactor":
-            reactor_name = self.manager.find_target(reactor_name.lower()).name
+        reactor_name = self.manager.find_target(reactor_name.lower()).name
         temp = heatchill_info.get('temp')
         heat_secs = heatchill_info.get('time')
         # StopHeatChill
@@ -284,7 +283,7 @@ class WebListener():
                             add_actions['img_processing'] = img_processing
                     elif "wait_user" in comment:
                         add_actions['wait_user'] =True
-                    elif "wait_reason" in comment:
+                    if "wait_reason" in comment:
                         reason = comment[comment.index('('):-1]
                         add_actions['wait_reason'] = reason
                 self.manager.wait(wait_time=wait_time, actions=add_actions)

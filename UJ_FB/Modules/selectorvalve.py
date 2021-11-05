@@ -386,7 +386,6 @@ class SelectorValve(modules.Module):
 
     def check_backlash(self):
         i = 0
-        direction = -1
         start_pos = self.stepper.get_current_position()
         # we start at zero.
         # move in fwd direction to next magnet
@@ -394,16 +393,19 @@ class SelectorValve(modules.Module):
         # move back
         self.stepper.move_steps(-self.spr/5)
         # get within 10 of reading
-        reading = self.he_sensor.analog_read()
-        last_reading = reading
+        start_reading = self.he_sensor.analog_read()
+        last_reading = start_reading
+        reading = start_reading
         while reading < (self.magnet_readings[1] - 20):
-            self.stepper.move_steps(10*direction)
-            if (last_reading > reading):
-                direction = -direction
-                i = 0
+            self.stepper.move_steps(-10)
+            if last_reading > reading:
+                if last_reading <= start_reading:
+                    self.stepper.move_to(start_pos)
+                break
             i += 1
+            last_reading = reading
             reading = self.he_sensor.analog_read()
-        self.backlash = i * direction * 10
+        self.backlash = i * 10
         self.manager.prev_run_config['backlash']['backlash'] = self.backlash
 
     def zero(self):
