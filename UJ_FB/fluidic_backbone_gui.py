@@ -45,8 +45,6 @@ class FluidicBackboneUI:
         self.log = tk.Text(self.log_frame, state='disabled', width=60, height=24, wrap='none', borderwidth=5)
 
         self.override_frame = tk.Frame(self.primary, bg=self.colours['form-background'])
-        self.clean_butt = tk.Button(self.override_frame, text="Clean step complete?", font=self.fonts['buttons'], bg=self.colours['other-button'],
-                                                fg='white', command=self.clean_done)
         self.pause_butt = tk.Button(self.override_frame, text='Pause', font=self.fonts['buttons'], bg=self.colours['other-button'],
                                     fg='white', command=self.pause)
         self.stop_butt = tk.Button(self.override_frame, text='Stop', font=self.fonts['buttons'], bg=self.colours['cancel-button'], fg='white',
@@ -68,7 +66,6 @@ class FluidicBackboneUI:
         self.web_frame.grid(row=3, column=1, padx=5, pady=5)
         self.url_label.grid(row=0, column=1)
         self.url_butt.grid(row=0, column=2)
-        self.clean_butt.grid(row=0, sticky="E")
         self.pause_butt.grid(row=0, column=2, sticky="W")
         self.stop_butt.grid(row=0, column=3, sticky="W")
         self.log.grid(row=14, column=0)
@@ -484,6 +481,7 @@ class FluidicBackboneUI:
 
     def stop(self):
         self.stop_butt.configure(state='disabled')
+        self.pause_butt.configure(text='pause', bg=self.colours['other-button'], command=self.pause)
         self.send_interrupt({'pause': True, 'stop': True, 'resume': False, 'exit': False})
 
     def pause(self):
@@ -492,11 +490,8 @@ class FluidicBackboneUI:
         self.send_interrupt({'pause': True, 'stop': False, 'resume': False, 'exit': False})
 
     def resume(self):
-        self.pause_butt.configure(text='pause', bg='sky blue', command=self.pause)
+        self.pause_butt.configure(text='pause', bg=self.colours['other-button'], command=self.pause)
         self.send_interrupt({'pause': False, 'stop': False, 'resume': True, 'exit': False})
-
-    def clean_done(self):
-        self.manager.clean_step = False
 
     def send_interrupt(self, parameters):
         if parameters['stop']:

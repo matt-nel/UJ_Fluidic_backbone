@@ -389,6 +389,10 @@ class SetupGUI:
             else:
                 self.write_message("Required to configure at least one valve and syringe")
 
+        def reset_graph_setup():
+            self.modules = {}
+            graph_setup.destroy()
+
         def populate_menus(frame, valve_no, row_count, port, col, pad=2, span=False):
             new_frame = tk.Frame(frame)
             col_span = 1
@@ -529,7 +533,7 @@ class SetupGUI:
             camera_butt = tk.Button(graph_setup, text="Set up camera", bg=self.colours['other-button'], fg="white")
             camera_butt.configure(command=lambda: self.camera_setup(camera_butt))
             accept_butt = tk.Button(graph_setup, text='Accept', bg='lawn green', command=accept)
-            cancel_butt = tk.Button(graph_setup, text='Cancel', bg='tomato2', command=graph_setup.destroy)
+            cancel_butt = tk.Button(graph_setup, text='Cancel', bg='tomato2', command=reset_graph_setup)
             camera_butt.grid(row=2, column =0)
             accept_butt.grid(row=3, column=1)
             cancel_butt.grid(row=3, column=2)

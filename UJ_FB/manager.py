@@ -119,10 +119,10 @@ class Manager(Thread):
             raise fbexceptions.FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
     def write_log(self, message, level):
-        message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
         if self.gui_main is not None:
             if level > 9:
                 self.gui_main.write_message(message)
+        message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
         if level > 49:
             self.logger.critical(message)
         elif level > 39:
@@ -270,8 +270,8 @@ class Manager(Thread):
                         break
                     elif self.pause_flag and not self.paused:
                         self.pause_all()
-                        if self.stop_flag:
-                            self.stop_all()
+                    elif self.stop_flag:
+                        self.stop_all()
                     elif not self.pause_flag and self.paused:
                         self.resume()
                     self.interrupt = False
@@ -422,6 +422,7 @@ class Manager(Thread):
             self.q.queue.clear()
         self.paused = False
         self.pause_flag = False
+        self.stop_flag = False
 
     def resume(self):
         """
@@ -509,7 +510,7 @@ class Manager(Thread):
             cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=(new_task,))
         elif command == 'jog':
             cmd_thread = Thread(target=self.syringes[name].jog, name=name + 'jog',
-                                args=(parameters['steps'], parameters['direction']))
+                                args=(parameters['steps'], parameters['direction'], new_task))
         elif command == 'setpos':
             position = parameters['pos']
             cmd_thread = Thread(target=self.syringes[name].set_pos, name=name + 'setpos', args=(position,))
@@ -577,12 +578,6 @@ class Manager(Thread):
                 for syringe in self.syringes:
                     target = self.syringes[syringe]
                     break
-        elif "flask" in target_name:
-            target = self.flasks.get(target)
-            if target is None: 
-                for flask in self.flasks:
-                    target = self.flasks[flask]
-                    break
         elif "reactor" in target_name:
             target = self.reactors.get(target)
             if target is None: 
@@ -598,8 +593,12 @@ class Manager(Thread):
         elif "waste" in target_name:
             target = self.flasks.get(target)
             if target is None: 
+                return None
+        else:
+            target = self.flasks.get(target)
+            if target is None:
                 for flask in self.flasks:
-                    target = self.flasks.get(flask)
+                    target = self.flasks[flask]
                     break
         return target
 
@@ -1065,6 +1064,7 @@ class Manager(Thread):
             home_cmds.append({'mod_type': 'valve', 'module_name': valve,
                             'command': 'home', 'parameters': {'wait': True}})
         self.add_to_queue(home_cmds, self.q)
+
 
 class Task:
     """
