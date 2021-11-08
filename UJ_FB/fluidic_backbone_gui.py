@@ -1,5 +1,6 @@
 import os
 import tkinter as tk
+import tkinter.filedialog as fd
 import UJ_FB.manager as manager
 
 
@@ -18,7 +19,6 @@ class FluidicBackboneUI:
         self.primary.title('Fluidic Backbone Prototype')
         self.primary.configure(background=self.colours['form-background'])
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
-
 
         icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), 'Syringe.png'))
         self.primary.iconphoto(True, icon)
@@ -42,19 +42,24 @@ class FluidicBackboneUI:
             self.populate_valves(valve)
 
         self.log_frame = tk.Frame(self.primary)
-        self.log = tk.Text(self.log_frame, state='disabled', width=60, height=24, wrap='none', borderwidth=5)
+        self.log = tk.Text(self.log_frame, state='disabled', width=60, height=24, wrap='word', borderwidth=5)
 
         self.override_frame = tk.Frame(self.primary, bg=self.colours['form-background'])
         self.pause_butt = tk.Button(self.override_frame, text='Pause', font=self.fonts['buttons'], bg=self.colours['other-button'],
                                     fg='white', command=self.pause)
         self.stop_butt = tk.Button(self.override_frame, text='Stop', font=self.fonts['buttons'], bg=self.colours['cancel-button'], fg='white',
                                    command=self.stop)
+        self.load_xdl_butt = tk.Button(self.override_frame, text="Load XDL", font=self.fonts['buttons'], bg=self.colours['other-button'], fg='white',
+                                       command=self.load_xdl)
+        self.execute_butt = tk.Button(self.override_frame, text="Stop auto execution", font=self.fonts['buttons'], bg=self.colours['other-button'], fg='white',
+                                      command=lambda: self.send_interrupt({'pause': False, 'stop': False, 'resume': False, 'exit': False, "execute": False}))
         
         self.web_frame = tk.Frame(self.primary, bg=self.colours['form-background'])
         self.url_label = tk.Label(self.web_frame, text="Current server URL: " + self.manager.listener.url, font=self.fonts['labels'], background=self.colours['form-background'])
         self.url_butt = tk.Button(self.web_frame, text="Update URL", font=self.fonts['buttons'], fg='white', bg=self.colours['other-button'], 
                                                 command=self.update_url)
-        
+
+        self.reactor_labels = {}
         self.reactor_frame = tk.Frame(self.primary, bg=self.colours['form-background'])
         for reactor in self.manager.reactors.keys():
             self.populate_reactors(reactor)
@@ -68,6 +73,8 @@ class FluidicBackboneUI:
         self.url_butt.grid(row=0, column=2)
         self.pause_butt.grid(row=0, column=2, sticky="W")
         self.stop_butt.grid(row=0, column=3, sticky="W")
+        self.execute_butt.grid(row=0, column=5, sticky="E")
+        self.load_xdl_butt.grid(row=0, column=6, sticky="E")
         self.log.grid(row=14, column=0)
 
     def populate_syringes(self, syringe_name):
@@ -140,14 +147,17 @@ class FluidicBackboneUI:
         reactor_no = int(reactor_name[-1])
         reactor_print_name = "Reactor " + str(reactor_no)
         row = reactor_no
-        self.syringe_labels.append(tk.Label(self.reactor_frame, text=reactor_print_name, font=self.fonts['labels'],
-                                            bg=self.colours['form-background']))
-        self.syringe_labels[reactor_no].grid(row=row, column=0)
+        reactor_label = tk.Label(self.reactor_frame, text=reactor_print_name, font=self.fonts['labels'],
+                                            bg=self.colours['form-background'])
+        reactor_label.grid(row=row, column=0)
 
         heat_button = tk.Button(self.reactor_frame, text='Heating', font=self.fonts['buttons'], padx=5, bg=self.colours['other-button'],
                                 fg='white', command=lambda: self.heat_reactor(reactor_name, reactor_print_name))
         stir_button = tk.Button(self.reactor_frame, text='Stirring', font=self.fonts['buttons'], padx=5, bg=self.colours['other-button'], fg='white',
                                command=lambda: self.stir_reactor(reactor_name, reactor_print_name))
+
+        self.reactor_labels[reactor_name] = tk.Label(self.reactor_frame, text="- °C", font=self.fonts['labels'], padx=5, bg=self.colours['form-background'])
+        self.reactor_labels[reactor_name].grid(row=row, column=3)
 
         heat_button.grid(row=row, column=1)
         stir_button.grid(row=row, column=2)
@@ -422,6 +432,9 @@ class FluidicBackboneUI:
         stop_butt.grid(row=2, column=1)
         cancel_butt.grid(row=3, columnspan=2, pady=5)
 
+    def update_temps(self, reactor_name, reactor_temp):
+        self.reactor_labels[reactor_name].configure(text=f"{reactor_temp} °")
+
     def wait_user(self):
         def done():
             self.manager.user_wait_flag = True
@@ -434,7 +447,10 @@ class FluidicBackboneUI:
         done_butt.grid()
 
     def send_command(self, command_dict):
-        self.manager.q.put(command_dict)
+        if self.manager.error:
+            self.manager.error_queue.put(command_dict)
+        else:
+            self.manager.q.put(command_dict)
         name, command = command_dict['module_name'], command_dict['command']
         params = command_dict['parameters']
         if command_dict['mod_type'] == 'valve':
@@ -479,6 +495,16 @@ class FluidicBackboneUI:
     def send_message(self, parameters):
         pass
 
+    def update_execution(self, execute):
+        if execute:
+            self.execute_butt.configure(text="Stop auto execution", command=lambda: self.send_interrupt({'pause': False, 'stop': False, 'resume': False, 'exit': False, "execute": False}))
+        else:
+            self.execute_butt.configure(text="Start auto execution", command=lambda: self.send_interrupt({'pause': False, 'stop': False, 'resume': False, 'exit': False,"execute": True}))
+
+    def load_xdl(self):
+        filename = fd.askopenfilename(title="Open XDL file", initialdir='/', filetypes=(("All files", "*.*"), ))
+        self.manager.listener.load_xdl(filename, is_file=True)
+
     def stop(self):
         self.stop_butt.configure(state='disabled')
         self.pause_butt.configure(text='pause', bg=self.colours['other-button'], command=self.pause)
@@ -494,6 +520,7 @@ class FluidicBackboneUI:
         self.send_interrupt({'pause': False, 'stop': False, 'resume': True, 'exit': False})
 
     def send_interrupt(self, parameters):
+        execute = parameters.get("execute")
         if parameters['stop']:
             with self.manager.interrupt_lock:
                 self.manager.pause_flag = True
@@ -510,6 +537,9 @@ class FluidicBackboneUI:
                 self.manager.pause_flag = False
                 self.manager.interrupt = True
             self.write_message('Resuming operations')
+        elif execute is not None:
+            with self.manager.interrupt_lock:
+                self.manager.execute = execute
         elif parameters['exit']:
             with self.manager.interrupt_lock:
                 self.manager.exit_flag = True

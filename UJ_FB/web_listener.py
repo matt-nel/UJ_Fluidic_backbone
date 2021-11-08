@@ -10,7 +10,7 @@ DEFAULT_URL = "http://127.0.0.1:5000/robots_api"
 DEFAULT_FLOW = 5000
 
 
-class WebListener():
+class WebListener:
     def __init__(self, robot_manager, robot_id,  robot_key):
         self.manager = robot_manager
         self.id = robot_id
@@ -116,14 +116,14 @@ class WebListener():
             try:
                 tree = et.parse(xdl)
                 tree = tree.getroot()
-            except FileNotFoundError:
+            except (FileNotFoundError, et.ParseError):
                 self.manager.write_log(f"{xdl} not found",  level=logging.WARNING)
                 return False
         else:
             try:
                 tree = et.fromstring(xdl)
-            except et.ParseError:
-                self.manager.write_log(f"The XDL provided is not formatted correctly", level=logging.ERROR)
+            except et.ParseError as e:
+                self.manager.write_log(f"The XDL provided is not formatted correctly, {str(e)}", level=logging.ERROR)
                 return False
         self.parse_xdl(tree, clean_step=clean_step)
 
@@ -133,6 +133,7 @@ class WebListener():
         if tree.find('Synthesis'):
             tree = tree.find('Synthesis')
         metadata = tree.find("Metadata")
+        reaction_name = metadata.get('name')
         req_hardware = tree.find('Hardware')
         req_reagents = tree.find('Reagents')
         procedure = tree.find('Procedure')
@@ -164,6 +165,11 @@ class WebListener():
             self.manager.wait(0, {'wait_user': True, "wait_reason": "cleaning"})
         if not parse_success:
             self.manager.pipeline.queue.clear()
+        else:
+            with self.manager.interrupt_lock:
+                self.manager.reaction_ready = True
+                if not self.manager.reaction_name:
+                    self.manager.reaction_name = reaction_name
 
     def process_xdl_add(self, modules, reagents, add_info):
         vessel = add_info.get('vessel')
@@ -291,11 +297,12 @@ class WebListener():
         if wait_time is None:
             self.manager.wait(wait_time=30, actions={})
         else:
+            wait_time = wait_time.split(' ')
             unit = wait_time[1]
             if unit == 's' or unit == 'seconds':
-                wait_time = int(wait_time)
+                wait_time = int(wait_time[0])
             elif unit == 'min' or unit == 'minutes':
-                wait_time=float(wait_time) * 60
+                wait_time = float(wait_time[0]) * 60
             # comments: "Picture<picture_no>, wait_user, wait_reason(reason)"
             comments = wait_info.get('comments')
             if comments is None:

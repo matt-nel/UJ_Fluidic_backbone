@@ -59,6 +59,7 @@ class Manager(Thread):
         self.logger = logging.getLogger(self.id)
         self.q = Queue()
         self.pipeline = Queue()
+        self.error_queue = Queue()
         # list to hold current Task objects.
         self.tasks = []
         self.serial_lock = Lock()
@@ -76,6 +77,7 @@ class Manager(Thread):
         self.reaction_id = None
         self.error = False
         self.error_start = None
+        self.error_flag = False
         self.valid_nodes = []
         self.valves = {}
         self.num_valves = 0
@@ -246,20 +248,17 @@ class Manager(Thread):
         This is the primary loop of the program. This loop monitors for errors or interrupts, dispatches tasks,
          updates the server and has logic to handle pauses.
         """
+        execute = self.execute
         while not self.exit_flag:
-            if self.web_enabled:
-                execute = self.listener.update_execution()
-            else:
-                execute = self.execute
-            if self.error:
-                if self.web_enabled:
-                    self.listener.update_status(self.ready, error=True)
-                elif time.time() - self.error_start > 300:
-                    self.ensure_reactors_disabled()
             self.check_task_completion()
             # interrupt lock used to synchronise access to pause, stop, and exit flags
             with self.interrupt_lock:
                 pause_flag = self.pause_flag
+                error = self.error
+                if self.web_enabled:
+                    execute = self.listener.update_execution()
+                else:
+                    execute = self.execute
                 # We have received a command to stop or start execution
                 if not execute and execute is not None:
                     # if not ready then we must pause the current execution
@@ -284,14 +283,14 @@ class Manager(Thread):
                     # log reaction completion once
                     if self.reaction_name:
                         self.write_log(f"Completed {self.reaction_name}", level=logging.INFO)
-                        self.listener.update_status(True, reaction_complete=True)
+                        if self.reaction_id:
+                            self.listener.update_status(True, reaction_complete=True)
                         self.reaction_name = ""
                         self.reaction_id = None
                         self.home_all_valves()
                     # Attempt to request reaction from server
                     if self.web_enabled:
                         if self.listener.request_reaction():
-                            self.reaction_ready = True
                             self.write_log(f"Prepared to run {self.reaction_name} reaction.", level=logging.INFO)
                 # a reaction has been queued
                 else:
@@ -303,6 +302,14 @@ class Manager(Thread):
                         self.listener.update_status(False)
                         continue
             # execution ongoing
+            if error:
+                if self.web_enabled:
+                    self.listener.update_status(self.ready, error=True)
+                elif time.time() - self.error_start > 300:
+                    self.ensure_reactors_disabled()
+            if self.execute != execute:
+                if self.gui_main is not None:
+                    self.gui_main.update_execution(execute)
             if not pause_flag:
                 # waiting for task completion
                 if self.waiting:
@@ -316,6 +323,14 @@ class Manager(Thread):
                         self.write_log(f"Added command {command_dict['command']} for {command_dict['module_name']}", level=logging.INFO)
                     else:
                         self.write_log(f"Failed to add command {command_dict['command']} for {command_dict['module_name']}", level=logging.ERROR)
+            elif self.error and not self.error_queue.empty():
+                command_dict = self.error_queue.get(block=False)
+                self.command_module(command_dict)
+            if self.gui_main is not None:
+                for r in self.reactors:
+                    r = self.reactors[r]
+                    temp = round(r.cur_temp)
+                    self.gui_main.update_temps(r.name, temp)
             if self.rc_changes:
                 self.write_running_config("Configs\\running_config.json")
         self.pause_all()
@@ -392,6 +407,7 @@ class Manager(Thread):
             if task.is_complete and not task.is_paused:
                 if task.error:
                     self.pause_all()
+                    self.write_log(f"The robot has hit an error. Please use the GUI to correct and press.")
                     with self.interrupt_lock:
                         self.pause_flag = True
                     self.error = True
@@ -423,6 +439,7 @@ class Manager(Thread):
         self.paused = False
         self.pause_flag = False
         self.stop_flag = False
+        self.reaction_name = ""
 
     def resume(self):
         """
@@ -440,8 +457,11 @@ class Manager(Thread):
             command_dict = self.q.get(block=False)
             new_q.put(command_dict)
         self.q = new_q
-        self.pause_flag = False
-        self.paused = False
+        with self.interrupt_lock:
+            self.error_flag = False
+            self.error = False
+            self.pause_flag = False
+            self.paused = False
 
     def command_module(self, command_dict):
         """
@@ -648,7 +668,7 @@ class Manager(Thread):
             self.write_log(f"{command} is not a valid command", level=logging.WARNING)
             return False
         new_task.add_worker(self.reactors[name].thread)
-        if parameters['wait']:
+        if parameters.get('wait'):
             self.wait_until_ready()
         self.q.task_done()
         return True
@@ -853,12 +873,12 @@ class Manager(Thread):
                                     'parameters': {'target': 'empty', 'wait': True}})
             # Command to aspirate air to fill dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 2000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
                                                    'direction': 'A', 'wait': True}})
         else:
             # dispense dead volume of air into target, emptying the dead volume in the tube
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 2000, 'target': target,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': target,
                                                    'direction': 'D', 'wait': True}})
         return pipelined_steps, dead_volume
 

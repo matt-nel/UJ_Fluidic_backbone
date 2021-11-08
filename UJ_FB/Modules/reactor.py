@@ -27,6 +27,8 @@ class Reactor(modules.FBFlask):
         self.pid_range = 255
         self.last_voltage = 0
         self.cur_temp = 0.0
+        self.heat_update_delay = 20
+        self.heat_last_update_time = time.time()-30
         self.heating = False
         self.resume_heating = False
         self.stirring = False
@@ -62,6 +64,7 @@ class Reactor(modules.FBFlask):
         else:
             self.last_voltage = cart_voltage
         self.heating = True
+        self.cooling = False
         self.ready = False
         if target:
             self.target = True
@@ -120,6 +123,9 @@ class Reactor(modules.FBFlask):
                 else:
                     if self.stir_task:
                         self.stir_task.complete = True
+            if not self.heating and time.time() - self.heat_last_update_time > self.heat_update_delay:
+                self.cur_temp = self.temp_sensors[0].read_temp()
+                self.heat_last_update_time = time.time()
             with self.stop_lock:
                 if self.stop_cmd:
                     self.stop_cmd = False
