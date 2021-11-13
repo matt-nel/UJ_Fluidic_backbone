@@ -27,6 +27,8 @@ class Reactor(modules.FBFlask):
         self.pid_range = 255
         self.last_voltage = 0
         self.cur_temp = 0.0
+        self.heat_update_delay = 20
+        self.heat_last_update_time = time.time()-30
         self.heating = False
         self.resume_heating = False
         self.stirring = False
@@ -38,7 +40,7 @@ class Reactor(modules.FBFlask):
         self.stir_task = None
         self.heat_time_threshold = 30
         self.temp_change_threshold = 1
-        self.temp_target = 0.0
+        self.target_temp = 0.0
         self.prev_error = 0.0
         self.integral_error = 0.0
         self.prev_time = 0.0
@@ -62,6 +64,7 @@ class Reactor(modules.FBFlask):
         else:
             self.last_voltage = cart_voltage
         self.heating = True
+        self.cooling = False
         self.ready = False
         if target:
             self.target = True
@@ -72,8 +75,18 @@ class Reactor(modules.FBFlask):
 
     def start_stir(self, speed, stir_secs, task):
         self.stirring = True
-        if speed < 2000:
-            self.mag_stirrers[0].start_stir(2000)
+        if 1500 < speed < 3500:
+            self.mag_stirrers[0].start_stir(7200)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(3000)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(speed)
+        elif speed < 1500:
+            self.mag_stirrers[0].start_stir(7200)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(3000)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(1500)
         else:
             self.mag_stirrers[0].start_stir(speed)
         self.stir_start_time = time.time()
@@ -120,6 +133,9 @@ class Reactor(modules.FBFlask):
                 else:
                     if self.stir_task:
                         self.stir_task.complete = True
+            if not self.heating and time.time() - self.heat_last_update_time > self.heat_update_delay:
+                self.cur_temp = self.temp_sensors[0].read_temp()
+                self.heat_last_update_time = time.time()
             with self.stop_lock:
                 if self.stop_cmd:
                     self.stop_cmd = False

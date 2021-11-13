@@ -113,6 +113,8 @@ class StepperMotor:
         :param position: The desired position of the motor. Sets the current step position to be the desired step
         position.
         """
+        if self.reversed_direction:
+            position = -position
         with self.serial_lock:
             self.cmd_stepper.set_current_position(position)
         self.position = position

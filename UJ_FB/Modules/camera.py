@@ -25,4 +25,21 @@ class Camera(modules.Module):
 
     def encode_image(self):
         ret, enc_image = cv.imencode('.png', self.last_image)
-        return enc_image
+        data = enc_image.tobytes()
+        return data
+
+    def send_image(self, listener, metadata, task):
+        num_retries = 0
+        while num_retries < 5:
+            self.capture_image()
+            data = self.encode_image()
+            response, num_retries = listener.send_image(metadata, data, task, 0)
+            if response is not False:
+                if response.ok:
+                    break
+        if num_retries > 4:
+            task.error = True
+            self.write_log("Unable to send image", level=logging.WARNING)
+
+    def resume(self, command_dicts):
+        return True
