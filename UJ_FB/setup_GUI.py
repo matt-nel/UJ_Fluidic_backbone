@@ -17,7 +17,7 @@ def populate_ports():
     if sys.platform.startswith('win'):
         arduino_list = [port for port in serial.tools.list_ports.comports() if 'arduino' in port.description.lower()]
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
-        arduino_list = [port for port in serial.tools.list_ports.comports() if 'ACM' in port.description.lower()]
+        arduino_list = [port for port in serial.tools.list_ports.comports() if 'acm' in port.description.lower()]
     else:
         raise EnvironmentError("Unsupported platform")
 
@@ -716,10 +716,12 @@ class SetupGUI:
             module.mod_type = 'camera'
             module.class_type = "Camera"
             module.mod_config = {"ROI": self.roi}
+            cap.release()
             cv.destroyAllWindows()
             window.destroy()
 
         def cancel():
+            cap.release()
             cv.destroyAllWindows()
             window.destroy()
 
@@ -755,7 +757,6 @@ class SetupGUI:
         accept_butt.grid(row=5, column=1)
         cancel_butt.grid(row=5, column=3)
         video_stream()
-        
 
     def valve_link(self, node_config, window, button):
         """Set up a link between two valves
