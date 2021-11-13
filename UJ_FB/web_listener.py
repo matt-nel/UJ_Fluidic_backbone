@@ -50,7 +50,7 @@ class WebListener:
                 self.test_connection()
             else:
                 self.url = ""
-                print("Could not connect to server, running offline. Update URL to connect\n")
+                self.manager.write_log("Could not connect to server, running offline. ", level=logging.WARNING)
 
     def update_status(self, ready, error=False, reaction_complete=False):
         time_elapsed = time.time() - self.last_error_update
@@ -78,19 +78,37 @@ class WebListener:
 
     def update_execution(self):
         time_elapsed = time.time() - self.last_execution_update
-        if self.valid_connection and time_elapsed > self.polling_time:
-            response = requests.get(self.url + "/status", json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'robot_execute'})
-            response = response.json()
-            execute = response.get("action")
-            self.last_execution_update = time.time()
-            return execute
+        if not self.valid_connection:
+            self.test_connection()
+        elif self.valid_connection and time_elapsed > self.polling_time:
+            try:
+                response = requests.get(self.url + "/status", json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'robot_execute'})
+                response = response.json()
+                execute = response.get("action")
+                self.last_execution_update = time.time()
+                return execute
+            except requests.ConnectionError:
+                self.valid_connection = False
+                return None
         return None
 
-    def send_image(self, image_metadata, img_data):
-        r = requests.post(self.url + '/send_image', json=image_metadata)
-        request_id = r.json().get('request_id')
-        r = requests.post(self.url + '/send_image', data=img_data.tobytes(), params={'request_id': request_id})
-        return r
+    def send_image(self, image_metadata, img_data, task, num_retries):
+        if not self.valid_connection:
+            self.test_connection()
+        try:
+            r = requests.post(self.url + '/send_image', json=image_metadata)
+            if r.ok:
+                request_id = r.json().get('request_id')
+                r = requests.post(self.url + '/send_image', data=img_data, params={'request_id': request_id})
+                if not r.ok:
+                    num_retries += 1
+            return r, num_retries
+        except requests.ConnectionError:
+            self.manager.write_log(f"A connection to {self.url} could not be established, trying again.", level=logging.WARNING)
+            num_retries += 1
+            self.valid_connection = False
+            time.sleep(20)
+            return False, num_retries
 
     def request_reaction(self):
         time_elapsed = time.time() - self.last_reaction_update
@@ -99,7 +117,7 @@ class WebListener:
                 response = requests.get(self.url + '/reaction', json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'get_reaction'})
                 response = response.json()
                 # get the xdl string
-                protocol  = response.get('protocol')
+                protocol = response.get('protocol')
                 if protocol is not None:
                     self.manager.write_log(f"Received reaction {response.get('name')}", level=logging.INFO)
                     self.manager.reaction_name = response.get("name")
@@ -187,7 +205,7 @@ class WebListener:
             reagent_info = reagent_info.split(' ')
             volume = float(reagent_info[0])
             if volume == 0:
-                return
+                return True
             unit = reagent_info[1]
             if unit != 'ml':
                 # assume uL
@@ -221,7 +239,7 @@ class WebListener:
             reagent_info = reagent_info.split(' ')
             volume = float(reagent_info[0])
             if volume == 0:
-                return
+                return True
             unit = reagent_info[1]
             if unit != 'ml':
                 volume = volume/1000
@@ -235,7 +253,7 @@ class WebListener:
                 flow_rate = (volume * 1000) / int(t_time[0])
         else:
             flow_rate = DEFAULT_FLOW
-        self.manager.move_fluid(source, target, volume, flow_rate)
+        self.manager.move_fluid(source, target, volume, flow_rate, transfer=True)
         return True
 
     def process_xdl_stir(self, stir_info):
@@ -244,23 +262,25 @@ class WebListener:
         if reactor is None:
             return False
         reactor_name = reactor.name
-        speed = stir_info.get('stir_speed')
-        speed = speed.split(' ')[0]
-        stir_secs = stir_info.get('time')
-        if stir_secs is None:
-            stir_secs = 0
-        else:
-            stir_secs = stir_secs.split(' ')[0]
         # StopStir
         if 'Stop' in stir_info.tag:
             self.manager.stop_reactor(reactor_name, command='stop_stir')
-        # StartStir
-        elif 'Start' in stir_info.tag:
-            self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=stir_secs, wait=False)
-        # Stir
+            return True
         else:
-            self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=int(stir_secs), wait=True)
-        return True
+            speed = stir_info.get('stir_speed')
+            speed = speed.split(' ')[0]
+            stir_secs = stir_info.get('time')
+            if stir_secs is None:
+                stir_secs = 0
+            else:
+                stir_secs = stir_secs.split(' ')[0]
+            # StartStir
+            if 'Start' in stir_info.tag:
+                self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=stir_secs, wait=False)
+            # Stir
+            else:
+                self.manager.start_stirring(reactor_name, command='start_stir', speed=float(speed), stir_secs=int(stir_secs), wait=True)
+            return True
     
     def process_xdl_heatchill(self, heatchill_info):
         reactor_name = heatchill_info.get('vessel')
@@ -306,7 +326,7 @@ class WebListener:
             # comments: "Picture<picture_no>, wait_user, wait_reason(reason)"
             comments = wait_info.get('comments')
             if comments is None:
-                self.manager.wait(wait_time=wait_time)
+                self.manager.wait(wait_time, {})
             else:
                 add_actions = {}
                 comments = comments.lower()

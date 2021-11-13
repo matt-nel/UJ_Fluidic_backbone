@@ -40,7 +40,7 @@ class Reactor(modules.FBFlask):
         self.stir_task = None
         self.heat_time_threshold = 30
         self.temp_change_threshold = 1
-        self.temp_target = 0.0
+        self.target_temp = 0.0
         self.prev_error = 0.0
         self.integral_error = 0.0
         self.prev_time = 0.0
@@ -75,8 +75,18 @@ class Reactor(modules.FBFlask):
 
     def start_stir(self, speed, stir_secs, task):
         self.stirring = True
-        if speed < 2000:
-            self.mag_stirrers[0].start_stir(2000)
+        if 1500 < speed < 3500:
+            self.mag_stirrers[0].start_stir(7200)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(3000)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(speed)
+        elif speed < 1500:
+            self.mag_stirrers[0].start_stir(7200)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(3000)
+            time.sleep(1.5)
+            self.mag_stirrers[0].start_stir(1500)
         else:
             self.mag_stirrers[0].start_stir(speed)
         self.stir_start_time = time.time()

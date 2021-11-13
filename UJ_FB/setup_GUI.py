@@ -223,7 +223,7 @@ class SetupGUI:
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
                                               "acceleration": 1000},
                             "valve" : {"steps_per_rev": 3200, "enabled_acceleration": True, "speed": 1000,
-                             "max_speed": 3000, "acceleration": 1000}
+                             "max_speed": 1000, "acceleration": 1000}
                             }
         self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
                                                  'device_config': {}}},
@@ -450,6 +450,7 @@ class SetupGUI:
                     node_config.mod_type = 'waste'
                     node_config.class_type = 'FBFlask'
                     node_config.add_params.append(("Contents", "Waste"))
+                    fields += ['Tubing length in mm']
                     node_config.dual = False
                     self.flask_setup(node_config, fields, port_options_window, button)
                 elif variable == 'filter':

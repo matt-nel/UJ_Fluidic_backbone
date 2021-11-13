@@ -57,7 +57,7 @@ class Module:
                     temp_sensor = getattr(cmduino, assoc_devices[item]['cmd_id'])
                     self.temp_sensors.append(devices.TempSensor(temp_sensor, assoc_devices[item]["device_config"], manager.serial_lock))
 
-    def write_log(self, message, level):
+    def write_log(self, message, level=logging.INFO):
         self.manager.write_log(message, level)
 
     def stop(self):

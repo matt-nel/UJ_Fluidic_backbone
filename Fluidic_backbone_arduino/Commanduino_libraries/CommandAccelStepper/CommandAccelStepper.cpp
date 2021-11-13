@@ -529,7 +529,7 @@ void CommandAccelStepper::moveCompleteUpdate(){
 void CommandAccelStepper::checkHeSensor(){
     if (hePin > 0){
             int reading = analogRead(hePin);
-            if (reading <= 510 || reading >= 580)
+            if (reading <= 490 || reading >= 580)
                 magnetsPassed++;
     }
 }

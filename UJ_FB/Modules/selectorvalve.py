@@ -2,12 +2,13 @@ from UJ_FB.Modules import modules
 import time
 import logging
 
-DIFF_THRESHOLD = 20
+MAX_DIFF_THRESHOLD = 50
+MIN_DIFF_THRESHOLD = 20
 ERROR_THRESHOLD = 20
 POS_THRESHOLD = 600
 NEG_THRESHOLD = 490
 HOMING_SPEED = 5000
-OPT_SPEED = 2000
+OPT_SPEED = 1000
 
 
 class SelectorValve(modules.Module):
@@ -83,16 +84,6 @@ class SelectorValve(modules.Module):
         if self.reading < POS_THRESHOLD or self.reading < self.magnet_readings[1]:
             self.home_valve()
         # check magnet positions against config
-        check_value = False
-        for value in self.magnet_readings.values():
-            if 500 < value < 550:
-                check_value = True
-        if check_value:
-            self.check_magnets()
-            self.find_opt(self.magnet_readings[1] + 40)
-        # Counter goes up each time robot started or homes. When counter at 5, check the magnet positions
-        if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 and not check_value:
-            self.check_magnets()
         if self.geared:
             if self.manager.prev_run_config['backlash']['check_backlash'] % 10 == 0 or self.backlash == 0:
                 self.check_backlash()
@@ -101,7 +92,7 @@ class SelectorValve(modules.Module):
         self.current_port = 1
         self.stepper.set_current_position(0)
 
-    def move_to_pos(self, position, check=True):
+    def move_to_pos(self, position, check=True, target=""):
         """Moves the valve to a specific port
 
         Args:
@@ -109,6 +100,7 @@ class SelectorValve(modules.Module):
             task (Task object): Task associated with this function call
         """
         if self.current_port != position:
+            self.write_log(f"{self.name} is moving to position {position} ({target})")
             backlash = 0
             # we need to move backwards
             if self.current_port > position:
@@ -128,6 +120,7 @@ class SelectorValve(modules.Module):
             cur_stepper_pos = int(self.stepper.get_current_position())
             if cur_stepper_pos != self.pos_dict[position]:
                 self.stepper.set_current_position(self.pos_dict[position])
+            self.write_log(f"{self.name} arrived at {position}")
             self.current_port = position
             self.ready = True
 
@@ -145,7 +138,7 @@ class SelectorValve(modules.Module):
                     return
                 continue
             elif target in port[1].name:
-                self.move_to_pos(port[0])
+                self.move_to_pos(port[0], target)
                 return
         self.write_log(f"{target} not found on valve {self.name}", level=logging.WARNING)
         task.error = True
@@ -176,6 +169,7 @@ class SelectorValve(modules.Module):
         """
         Homes the valve using the hall-effect sensor
         """
+        self.write_log(f"{self.name} is homing")
         # Counter goes up each time robot started or homes. When counter at 5, check the magnet positions
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
         self.manager.rc_changes = True
@@ -189,7 +183,7 @@ class SelectorValve(modules.Module):
         self.stepper.set_current_position(0)
         self.reading = self.he_sensor.analog_read()
         # Keep looking for home pos (reading >= max saved reading)
-        while (self.reading < self.magnet_readings[1] - DIFF_THRESHOLD) or (self.reading > 1000) or self.reading < POS_THRESHOLD :
+        while (self.reading < self.magnet_readings[1] - MIN_DIFF_THRESHOLD) or (self.reading > 1000) or self.reading < POS_THRESHOLD :
             self.reading = self.he_sensor.analog_read()
             # if close to home pos
             if self.reading > POS_THRESHOLD:
@@ -213,8 +207,13 @@ class SelectorValve(modules.Module):
         # had to stop unexpectedly
         else:
             self.current_port = None
-        if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0:
+        check_value = False
+        for value in self.magnet_readings.values():
+            if 500 < value < 550:
+                check_value = True
+        if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 or check_value:
             self.check_magnets()
+            self.find_opt(self.magnet_readings[1] + 40)
         self.stepper.set_max_speed(prev_speed)
         self.ready = True
 
@@ -335,34 +334,29 @@ class SelectorValve(modules.Module):
         # if we start on an even position, will pass an additional magnet (magnets on starting position aren't counted)
         if self.current_port % 2 == 0 and position % 2 == 1:
             req_magnets += 1
-        # If position has a magnet, check against the magnets dictionary.
         if magnets_passed < req_magnets:
-            if position in self.magnet_readings:
-                self.reading = self.he_sensors[0].analog_read()
-                if position == 1:
-                    if self.reading < self.magnet_readings[position] + DIFF_THRESHOLD:
-                        self.find_opt(self.magnet_readings[position]+50)
-                        self.reading = self.he_sensor.analog_read()
-                    # if this is still true, we must have lost position.
-                    if self.reading < self.magnet_readings[position] + DIFF_THRESHOLD:
-                        self.home_valve()
-                        self.move_to_pos(position)
-                else:
-                    if self.reading > self.magnet_readings[position] + DIFF_THRESHOLD:
-                        self.find_opt(self.magnet_readings[position]-50)
-                        self.reading = self.he_sensor.analog_read()
-                    # if this is still true, we must have lost position.
-                    if self.reading > self.magnet_readings[position] + DIFF_THRESHOLD and self.times_checked < 2:
-                        self.readings_history.append(self.reading)
-                        self.home_valve()
-                        self.times_checked += 1
-                        self.move_to_pos(position)
-                    # we've homed 3 times, this must be the position
-                    elif self.times_checked >= 2:
-                        self.magnet_readings[position] = min(self.readings_history)
+            self.write_log("Valve encoder error, checking position", level=logging.WARNING)
+            self.home_valve()
+            self.move_to_pos(position)
+        if position in self.magnet_readings:
+            self.reading = self.he_sensors[0].analog_read()
+            if position == 1:
+                if self.reading < self.magnet_readings[position] - MIN_DIFF_THRESHOLD:
+                    self.find_opt(self.magnet_readings[position]+50)
+                    self.reading = self.he_sensor.analog_read()
+                # if this is still true, we must have lost position.
+                if self.reading < self.magnet_readings[position] + MIN_DIFF_THRESHOLD:
+                    self.home_valve()
             else:
-                self.home_valve()
-                self.move_to_pos(position)
+                if self.reading > self.magnet_readings[position] + MIN_DIFF_THRESHOLD:
+                    self.find_opt(self.magnet_readings[position]-50)
+                    self.reading = self.he_sensor.analog_read()
+                # if this is still true, we must have lost position.
+                if self.reading > self.magnet_readings[position] + MIN_DIFF_THRESHOLD and self.times_checked < 2:
+                    self.readings_history.append(self.reading)
+                    self.home_valve()
+                    self.times_checked += 1
+                    self.move_to_pos(position)
             self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
             self.manager.rc_changes = True
         self.times_checked = 0
@@ -463,7 +457,7 @@ class SelectorValve(modules.Module):
             command_home = {'mod_type': 'valve', 'module_name': self.name, 'command': 'home',
                             'parameters': {'wait': True}}
             command_move_pos = {'mod_type': 'valve', 'module_name': self.name, 'command': command_dicts[0]['command'],
-                                'parameters': {'wait': True}}
+                                'parameters': command_dicts[0]['parameters']}
             command_dicts[0] = command_home
             command_dicts.append(command_move_pos)
             return True

@@ -516,7 +516,7 @@ class FluidicBackboneUI:
         self.send_interrupt({'pause': True, 'stop': False, 'resume': False, 'exit': False})
 
     def resume(self):
-        self.pause_butt.configure(text='pause', bg=self.colours['other-button'], command=self.pause)
+        self.pause_butt.configure(text='Pause', bg=self.colours['other-button'], command=self.pause)
         self.send_interrupt({'pause': False, 'stop': False, 'resume': True, 'exit': False})
 
     def send_interrupt(self, parameters):
