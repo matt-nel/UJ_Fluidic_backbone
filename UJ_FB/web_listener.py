@@ -49,7 +49,6 @@ class WebListener:
                 self.url = DEFAULT_URL
                 self.test_connection()
             else:
-                self.url = ""
                 self.valid_connection = False
                 self.manager.write_log("Could not connect to server, running offline. ", level=logging.WARNING)
 

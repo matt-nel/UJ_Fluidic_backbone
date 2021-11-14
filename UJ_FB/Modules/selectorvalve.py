@@ -3,11 +3,11 @@ import time
 import logging
 
 MAX_DIFF_THRESHOLD = 50
-MIN_DIFF_THRESHOLD = 20
+MIN_DIFF_THRESHOLD = 10
 ERROR_THRESHOLD = 20
 POS_THRESHOLD = 600
 NEG_THRESHOLD = 490
-HOMING_SPEED = 5000
+HOMING_SPEED = 3000
 OPT_SPEED = 1000
 
 
@@ -177,7 +177,7 @@ class SelectorValve(modules.Module):
         with self.stop_lock:
             self.stop_cmd = False
         prev_speed = self.stepper.running_speed
-        self.stepper.set_max_speed(HOMING_SPEED)
+        self.stepper.set_running_speed(HOMING_SPEED)
         if self.current_port is not None:
             self.move_to_pos(1, check=False)
         self.stepper.set_current_position(0)
@@ -214,7 +214,7 @@ class SelectorValve(modules.Module):
         if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 or check_value:
             self.check_magnets()
             self.find_opt(self.magnet_readings[1] + 40)
-        self.stepper.set_max_speed(prev_speed)
+        self.stepper.set_running_speed(prev_speed)
         self.ready = True
 
     def find_opt(self, target):
@@ -226,7 +226,7 @@ class SelectorValve(modules.Module):
         Returns:
             bool: True if optimum found, False otherwise
         """
-        self.stepper.set_max_speed(OPT_SPEED)
+        self.stepper.set_running_speed(OPT_SPEED)
         kd, kp = self.pd_constants
         direction = True
         dir_changes = 0
@@ -266,7 +266,7 @@ class SelectorValve(modules.Module):
             error = abs(target - readings[-1])
             errors.append(error)
             if self.check_stop:
-                self.stepper.set_max_speed(HOMING_SPEED)
+                self.stepper.set_running_speed(HOMING_SPEED)
                 return False
             if iters > 10 or dir_changes > 3:
                 self.stepper.move_to(opt_pos)
@@ -274,7 +274,7 @@ class SelectorValve(modules.Module):
                 if opt > self.magnet_readings[1]:
                     self.magnet_readings[1] = opt
                 self.reading = opt
-                self.stepper.set_max_speed(HOMING_SPEED)
+                self.stepper.set_running_speed(HOMING_SPEED)
                 break
         return True
 
@@ -345,7 +345,7 @@ class SelectorValve(modules.Module):
                     self.find_opt(self.magnet_readings[position]+50)
                     self.reading = self.he_sensor.analog_read()
                 # if this is still true, we must have lost position.
-                if self.reading < self.magnet_readings[position] + MIN_DIFF_THRESHOLD:
+                if self.reading < self.magnet_readings[position] - MIN_DIFF_THRESHOLD:
                     self.home_valve()
             else:
                 if self.reading > self.magnet_readings[position] + MIN_DIFF_THRESHOLD:
@@ -357,6 +357,7 @@ class SelectorValve(modules.Module):
                     self.home_valve()
                     self.times_checked += 1
                     self.move_to_pos(position)
+            self.magnet_readings[position] = self.reading()
             self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
             self.manager.rc_changes = True
         self.times_checked = 0

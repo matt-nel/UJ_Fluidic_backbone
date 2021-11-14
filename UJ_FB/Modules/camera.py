@@ -1,4 +1,3 @@
-#todo add camera module class
 from UJ_FB.Modules import modules
 import logging
 import cv2 as cv
@@ -33,10 +32,11 @@ class Camera(modules.Module):
         while num_retries < 5:
             self.capture_image()
             data = self.encode_image()
-            response, num_retries = listener.send_image(metadata, data, task, 0)
+            response, num_retries = listener.send_image(metadata, data, task, num_retries)
             if response is not False:
                 if response.ok:
                     break
+            self.write_log(f"Received response: {response.json()}")
         if num_retries > 4:
             task.error = True
             self.write_log("Unable to send image", level=logging.WARNING)

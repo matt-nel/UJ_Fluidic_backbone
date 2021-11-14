@@ -222,8 +222,8 @@ class SetupGUI:
                                           "max_speed": 10000, "acceleration": 1000},
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
                                               "acceleration": 1000},
-                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": True, "speed": 1000,
-                             "max_speed": 1000, "acceleration": 1000}
+                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 2000,
+                             "max_speed": 4000, "acceleration": 1000}
                             }
         self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
                                                  'device_config': {}}},
@@ -236,7 +236,7 @@ class SetupGUI:
                               'E1': {'stepperE1': {'cmd_id': 'STPE1',
                                                    'device_config': {}}}}
         self.default_running_config = {
-            "url": "",
+            "url": "http://127.0.0.1:5000/robots_api",
             "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
                                                                                                "5": 0, "7": 0, "9": 0}, 'check_magnets': 0},
             "backlash": {"check_backlash": 0, 'backlash_steps': 0}}
