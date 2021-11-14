@@ -226,6 +226,7 @@ class SelectorValve(modules.Module):
         Returns:
             bool: True if optimum found, False otherwise
         """
+        prev_speed = self.stepper.running_speed
         self.stepper.set_running_speed(OPT_SPEED)
         kd, kp = self.pd_constants
         direction = True
@@ -266,7 +267,7 @@ class SelectorValve(modules.Module):
             error = abs(target - readings[-1])
             errors.append(error)
             if self.check_stop:
-                self.stepper.set_running_speed(HOMING_SPEED)
+                self.stepper.set_running_speed(prev_speed)
                 return False
             if iters > 10 or dir_changes > 3:
                 self.stepper.move_to(opt_pos)
@@ -274,7 +275,7 @@ class SelectorValve(modules.Module):
                 if opt > self.magnet_readings[1]:
                     self.magnet_readings[1] = opt
                 self.reading = opt
-                self.stepper.set_running_speed(HOMING_SPEED)
+                self.stepper.set_running_speed(prev_speed)
                 break
         return True
 
