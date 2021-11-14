@@ -284,6 +284,8 @@ class SetupGUI:
         def add_com_port(port_name=''):
             if port_name == '':
                 port = self.text_temp
+                if "tty" in port:
+                    port = '/dev/' + port
                 self.cmd_devices.ios.append({"port": port})
                 self.write_message(f"Port {port} added")
                 com_port_entry.delete(0, 'end')

@@ -50,6 +50,7 @@ class WebListener:
                 self.test_connection()
             else:
                 self.url = ""
+                self.valid_connection = False
                 self.manager.write_log("Could not connect to server, running offline. ", level=logging.WARNING)
 
     def update_status(self, ready, error=False, reaction_complete=False):
