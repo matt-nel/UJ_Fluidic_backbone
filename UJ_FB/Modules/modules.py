@@ -95,7 +95,6 @@ class FBFlask(Module):
         if vol < 0:
             if self.cur_vol + vol < 0:
                 self.manager.write_log(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
-                return False
         else:
             if self.cur_vol + vol > self.max_volume:
                 self.write_log(f'Max volume of {self.name} would be exceeded', level=logging.WARNING)

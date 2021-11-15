@@ -333,6 +333,8 @@ class Manager(Thread):
                 self.write_running_config("Configs\\running_config.json")
         self.stop_flag = True
         self.pause_all()
+        for cam in self.cameras:
+            cam.cap.release()
         self.gui_main.primary.quit()
 
     def add_to_queue(self, commands, queue=None):
