@@ -163,8 +163,12 @@ void CommandAccelStepper::update()
         posCount++;
         if (posCount < numPositions){
             if (fwd){
+                if (!accelerationEnabled)
+                    stepper->setSpeed(lastSetSpeed);
                 stepper->move(stepsPerPort);
             }else{
+                if (!accelerationEnabled)
+                    stepper->setSpeed(lastSetSpeed);
                 stepper->move(-stepsPerPort);
             }
         }else {

@@ -222,7 +222,7 @@ class SetupGUI:
                                           "max_speed": 10000, "acceleration": 1000},
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
                                               "acceleration": 1000},
-                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 2000,
+                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 500,
                              "max_speed": 4000, "acceleration": 1000}
                             }
         self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
