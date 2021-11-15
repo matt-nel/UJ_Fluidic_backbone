@@ -575,7 +575,7 @@ class SetupGUI:
                     module.name = syringe_name
                     module.mod_type = 'syringe'
                     module.class_type = 'SyringePump'
-                    module.mod_config = {'screw_lead': 8, 'linear_stepper': True}
+                    module.mod_config = {'screw_lead': 8, 'linear_stepper': True, "backlash": 780}
                     self.motor_setup(syringe_name, stepper_name, motor_cxn, config_type='default')
                     self.config_flags[0], self.config_flags[2] = False, False
                     self.read_fields(node_config)

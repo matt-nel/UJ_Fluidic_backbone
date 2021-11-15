@@ -340,7 +340,7 @@ class WebListener:
                     elif "wait_user" in comment:
                         add_actions['wait_user'] =True
                     if "wait_reason" in comment:
-                        reason = comment[comment.index('('):-1]
+                        reason = comment[comment.index('(')+1:-1]
                         add_actions['wait_reason'] = reason
                 self.manager.wait(wait_time=wait_time, actions=add_actions)
         return True

@@ -1,3 +1,4 @@
+import sys
 import os
 import logging
 import json
@@ -8,7 +9,7 @@ import math
 from networkx.readwrite.json_graph import node_link_graph
 from queue import Queue
 from threading import Thread, Lock
-from commanduino import CommandManager
+import commanduino
 import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
 import UJ_FB.web_listener as  web_listener
 from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules, camera
@@ -47,7 +48,7 @@ class Manager(Thread):
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
         cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
-        self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
+        self.cmd_mng = commanduino.CommandManager.from_configfile(cm_config, simulation)
         self.module_info = self.json_loader("Configs/module_info.json")
         self.key = self.module_info['key']
         self.id = self.module_info['id']
@@ -99,15 +100,9 @@ class Manager(Thread):
         self.xdl = ''
         if gui:
             self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
-        else:
-            self.gui_main = None
         if web_enabled:
             self.listener.test_connection()
         self.start()
-
-    def mainloop(self):
-        if self.gui_main is not None:
-            self.gui_main.primary.mainloop()
 
     def update_url(self, url):
         self.listener.update_url(url)
@@ -123,7 +118,7 @@ class Manager(Thread):
     def write_log(self, message, level=logging.INFO):
         if self.gui_main is not None:
             if level > 9:
-                self.gui_main.write_message(message)
+                self.gui_main.queue.put(('log', message))
         message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
         if level > 49:
             self.logger.critical(message)
@@ -250,7 +245,7 @@ class Manager(Thread):
         This is the primary loop of the program. This loop monitors for errors or interrupts, dispatches tasks,
          updates the server and has logic to handle pauses.
         """
-        execute = self.execute
+        heat_update_time = time.time()
         while not self.exit_flag:
             self.check_task_completion()
             # interrupt lock used to synchronise access to pause, stop, and exit flags
@@ -326,17 +321,19 @@ class Manager(Thread):
             elif self.error and not self.error_queue.empty():
                 command_dict = self.error_queue.get(block=False)
                 self.command_module(command_dict)
-            if self.gui_main is not None:
+            if self.gui_main is not None and time.time() - heat_update_time > 5:
+                heat_update_time = time.time()
                 for r in self.reactors:
                     r = self.reactors[r]
                     temp = round(r.cur_temp)
                     if temp < 0:
                         temp = "-"
-                    self.gui_main.update_temps(r.name, temp)
+                    self.gui_main.queue.put(("temp", (r.name, temp)))
             if self.rc_changes:
                 self.write_running_config("Configs\\running_config.json")
+        self.stop_flag = True
         self.pause_all()
-        self.cmd_mng.commandhandlers[0].stop()
+        self.gui_main.primary.quit()
 
     def add_to_queue(self, commands, queue=None):
         """

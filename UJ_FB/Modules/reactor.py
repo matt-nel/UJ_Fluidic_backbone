@@ -51,6 +51,7 @@ class Reactor(modules.FBFlask):
         self.stir_time = 0.0
         self.stir_start_time = 0.0
         self.stir_rem_time = 0.0
+        self.exit = False
         self.thread = Thread(target=self.run, name=self.name, daemon=True)
         self.thread.start()
 
@@ -92,7 +93,7 @@ class Reactor(modules.FBFlask):
         self.write_log(f'{self.name} started stirring at {speed}', level=logging.INFO)
 
     def run(self):
-        while True:
+        while not self.exit:
             time.sleep(1/self.polling_rate)
             if self.target:
                 self.target = False

@@ -32,7 +32,7 @@ class SyringePump(modules.Module):
         self.current_vol = 0.0
         self.remaining_volume = 0.0
         self.last_dir = "D"
-        self.backlash = 780
+        self.backlash = module_config["backlash"]
         self.contents = ['empty', 0.0]
         self.contents_history = []
         self.stepper = self.steppers[0]
