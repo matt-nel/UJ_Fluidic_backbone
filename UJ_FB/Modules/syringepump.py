@@ -37,6 +37,7 @@ class SyringePump(modules.Module):
         self.contents_history = []
         self.stepper = self.steppers[0]
         self.steps_per_rev = self.stepper.steps_per_rev
+        self.valve = None
 
     def set_max_volume(self, volume):
         self.max_volume = float(volume) * 1000.0
@@ -103,10 +104,10 @@ class SyringePump(modules.Module):
                 self.stepper.move_steps(actual_steps)
                 # Blocked until move complete or stop command received
                 if self.stepper.encoder_error:
-                    self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
-                    task.error = True
-                    # will have skipped steps, for at least two gap intervals.
-                    new_step_pos = self.stepper.get_current_position() - 400
+                    new_step_pos = self.correct_error(actual_steps)
+                    if self.stepper.encoder_error:
+                        task.error = True
+                        self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
                 else:
                     new_step_pos = self.stepper.get_current_position()
                 # if aspirating, step change is neg.
@@ -127,6 +128,7 @@ class SyringePump(modules.Module):
                 self.last_dir = direction
             self.ready = True
             time.sleep(flow_rate/5000)
+            self.error_count = 0
             return
         self.remaining_volume = abs(volume)
         self.ready = True
@@ -228,6 +230,14 @@ class SyringePump(modules.Module):
         self.contents[1] = vol
         self.position = self.syringe_length - ((self.max_volume - vol)/self.max_volume)*self.syringe_length
         self.stepper.set_current_position((self.position/8)*3200)
+
+    def correct_error(self, steps):
+        self.write_log(f"{self.name} can't move. Moving back:")
+        self.stepper.encoder_error = False
+        self.stepper.move_to(self.cur_step_pos)
+        self.manager.correct_position_error(self)
+        self.stepper.move(steps)
+        return self.stepper.get_current_position()
 
     def resume(self, command_dicts):
         """Resumes a paused move

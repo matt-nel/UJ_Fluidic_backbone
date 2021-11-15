@@ -208,7 +208,9 @@ class Manager(Thread):
                 self.valves[name].ports[port] = g.nodes[node_name]['object']
                 if "valve" in node_name:
                     self.valves[name].adj_valves.append((node_name, port))
-            self.valves[name].syringe = self.valves[name].ports[-1]
+            syringe = self.valves[name].ports[-1]
+            self.valves[name].syringe = syringe
+            syringe.valve = self.valves[name]
 
     def init_syringes(self):
         """
@@ -1045,6 +1047,13 @@ class Manager(Thread):
             {'volume': volume, 'flow_rate': flow_rate, 'target': source_syringe.name,
              'direction': "A", 'wait': True}})
         return commands
+
+    def correct_position_error(self, syringe):
+        valve = syringe.valve
+        current_valve_port = valve.current_port
+        self.write_log("Repositioning valve")
+        valve.home()
+        valve.move_to_pos(current_valve_port)
 
     def start_stirring(self, reactor_name, command, speed, stir_secs, wait):
         params = {'speed': speed, "stir_secs": stir_secs, "wait": wait}

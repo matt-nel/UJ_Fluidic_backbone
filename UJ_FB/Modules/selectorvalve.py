@@ -358,7 +358,7 @@ class SelectorValve(modules.Module):
                     self.home_valve()
                     self.times_checked += 1
                     self.move_to_pos(position)
-            self.magnet_readings[position] = self.reading()
+            self.magnet_readings[position] = self.reading
             self.manager.prev_run_config['magnet_readings'][self.name] = self.magnet_readings
             self.manager.rc_changes = True
         self.times_checked = 0
