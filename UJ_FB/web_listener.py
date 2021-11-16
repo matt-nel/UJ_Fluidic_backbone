@@ -216,9 +216,9 @@ class WebListener:
             # flow should be in uL/min
             a_time = a_time.split(' ')
             if a_time[1] == 's':
-                flow_rate = (volume*1000)/(int(a_time[0])/60)
+                flow_rate = (volume*1000)/(float(a_time[0])/60)
             else:
-                flow_rate = (volume*1000)/int(a_time[0])
+                flow_rate = (volume*1000)/float(a_time[0])
         else:
             flow_rate = DEFAULT_FLOW
         self.manager.move_fluid(source, target, volume, flow_rate)
@@ -248,9 +248,9 @@ class WebListener:
             # uL/min
             t_time = t_time.split(' ')
             if t_time[1] == 's':
-                flow_rate = (volume * 1000) / (int(t_time[0]) / 60)
+                flow_rate = (volume * 1000) / (float(t_time[0]) / 60)
             else:
-                flow_rate = (volume * 1000) / int(t_time[0])
+                flow_rate = (volume * 1000) / float(t_time[0])
         else:
             flow_rate = DEFAULT_FLOW
         self.manager.move_fluid(source, target, volume, flow_rate, transfer=True)

@@ -239,7 +239,8 @@ class SetupGUI:
             "url": "http://127.0.0.1:5000/robots_api",
             "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
                                                                                                "5": 0, "7": 0, "9": 0}, 'check_magnets': 0},
-            "backlash": {"check_backlash": 0, 'backlash_steps': 0}}
+            "valve_backlash": {"check_backlash": 0, 'backlash_steps': 0},
+            "valve_pos": {"valve1": None, "valve2": None}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
         self.used_he_pins = []

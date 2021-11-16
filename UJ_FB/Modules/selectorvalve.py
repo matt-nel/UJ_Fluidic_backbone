@@ -7,7 +7,7 @@ MIN_DIFF_THRESHOLD = 10
 ERROR_THRESHOLD = 20
 POS_THRESHOLD = 600
 NEG_THRESHOLD = 490
-HOMING_SPEED = 2000
+HOMING_SPEED = 1500
 OPT_SPEED = 1000
 
 
@@ -42,7 +42,7 @@ class SelectorValve(modules.Module):
         self.times_checked = 0
         self.readings_history = []
         self.adj_valves = []
-        self.current_port = None
+        self.current_port = self.manager.prev_run_config["valve_pos"][self.name]
         # kd, kp
         self.pd_constants = [1.5, 0.5]
         self.check_spd = 3000
@@ -71,17 +71,21 @@ class SelectorValve(modules.Module):
         """
         Homes the valve before use
         """
+        if self.current_port is not None:
+            self.stepper.set_current_position(self.pos_dict[self.current_port])
+            self.move_to_pos(1, check=False)
         self.reading = self.he_sensors[0].analog_read()
         # if reading near positive magnet
         if self.reading > POS_THRESHOLD:
             self.find_opt(POS_THRESHOLD + 150)
         # if near negative magnet
         elif self.reading < NEG_THRESHOLD:
-            self.find_opt(NEG_THRESHOLD -  150)
+            self.find_opt(NEG_THRESHOLD - 150)
             self.check_all_positions()
         # ended up between magnets
         self.reading = self.he_sensor.analog_read()
         if self.reading < POS_THRESHOLD or self.reading < self.magnet_readings[1]:
+            self.current_port = None
             self.home_valve()
         # check magnet positions against config
         if self.geared:
