@@ -1,7 +1,7 @@
 from UJ_FB.Modules import modules
 import logging
 import cv2 as cv
-import numpy as np
+from threading import Thread, Lock
 
 
 class Camera(modules.Module):
@@ -13,14 +13,26 @@ class Camera(modules.Module):
         module_config = module_info['mod_config']
         self.roi = module_config['ROI']
         self.cap = cv.VideoCapture(0)
-        self.last_image = np.array([]) 
+        self.last_frame = None
+        self.frame_lock = Lock()
+        self.capture_thread = Thread(target=self.read_frames)
+        self.exit_flag = False
+
+    def read_frames(self):
+        while not self.exit_flag:
+            ret, frame = self.cap.read()
+            if ret:
+                with self.frame_lock:
+                    self.last_frame = frame
+        self.cap.release()
 
     def capture_image(self):
-        ret, frame = self.cap.read()
-        if not ret:
-            self.write_log("Unable to receive frame from video stream", level=logging.ERROR)
-        else:
-            self.last_image = frame
+        with self.frame_lock:
+            if self.last_frame is None:
+                self.write_log("Unable to receive frame from video stream", level=logging.ERROR)
+            else:
+                new_frame = self.last_frame.copy()
+                return new_frame
 
     def encode_image(self):
         ret, enc_image = cv.imencode('.png', self.last_image)
