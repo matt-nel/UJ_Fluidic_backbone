@@ -239,7 +239,7 @@ class SetupGUI:
             "url": "http://127.0.0.1:5000/robots_api",
             "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
                                                                                                "5": 0, "7": 0, "9": 0}, 'check_magnets': 0},
-            "valve_backlash": {"check_backlash": 0, 'backlash_steps': 0},
+            "valve_backlash": {"valve1": {"check_backlash": 0, 'backlash_steps': 0}, "valve2": {"check_backlash": 0, "backlash_steps": 0}},
             "valve_pos": {"valve1": None, "valve2": None}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
@@ -285,12 +285,12 @@ class SetupGUI:
         def add_com_port(port_name=''):
             if port_name == '':
                 port = self.text_temp
-                if "tty" in port:
-                    port = '/dev/' + port
                 self.cmd_devices.ios.append({"port": port})
                 self.write_message(f"Port {port} added")
                 com_port_entry.delete(0, 'end')
             else:
+                if "tty" in port_name:
+                    port = '/dev/' + port_name
                 self.cmd_devices.ios.append({"port": port_name})
                 self.write_message(f"Port {port_name} added")
 
