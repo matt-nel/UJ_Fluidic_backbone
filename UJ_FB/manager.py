@@ -133,10 +133,9 @@ class Manager(Thread):
 
     def write_running_config(self, fp):
         fp = os.path.join(self.script_dir, fp)
-        rc_file = open(fp, 'w+')
-        running_config = json.dumps(self.prev_run_config, indent=4)
-        rc_file.write(running_config)
-        rc_file.close()
+        with open(fp, 'w+') as rc_file:
+            running_config = json.dumps(self.prev_run_config, indent=4)
+            rc_file.write(running_config)
         self.rc_changes = False
 
     def populate_modules(self):

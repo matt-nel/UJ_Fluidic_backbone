@@ -213,7 +213,7 @@ class SelectorValve(modules.Module):
             self.current_port = None
         check_value = False
         for value in self.magnet_readings.values():
-            if 500 < value < 550:
+            if 500 < value < 550 or value == 0:
                 check_value = True
         if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 or check_value:
             self.check_magnets()

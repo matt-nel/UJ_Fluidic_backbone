@@ -32,19 +32,15 @@ class Camera(modules.Module):
             if self.last_frame is None:
                 self.write_log("Unable to receive frame from video stream", level=logging.ERROR)
             else:
-                new_frame = self.last_frame.copy()
-                return new_frame
-
-    def encode_image(self):
-        ret, enc_image = cv.imencode('.png', self.last_image)
-        data = enc_image.tobytes()
-        return data
+                frame = self.last_frame
+                return frame
 
     def send_image(self, listener, metadata, task):
         num_retries = 0
         while num_retries < 5:
-            self.capture_image()
-            data = self.encode_image()
+            frame = self.capture_image()
+            ret, enc_image = cv.imencode('.png', frame)
+            data = enc_image.tobytes()
             response, num_retries = listener.send_image(metadata, data, task, num_retries)
             if response is not False:
                 if response.ok:
