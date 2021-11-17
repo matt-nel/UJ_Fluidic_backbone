@@ -17,6 +17,7 @@ class Camera(modules.Module):
         self.frame_lock = Lock()
         self.capture_thread = Thread(target=self.read_frames)
         self.exit_flag = False
+        self.capture_thread.start()
 
     def read_frames(self):
         while not self.exit_flag:

@@ -78,16 +78,14 @@ class WebListener:
 
     def update_execution(self):
         time_elapsed = time.time() - self.last_execution_update
-        if not self.valid_connection:
-            self.test_connection()
-        elif self.valid_connection and time_elapsed > self.polling_time:
+        if self.valid_connection and time_elapsed > self.polling_time:
             try:
                 response = requests.get(self.url + "/status", json={'robot_id': self.id, 'robot_key': self.key, 'cmd': 'robot_execute'})
                 response = response.json()
                 execute = response.get("action")
                 self.last_execution_update = time.time()
                 return execute
-            except requests.ConnectionError:
+            except (requests.ConnectionError, json.JSONDecodeError) as e:
                 self.valid_connection = False
                 return None
         return None

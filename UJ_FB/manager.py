@@ -336,7 +336,7 @@ class Manager(Thread):
         self.stop_flag = True
         self.pause_all()
         for cam in self.cameras:
-            self.cameras[cam].cap.release()
+            self.cameras[cam].exit_flag = True
         for valve in self.valves:
             self.prev_run_config['valve_pos'][valve] = self.valves[valve].current_port
         self.write_running_config("Configs\\running_config.json")

@@ -216,7 +216,7 @@ class LinearStepperMotor(StepperMotor):
         moving = True
         prev_time = time.time()
         while moving:
-            if time.time() > prev_time + 0.5:
+            if time.time() > prev_time + 0.2:
                 if not self.is_moving:
                     moving = False
                     self.encoder_error = self.cmd_stepper.encoder_error

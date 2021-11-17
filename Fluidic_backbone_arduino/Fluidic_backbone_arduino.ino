@@ -71,7 +71,7 @@ void setup() {
   cmdStpy.registerToCommandManager(cmdMng, "STPY");
   
   cmdStpz.registerToCommandManager(cmdMng, "STPZ");
-  cmdStpz.setMagThresholds(580, 480);
+  cmdStpz.setMagThresholds(580, 490);
   
   cmdStpe0.registerToCommandManager(cmdMng, "STPE0");
   cmdStpe1.registerToCommandManager(cmdMng, "STPE1");
