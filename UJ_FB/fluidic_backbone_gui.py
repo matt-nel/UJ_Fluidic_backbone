@@ -171,7 +171,7 @@ class FluidicBackboneUI:
         stir_button = tk.Button(self.reactor_frame, text='Stirring', font=self.fonts['buttons'], padx=5, bg=self.colours['other-button'], fg='white',
                                command=lambda: self.stir_reactor(reactor_name, reactor_print_name))
 
-        self.reactor_labels[reactor_name] = tk.Label(self.reactor_frame, text="- °C", font=self.fonts['labels'], padx=5, bg=self.colours['form-background'])
+        self.reactor_labels[reactor_name] = tk.Label(self.reactor_frame, text="- °C", font=self.fonts['labels'], padx=5, width=4, bg=self.colours['form-background'])
         self.reactor_labels[reactor_name].grid(row=row, column=3)
 
         heat_button.grid(row=row, column=1)
