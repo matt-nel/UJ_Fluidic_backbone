@@ -60,7 +60,7 @@ class SelectorValve(modules.Module):
             self.spr *= gear_ratio
             self.stepper.reverse_direction(True)
             self.geared = True
-            self.backlash = self.manager.prev_run_config['backlash']['backlash_steps']
+            self.backlash = self.manager.prev_run_config['valve_backlash'][self.name]['backlash_steps']
         else:
             self.geared = False
         if self.spr != 3200:
@@ -89,10 +89,10 @@ class SelectorValve(modules.Module):
             self.home_valve()
         # check magnet positions against config
         if self.geared:
-            if self.manager.prev_run_config['backlash']['check_backlash'] % 10 == 0 or self.backlash == 0:
+            if self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] % 10 == 0 or self.backlash == 0:
                 self.check_backlash()
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
-        self.manager.prev_run_config['backlash']['check_backlash'] += 1
+        self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] += 1
         self.current_port = 1
         self.stepper.set_current_position(0)
 
@@ -400,7 +400,7 @@ class SelectorValve(modules.Module):
             last_reading = reading
             reading = self.he_sensor.analog_read()
         self.backlash = i * 10
-        self.manager.prev_run_config['backlash']['backlash'] = self.backlash
+        self.manager.prev_run_config['valve_backlash'][self.name]['backlash'] = self.backlash
 
     def zero(self):
         """
