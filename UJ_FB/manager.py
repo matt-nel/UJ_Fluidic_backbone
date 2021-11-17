@@ -1,3 +1,4 @@
+import sys
 import os
 import logging
 import json
@@ -8,7 +9,7 @@ import math
 from networkx.readwrite.json_graph import node_link_graph
 from queue import Queue
 from threading import Thread, Lock
-from commanduino import CommandManager
+import commanduino
 import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
 import UJ_FB.web_listener as  web_listener
 from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules, camera
@@ -47,7 +48,7 @@ class Manager(Thread):
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
         cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
-        self.cmd_mng = CommandManager.from_configfile(cm_config, simulation)
+        self.cmd_mng = commanduino.CommandManager.from_configfile(cm_config, simulation)
         self.module_info = self.json_loader("Configs/module_info.json")
         self.key = self.module_info['key']
         self.id = self.module_info['id']
@@ -99,15 +100,9 @@ class Manager(Thread):
         self.xdl = ''
         if gui:
             self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
-        else:
-            self.gui_main = None
         if web_enabled:
             self.listener.test_connection()
         self.start()
-
-    def mainloop(self):
-        if self.gui_main is not None:
-            self.gui_main.primary.mainloop()
 
     def update_url(self, url):
         self.listener.update_url(url)
@@ -123,7 +118,7 @@ class Manager(Thread):
     def write_log(self, message, level=logging.INFO):
         if self.gui_main is not None:
             if level > 9:
-                self.gui_main.write_message(message)
+                self.gui_main.queue.put(('log', message))
         message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
         if level > 49:
             self.logger.critical(message)
@@ -191,7 +186,8 @@ class Manager(Thread):
                     node = g.nodes[n]
                     node['object'] = syringe
                     syringe.set_max_volume(node['Maximum volume'])
-                    syringe.change_contents(node['Contents'], float(node['Current volume']) * 1000)
+                    syringe.contents[1][0] = node['Contents']
+                    syringe.contents[1][1] = float(node['Current volume']) * 1000
                     syringe.set_pos(node['Current volume'])
                 elif 'valve' in mod_type:
                     valves_list.append(n)
@@ -208,7 +204,9 @@ class Manager(Thread):
                 self.valves[name].ports[port] = g.nodes[node_name]['object']
                 if "valve" in node_name:
                     self.valves[name].adj_valves.append((node_name, port))
-            self.valves[name].syringe = self.valves[name].ports[-1]
+            syringe = self.valves[name].ports[-1]
+            self.valves[name].syringe = syringe
+            syringe.valve = self.valves[name]
 
     def init_syringes(self):
         """
@@ -248,7 +246,7 @@ class Manager(Thread):
         This is the primary loop of the program. This loop monitors for errors or interrupts, dispatches tasks,
          updates the server and has logic to handle pauses.
         """
-        execute = self.execute
+        heat_update_time = time.time()
         while not self.exit_flag:
             self.check_task_completion()
             # interrupt lock used to synchronise access to pause, stop, and exit flags
@@ -257,6 +255,7 @@ class Manager(Thread):
                 error = self.error
                 if self.web_enabled:
                     execute = self.listener.update_execution()
+                    self.execute = execute
                 else:
                     execute = self.execute
                 # We have received a command to stop or start execution
@@ -324,17 +323,24 @@ class Manager(Thread):
             elif self.error and not self.error_queue.empty():
                 command_dict = self.error_queue.get(block=False)
                 self.command_module(command_dict)
-            if self.gui_main is not None:
+            if self.gui_main is not None and time.time() - heat_update_time > 5:
+                heat_update_time = time.time()
                 for r in self.reactors:
                     r = self.reactors[r]
                     temp = round(r.cur_temp)
                     if temp < 0:
                         temp = "-"
-                    self.gui_main.update_temps(r.name, temp)
+                    self.gui_main.queue.put(("temp", (r.name, temp)))
             if self.rc_changes:
                 self.write_running_config("Configs\\running_config.json")
+        self.stop_flag = True
         self.pause_all()
-        self.cmd_mng.commandhandlers[0].stop()
+        for cam in self.cameras:
+            self.cameras[cam].cap.release()
+        for valve in self.valves:
+            self.prev_run_config['valve_pos'][valve] = self.valves[valve].current_port
+        self.write_running_config("Configs\\running_config.json")
+        self.gui_main.primary.quit()
 
     def add_to_queue(self, commands, queue=None):
         """
@@ -387,7 +393,6 @@ class Manager(Thread):
         """
         Begins execution of the queued actions
         """
-        self.execute = 1
         with self.interrupt_lock:
             self.pause_flag = True
             self.interrupt = True
@@ -512,6 +517,7 @@ class Manager(Thread):
             volume = parameters["volume"]
             flow_rate = parameters["flow_rate"]
             direction = parameters["direction"]
+            air = parameters.get('air')
             track_volume = parameters.get("track_volume")
             if not track_volume and track_volume is not None:
                 target = None
@@ -528,7 +534,7 @@ class Manager(Thread):
                 parameters['target'] = self.find_target(target)
                 target = parameters['target']
             cmd_thread = Thread(target=self.syringes[name].move_syringe, name=name + 'move',
-                                args=(target, volume, flow_rate, direction, new_task))
+                                args=(target, volume, flow_rate, direction, air, new_task))
         elif command == 'home':
             cmd_thread = Thread(target=self.syringes[name].home, name=name + 'home', args=(new_task,))
         elif command == 'jog':
@@ -636,7 +642,7 @@ class Manager(Thread):
         """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if self.flasks[flask].contents in reagent_name:
+            if self.flasks[flask].contents[0] in reagent_name:
                 return self.flasks[flask].name
         return ""
 
@@ -886,12 +892,12 @@ class Manager(Thread):
             # Command to aspirate air to fill dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
                                     'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
-                                                   'direction': 'A', 'wait': True}})
+                                                   'direction': 'A', 'air': True, 'wait': True}})
         else:
             # dispense dead volume of air into target, emptying the dead volume in the tube
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
                                     'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
-                                                   'direction': 'D', 'wait': True}})
+                                                   'direction': 'D', 'air': True, 'wait': True}})
         return pipelined_steps, dead_volume
 
     def flush_transfer_dead_volume(self, valve, source, intake):
@@ -911,7 +917,7 @@ class Manager(Thread):
             # Command to aspirate syringe to remove dead volume - doesn't update volumes
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
                                     'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
-                                                   'direction': 'A', 'wait': True}})
+                                                   'direction': 'A', 'air': True, 'wait': True}})
         else:
             # Command to index valve to required position for outlet
             pipelined_steps.append({'mod_type': 'valve', 'module_name': valve.name, 'command': 'target',
@@ -919,7 +925,7 @@ class Manager(Thread):
             # Command to dispense air to blow out dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
                                     'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': source,
-                                                   'direction': 'D', 'wait': True}})
+                                                   'direction': 'D', 'air': True, 'wait': True}})
         return pipelined_steps, dead_volume
 
     def flush_valve_dead_volume(self, source, valves):
@@ -1045,6 +1051,13 @@ class Manager(Thread):
             {'volume': volume, 'flow_rate': flow_rate, 'target': source_syringe.name,
              'direction': "A", 'wait': True}})
         return commands
+
+    def correct_position_error(self, syringe):
+        valve = syringe.valve
+        current_valve_port = valve.current_port
+        self.write_log("Repositioning valve")
+        valve.home()
+        valve.move_to_pos(current_valve_port)
 
     def start_stirring(self, reactor_name, command, speed, stir_secs, wait):
         params = {'speed': speed, "stir_secs": stir_secs, "wait": wait}

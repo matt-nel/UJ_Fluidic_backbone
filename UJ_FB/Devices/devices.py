@@ -1,4 +1,5 @@
 import math
+from commanduino.exceptions import CMDeviceReplyTimeout
 
 
 class Device:
@@ -39,11 +40,19 @@ class TempSensor(Device):
     def __init__(self, ts_obj, device_config, s_lock):
         super(TempSensor, self).__init__(ts_obj, s_lock)
         self.coefficients = device_config['SH_C']
+        self.last_temp = 0.0
 
     def read_temp(self):
         v = []
+        num_readings = 0
         for i in range(5):
-            v.append(self.analog_read())
+            try:
+                v.append(self.analog_read())
+                num_readings += 1
+            except CMDeviceReplyTimeout:
+                pass
+        if num_readings < 1:
+            return self.last_temp
         v_ave = sum(v)/5
         v_ave = (v_ave/1023) * 5.00
         if v_ave == 5.00:
@@ -51,8 +60,8 @@ class TempSensor(Device):
         r2 = (4700*v_ave)/(5.00-v_ave)
         rln = math.log(r2, math.e)
         a, b, c = self.coefficients
-        temp = 1/(a + (b * rln) + (c * pow(rln, 3))) - 273.15
-        return temp
+        self.last_temp = 1/(a + (b * rln) + (c * pow(rln, 3))) - 273.15
+        return self.last_temp
 
 
 class Heater(Device):

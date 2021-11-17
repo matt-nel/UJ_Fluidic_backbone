@@ -17,7 +17,11 @@
 class LinearAccelStepperActuator {
   public:
     LinearAccelStepperActuator();
-    LinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin=-1);
+    LinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin, int* myEncoderCount);
+
+    bool checkEncoder();
+    void calculateInterval(int newSpeed);
+    void startMove();
 
     AccelStepper *stepper;
     int homeSwitchPin;
@@ -27,7 +31,10 @@ class LinearAccelStepperActuator {
     void home();
     void update();
 
-    boolean homeSwitchState();
+    int* encoderCount;
+    int reqEncoderCount;
+
+    bool homeSwitchState();
     boolean isMoving();
 
     void move(long relativeSteps);
@@ -55,14 +62,21 @@ class LinearAccelStepperActuator {
 
   private:
 
-    boolean homing;
-    boolean moving;
-    boolean accelerationEnabled;
+    bool homing;
+    bool moving;
+    bool accelerationEnabled;
 
     float lastSetSpeed;
+    float lastSetAcceleration;
+    bool accelerating;
 
+    unsigned long chkTime, lastTime, motionStart;
+
+    int timeInterval, accInterval;
+    int stepsPerRev = 3200;
+    int numGaps = 8;
+  
     boolean revertSwitchEnabled;
-
 };
 
 #endif

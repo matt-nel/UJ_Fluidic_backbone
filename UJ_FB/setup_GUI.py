@@ -17,7 +17,7 @@ def populate_ports():
     if sys.platform.startswith('win'):
         arduino_list = [port for port in serial.tools.list_ports.comports() if 'arduino' in port.description.lower()]
     elif sys.platform.startswith('linux') or sys.platform.startswith('cygwin'):
-        arduino_list = [port for port in serial.tools.list_ports.comports() if 'ACM' in port.description.lower()]
+        arduino_list = [port for port in serial.tools.list_ports.comports() if 'acm' in port.description.lower()]
     else:
         raise EnvironmentError("Unsupported platform")
 
@@ -222,8 +222,8 @@ class SetupGUI:
                                           "max_speed": 10000, "acceleration": 1000},
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
                                               "acceleration": 1000},
-                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": True, "speed": 1000,
-                             "max_speed": 1000, "acceleration": 1000}
+                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 500,
+                             "max_speed": 4000, "acceleration": 1000}
                             }
         self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
                                                  'device_config': {}}},
@@ -236,10 +236,11 @@ class SetupGUI:
                               'E1': {'stepperE1': {'cmd_id': 'STPE1',
                                                    'device_config': {}}}}
         self.default_running_config = {
-            "url": "",
+            "url": "http://127.0.0.1:5000/robots_api",
             "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
                                                                                                "5": 0, "7": 0, "9": 0}, 'check_magnets': 0},
-            "backlash": {"check_backlash": 0, 'backlash_steps': 0}}
+            "valve_backlash": {"check_backlash": 0, 'backlash_steps': 0},
+            "valve_pos": {"valve1": None, "valve2": None}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
         self.used_he_pins = []
@@ -284,6 +285,8 @@ class SetupGUI:
         def add_com_port(port_name=''):
             if port_name == '':
                 port = self.text_temp
+                if "tty" in port:
+                    port = '/dev/' + port
                 self.cmd_devices.ios.append({"port": port})
                 self.write_message(f"Port {port} added")
                 com_port_entry.delete(0, 'end')
@@ -573,7 +576,7 @@ class SetupGUI:
                     module.name = syringe_name
                     module.mod_type = 'syringe'
                     module.class_type = 'SyringePump'
-                    module.mod_config = {'screw_lead': 8, 'linear_stepper': True}
+                    module.mod_config = {'screw_lead': 8, 'linear_stepper': True, "backlash": 780}
                     self.motor_setup(syringe_name, stepper_name, motor_cxn, config_type='default')
                     self.config_flags[0], self.config_flags[2] = False, False
                     self.read_fields(node_config)
@@ -716,10 +719,12 @@ class SetupGUI:
             module.mod_type = 'camera'
             module.class_type = "Camera"
             module.mod_config = {"ROI": self.roi}
+            cap.release()
             cv.destroyAllWindows()
             window.destroy()
 
         def cancel():
+            cap.release()
             cv.destroyAllWindows()
             window.destroy()
 
@@ -755,7 +760,6 @@ class SetupGUI:
         accept_butt.grid(row=5, column=1)
         cancel_butt.grid(row=5, column=3)
         video_stream()
-        
 
     def valve_link(self, node_config, window, button):
         """Set up a link between two valves

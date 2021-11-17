@@ -67,8 +67,12 @@ void setup() {
   //register modules with commandmanager
   Serial.begin(115200);
   cmdStpx.registerToCommandManager(cmdMng, "STPX");
+  
   cmdStpy.registerToCommandManager(cmdMng, "STPY");
+  
   cmdStpz.registerToCommandManager(cmdMng, "STPZ");
+  cmdStpz.setMagThresholds(580, 480);
+  
   cmdStpe0.registerToCommandManager(cmdMng, "STPE0");
   cmdStpe1.registerToCommandManager(cmdMng, "STPE1");
 

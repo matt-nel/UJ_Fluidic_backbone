@@ -49,7 +49,7 @@ class WebListener:
                 self.url = DEFAULT_URL
                 self.test_connection()
             else:
-                self.url = ""
+                self.valid_connection = False
                 self.manager.write_log("Could not connect to server, running offline. ", level=logging.WARNING)
 
     def update_status(self, ready, error=False, reaction_complete=False):
@@ -216,9 +216,9 @@ class WebListener:
             # flow should be in uL/min
             a_time = a_time.split(' ')
             if a_time[1] == 's':
-                flow_rate = (volume*1000)/(int(a_time[0])/60)
+                flow_rate = (volume*1000)/(float(a_time[0])/60)
             else:
-                flow_rate = (volume*1000)/int(a_time[0])
+                flow_rate = (volume*1000)/float(a_time[0])
         else:
             flow_rate = DEFAULT_FLOW
         self.manager.move_fluid(source, target, volume, flow_rate)
@@ -248,9 +248,9 @@ class WebListener:
             # uL/min
             t_time = t_time.split(' ')
             if t_time[1] == 's':
-                flow_rate = (volume * 1000) / (int(t_time[0]) / 60)
+                flow_rate = (volume * 1000) / (float(t_time[0]) / 60)
             else:
-                flow_rate = (volume * 1000) / int(t_time[0])
+                flow_rate = (volume * 1000) / float(t_time[0])
         else:
             flow_rate = DEFAULT_FLOW
         self.manager.move_fluid(source, target, volume, flow_rate, transfer=True)
@@ -340,7 +340,7 @@ class WebListener:
                     elif "wait_user" in comment:
                         add_actions['wait_user'] =True
                     if "wait_reason" in comment:
-                        reason = comment[comment.index('('):-1]
+                        reason = comment[comment.index('(')+1:-1]
                         add_actions['wait_reason'] = reason
                 self.manager.wait(wait_time=wait_time, actions=add_actions)
         return True

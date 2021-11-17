@@ -1,17 +1,19 @@
 import os
+import queue
 import tkinter as tk
 import tkinter.filedialog as fd
 import UJ_FB.manager as manager
 
 
 class FluidicBackboneUI:
-    def __init__(self, manager):
+    def __init__(self, robot_manager):
         """
         :param simulation: Bool to run the software in simulation mode
         """
         self.primary = tk.Tk()
+        self.queue = queue.Queue()
         self.primary.protocol('WM_DELETE_WINDOW', self.end_program)
-        self.manager = manager
+        self.manager = robot_manager
         self.fonts = {'buttons': ('Calibri', 12), 'labels': ('Calibri', 14), 'default': ('Calibri', 16),
                       'heading': ('Calibri', 16), 'text': ('Calibri', 10)}
         self.colours = {'form-background': "#9ab5d9", 'accept-button': '#4de60b', 'cancel-button': '#e6250b',
@@ -76,6 +78,19 @@ class FluidicBackboneUI:
         self.execute_butt.grid(row=0, column=5, sticky="E")
         self.load_xdl_butt.grid(row=0, column=6, sticky="E")
         self.log.grid(row=14, column=0)
+        self.primary.after(0, self.read_queue)
+
+    def read_queue(self):
+        try:
+            item = self.queue.get_nowait()
+            if item[0] == 'log':
+                self.write_message(item[1])
+            elif item[0] == 'temp':
+                self.update_temps(item[1][0], item[1][1])
+        except queue.Empty:
+            pass
+        finally:
+            self.primary.after(50, self.read_queue)
 
     def populate_syringes(self, syringe_name):
         """
@@ -548,7 +563,6 @@ class FluidicBackboneUI:
     def end_program(self):
         parameters = {'pause': False, 'stop': False, 'resume': False, 'exit': True}
         self.send_interrupt(parameters)
-        self.primary.destroy()
 
     def validate_vol(self, new_num):
         if not new_num:  # field is being cleared
@@ -571,6 +585,9 @@ class FluidicBackboneUI:
         except ValueError:
             self.write_message("Incorrect value for flow rate")
             return False
+
+    def mainloop(self):
+        self.primary.mainloop()
 
 
 if __name__ == '__main__':

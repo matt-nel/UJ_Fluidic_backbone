@@ -2,8 +2,6 @@ import logging
 import time
 from UJ_FB.Modules import modules
 
-direction_map = {'A': "aspirate", "D": "dispense"}
-
 
 class SyringePump(modules.Module):
     """
@@ -31,29 +29,26 @@ class SyringePump(modules.Module):
         self.cur_step_pos = 0
         self.current_vol = 0.0
         self.remaining_volume = 0.0
+        self.error_count = 0
         self.last_dir = "D"
-        self.backlash = 780
-        self.contents = ['empty', 0.0]
-        self.contents_history = []
+        self.backlash = module_config["backlash"]
+        self.contents = (['air', 0.0], ['', 0.0])
         self.stepper = self.steppers[0]
         self.steps_per_rev = self.stepper.steps_per_rev
+        self.valve = None
 
     def set_max_volume(self, volume):
         self.max_volume = float(volume) * 1000.0
         self.syringe_length = self.syringe_lengths[self.max_volume]
 
-    def change_contents(self, substance, vol):
-        # Todo set up logger with tracking of volumes dispensed and timestamps
-        self.contents = [substance, float(vol)]
-        self.contents_history.append((substance, vol))
-
-    def move_syringe(self, target, volume, flow_rate, direction, task):
+    def move_syringe(self, target, volume, flow_rate, direction, air, task):
         """Moves the syringe to aspirate (take in) or dispense fluid. Updates the target volume (if target is not None)
         Args:
             target (Module Object): Object representing the target module. Can be a SyringePump, Flask, or Reactor
             volume (float): Volume in uL to be aspirated or dispensed
             flow_rate (float): Flow rate in uL/min for pump
             direction (str): 'A' - aspirate syringe, motor moves CCW. 'D' - dispense syringe, motor moves CW
+            air (bool): True if syringe is pumping air
             task (Task Object): Object used to track task completion
         """
         self.ready = False
@@ -87,15 +82,12 @@ class SyringePump(modules.Module):
         if target is not None:
             if not target.check_volume(volume):
                 move_flag = False
+            elif direction == 'A':
+                self.write_log(f'{self.name}: start aspirate {abs(round(volume,2))} ul from {target.name}')
             else:
-                if direction == "A":
-                    self.write_log(
-                        f'{self.name}: aspirate {int(abs(volume))} ul of {target.contents} from {target.name}',
-                        level=logging.INFO)
-                else:
-                    self.write_log(
-                        f'{self.name}: dispense {int(abs(volume))} ul of ' +self.contents[0] + f' to {target.name}',
-                        level=logging.INFO)
+                self.write_log(f'{self.name}: start dispense {abs(round(volume,2))} ul to {target.name}')
+        elif air and direction == 'A':
+            self.write_log(f'{self.name}: start aspirate {abs(round(volume,2))} air')
         if move_flag:
             with self.lock:
                 self.cur_step_pos = self.stepper.get_current_position()
@@ -103,10 +95,10 @@ class SyringePump(modules.Module):
                 self.stepper.move_steps(actual_steps)
                 # Blocked until move complete or stop command received
                 if self.stepper.encoder_error:
-                    self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
-                    task.error = True
-                    # will have skipped steps, for at least two gap intervals.
-                    new_step_pos = self.stepper.get_current_position() - 400
+                    new_step_pos = self.correct_error(actual_steps)
+                    if self.stepper.encoder_error:
+                        task.error = True
+                        self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
                 else:
                     new_step_pos = self.stepper.get_current_position()
                 # if aspirating, step change is neg.
@@ -123,10 +115,11 @@ class SyringePump(modules.Module):
                 # syringe volume change is inverted relative to stepper direction - ie clockwise (+) when emptying (-)
                 vol_change = -vol_change
                 self.current_vol += vol_change
-                self.change_volume(vol_change, target, direction)
+                self.change_volume(vol_change, target, air)
                 self.last_dir = direction
             self.ready = True
             time.sleep(flow_rate/5000)
+            self.error_count = 0
             return
         self.remaining_volume = abs(volume)
         self.ready = True
@@ -194,29 +187,53 @@ class SyringePump(modules.Module):
             return False
         return True
 
-    def change_volume(self, volume_change, target, direction):
+    def change_volume(self, volume_change, target, air):
         """Changes the volume of the syringe to reflect change from movement
 
         Args:
-            volume_change (float): Volume that has been aspirated/dispensed
+            volume_change (float): Volume that has been aspirated(+)/dispensed(-)
             target (Module object): The module that is receiving/supplying the fluid
-            direction (str): 'A' - aspirating, 'D' - dispensing
+            air (bool): whether the pump is moving air
+
         """
-        self.contents[1] += volume_change
+        # contents: (['air', air_volume], [other contents, other_contents_volume])
+        volume_change = round(volume_change, 2)
+        message = f'{self.name}: '
         if target is not None:
-            if target.type != "SP":
-                # target is not a syringe pump, we are aspirating
-                if volume_change > 0 and target.contents != self.contents[0]:
-                    self.change_contents(target.contents, self.contents[1])
-                # dispensing
-                target.change_volume(-volume_change)
+            # we are aspirating
+            if volume_change > 0:
+                message += f'aspirate {round(abs(volume_change),2)} ul of '
+                if not air:
+                    if target.type != "SP":
+                        target.change_volume(self.contents[1][0], -volume_change)
+                        message += f'{target.contents[0]} '
+                        self.contents[1][0] = target.contents[0]
+                    else:
+                        message += f'{target.contents[0][0]}'
+                        self.contents[1][0] = target.contents[1][0]
+                    self.contents[1][1] += volume_change
+                else:
+                    message += 'air '
+                    self.contents[0][1] += volume_change
+                message += f'from {target.name}'
+            # we are dispensing
             else:
-                # target is a syringe pump
-                if volume_change < 0:
-                    # this pump is aspirating from another pump
-                    self.change_contents(target.contents, volume_change)
-        if self.contents[1] == 0:
-            self.change_contents('empty', 0)
+                message += f'dispense {int(abs(volume_change))} ul of '
+                if not air:
+                    message += f'{self.contents[1][0]} '
+                    self.contents[1][1] += volume_change
+                    if target.type != "SP":
+                        target.change_volume(self.contents[1][0], -volume_change)
+                else:
+                    message += 'air '
+                    self.contents[0][1] += volume_change
+                message += f'to {target.name}'
+            self.write_log(message)
+            self.contents[1][1] = max(self.contents[1][1], 0)
+            self.contents[0][1] = max(self.contents[0][1], 0)
+        elif air and volume_change < 0:
+            message += f" aspirate {int(abs(volume_change))} ul of air"
+            self.write_log(message)
 
     def set_pos(self, position):
         """Sets the syringe pump position in mm
@@ -225,9 +242,17 @@ class SyringePump(modules.Module):
             position (float): Position of the pump relative to the limit switch
         """
         vol = float(position)*1000
-        self.contents[1] = vol
+        self.contents[1][1] = vol
         self.position = self.syringe_length - ((self.max_volume - vol)/self.max_volume)*self.syringe_length
         self.stepper.set_current_position((self.position/8)*3200)
+
+    def correct_error(self, steps):
+        self.write_log(f"{self.name} can't move. Moving back:")
+        self.stepper.encoder_error = False
+        self.stepper.move_to(self.cur_step_pos)
+        self.manager.correct_position_error(self)
+        self.stepper.move(steps)
+        return self.stepper.get_current_position()
 
     def resume(self, command_dicts):
         """Resumes a paused move

@@ -84,8 +84,11 @@ public:
 
     static void wrapper_update(void* pt2Object);
     void update();
+	
+	void setMagThresholds(int upper, int lower);
 
 private:
+	int upperMagThreshold = 580, lowerMagThreshold = 510;
     int hePin;
     int stepsPerRev;
     int stepsPerPort;

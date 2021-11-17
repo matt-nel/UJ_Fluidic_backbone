@@ -163,9 +163,13 @@ void CommandAccelStepper::update()
         posCount++;
         if (posCount < numPositions){
             if (fwd){
-                stepper->move(stepsPerPort);
+				stepper->move(stepsPerPort);
+                if (!accelerationEnabled)
+                    stepper->setSpeed(lastSetSpeed);
             }else{
-                stepper->move(-stepsPerPort);
+				stepper->move(-stepsPerPort);
+                if (!accelerationEnabled)
+                    stepper->setSpeed(lastSetSpeed);
             }
         }else {
             subsMoves = false;
@@ -529,8 +533,12 @@ void CommandAccelStepper::moveCompleteUpdate(){
 void CommandAccelStepper::checkHeSensor(){
     if (hePin > 0){
             int reading = analogRead(hePin);
-            if (reading <= 490 || reading >= 580)
+            if (reading <= lowerMagThreshold || reading >= upperMagThreshold)
                 magnetsPassed++;
     }
 }
 
+void CommandAccelStepper::setMagThresholds(int upper, int lower){
+	upperMagThreshold = upper;
+	lowerMagThreshold = lower;
+}

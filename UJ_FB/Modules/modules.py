@@ -74,35 +74,37 @@ class FBFlask(Module):
     def __init__(self, name, module_info, cmd_mng, manager):
         super(FBFlask, self).__init__(name, module_info, cmd_mng, manager)
         self.type = "FSK"
-        self.manager = manager
         module_config = module_info['mod_config']
-        self.contents = module_config['Contents']
-        self.contents_hist = []
+        self.contents = [module_config['Contents'], float(module_config["Current volume"])*1000]
         self.cur_vol = float(module_config['Current volume'])*1000
         self.max_volume = float(module_config['Maximum volume'])*1000
 
-    def change_volume(self, vol):
+    def change_volume(self, new_contents, vol):
+        self.cur_vol += vol
         # neg vol means syringe aspirated from this vessel (volume decreased)
-        if self.check_volume(vol):
-            self.cur_vol += vol
-            if self.cur_vol == 0:
-                self.contents = 'empty'
-            return True
-        return False
+        if vol < 0:
+            if self.cur_vol <= 0:
+                self.contents[0] = 'empty'
+                self.contents[1] = 0
+                self.cur_vol = 0
+            else:
+                self.contents[1] += self.cur_vol
+        # dispensed to this vessel
+        elif self.contents[0] == 'empty':
+            self.contents[0] = new_contents
+            self.contents[1] = self.cur_vol
+        else:
+            self.contents[0] += f", {new_contents}"
+            self.contents[1] += self.cur_vol
+        return True
 
     def check_volume(self, vol):
         # if syringe withdrawing from this vessel
         if vol < 0:
             if self.cur_vol + vol < 0:
                 self.manager.write_log(f'Insufficient {self.contents} in {self.name}',  level=logging.WARNING)
-                return False
         else:
             if self.cur_vol + vol > self.max_volume:
                 self.write_log(f'Max volume of {self.name} would be exceeded', level=logging.WARNING)
                 return False                
         return True
-
-    def change_contents(self, new_contents, vol):
-        if self.change_volume(vol):
-            self.contents_hist.append(self.contents)
-            self.contents = new_contents
