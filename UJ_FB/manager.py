@@ -43,7 +43,7 @@ class Manager(Thread):
     Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
     tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules
     """
-    def __init__(self, gui=True, simulation=False, web_enabled=False):
+    def __init__(self, gui=True, stdout_log=False, simulation=False, web_enabled=False):
         Thread.__init__(self)
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
@@ -100,6 +100,10 @@ class Manager(Thread):
         self.xdl = ''
         if gui:
             self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
+        if stdout_log:
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.INFO)
+            self.logger.addHandler(handler)
         if web_enabled:
             self.listener.test_connection()
         self.start()
@@ -339,7 +343,8 @@ class Manager(Thread):
         for valve in self.valves:
             self.prev_run_config['valve_pos'][valve] = self.valves[valve].current_port
         self.write_running_config("Configs\\running_config.json")
-        self.gui_main.primary.quit()
+        if self.gui_main:
+            self.gui_main.primary.quit()
 
     def add_to_queue(self, commands, queue=None):
         """
