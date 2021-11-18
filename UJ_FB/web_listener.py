@@ -18,6 +18,8 @@ class WebListener:
         self.key = robot_key
         self.url_lock = Lock()
         self.url = self.manager.prev_run_config['url']
+        if "http" in self.url:
+            self.ip = self.url.split("/")[2]
         if self.url == "":
             self.url = DEFAULT_URL
         self.manager.prev_run_config['url'] = self.url
@@ -28,14 +30,17 @@ class WebListener:
         self.last_reaction_update = 0
         self.last_error_update = 0
 
-    def update_url(self, new_url):
-        self.url = "http://" + new_url + "/robots_api"
+    def update_url(self, ip):
+        self.ip = ip
+        self.url = "http://" + ip + "/robots_api"
         self.test_connection()
 
     def test_connection(self):
         with self.url_lock:
             try:
-                ip_address = socket.gethostbyname(socket.gethostname())
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect((self.ip, 80))
+                ip_address = s.getsockname()[0]
                 r = requests.get(self.url + "/", json={"robot_id": self.id, 'robot_key': self.key, "cmd": "connect", "ip": ip_address})
                 r = r.json()
                 self.manager.prev_run_config['url'] = self.url
@@ -45,7 +50,7 @@ class WebListener:
                     self.valid_connection = True
                 else:
                     self.manager.write_log('Connection refused. Please check robot ID and key in configuration files.',  level=logging.WARNING)
-            except (requests.ConnectionError, json.decoder.JSONDecodeError) as e:
+            except (requests.ConnectionError, json.decoder.JSONDecodeError, socket.gaierror) as e:
                 if self.url != DEFAULT_URL:
                     self.url = DEFAULT_URL
                     self.test_connection()
