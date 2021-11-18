@@ -94,23 +94,24 @@ class WebListener:
             return None
 
     def send_image(self, image_metadata, img_data, task, num_retries):
+        if not self.valid_connection:
+            self.test_connection()
         with self.url_lock:
-            if not self.valid_connection:
-                self.test_connection()
             try:
                 r = requests.post(self.url + '/send_image', json=image_metadata)
                 if r.ok:
                     request_id = r.json().get('request_id')
-                    r = requests.post(self.url + '/send_image', data=img_data, params={'request_id': request_id})
-                    if not r.ok:
-                        num_retries += 1
-                return r, num_retries
             except requests.ConnectionError:
                 self.manager.write_log(f"A connection to {self.url} could not be established, trying again.", level=logging.WARNING)
                 num_retries += 1
                 self.valid_connection = False
                 time.sleep(20)
                 return False, num_retries
+            else:
+                r = requests.post(self.url + '/send_image', data=img_data.tobytes(), params={'request_id': request_id})
+                if not r.ok:
+                    num_retries += 1
+                return r, num_retries
 
     def request_reaction(self):
         time_elapsed = time.time() - self.last_reaction_update
@@ -340,6 +341,8 @@ class WebListener:
                         add_actions["picture"] = int(pic_no)
                         if img_processing is not None:
                             add_actions['img_processing'] = img_processing
+                        else:
+                            add_actions['img_processing'] = ''
                     elif "wait_user" in comment:
                         add_actions['wait_user'] =True
                     if "wait_reason" in comment:

@@ -776,7 +776,7 @@ class Manager(Thread):
         Returns:
             True if successfully queued or False otherwise
         """
-        volume *= 1000
+        volume = (volume * 1000) + 50  # testing shows ~50 ul remains in the syringe after transfers
         pipelined_steps = []
         prev_max_vol = 999999.00
         min_vol = 0
@@ -875,7 +875,7 @@ class Manager(Thread):
         # find an unused port for air
         valve = self.valves[valve]
         tubing_length = self.graph.adj[valve.name][target][0]['tubing_length']
-        dead_volume = calc_volume(tubing_length) + 50
+        dead_volume = calc_volume(tubing_length) + 100  # push out a bit extra to ensure tube empty
 
         if intake:
             air_port = None

@@ -27,10 +27,11 @@ class Camera(modules.Module):
                     self.last_frame = frame
         self.cap.release()
 
-    def capture_image(self):
+    def capture_image(self, task):
         with self.frame_lock:
             if self.last_frame is None:
                 self.write_log("Unable to receive frame from video stream", level=logging.ERROR)
+                task.error = True
             else:
                 frame = self.last_frame
                 return frame
@@ -38,10 +39,11 @@ class Camera(modules.Module):
     def send_image(self, listener, metadata, task):
         num_retries = 0
         while num_retries < 5:
-            frame = self.capture_image()
+            frame = self.capture_image(task)
+            if task.error:
+                return
             ret, enc_image = cv.imencode('.png', frame)
-            data = enc_image.tobytes()
-            response, num_retries = listener.send_image(metadata, data, task, num_retries)
+            response, num_retries = listener.send_image(metadata, enc_image, task, num_retries)
             if response is not False:
                 if response.ok:
                     break
