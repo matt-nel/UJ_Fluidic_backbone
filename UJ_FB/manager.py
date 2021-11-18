@@ -881,7 +881,7 @@ class Manager(Thread):
         # find an unused port for air
         valve = self.valves[valve]
         tubing_length = self.graph.adj[valve.name][target][0]['tubing_length']
-        dead_volume = calc_volume(tubing_length) + 100  # push out a bit extra to ensure tube empty
+        dead_volume = calc_volume(tubing_length)*1.15  # push out a bit extra to ensure tube empty
 
         if intake:
             air_port = None
