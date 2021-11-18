@@ -253,7 +253,7 @@ class SyringePump(modules.Module):
         self.stepper.encoder_error = False
         self.stepper.move_to(self.cur_step_pos)
         self.manager.correct_position_error(self)
-        self.stepper.move(steps)
+        self.stepper.move_steps(steps)
         return self.stepper.get_current_position()
 
     def resume(self, command_dicts):
