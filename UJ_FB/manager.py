@@ -123,7 +123,7 @@ class Manager(Thread):
         if self.gui_main is not None:
             if level > 9:
                 self.gui_main.queue.put(('log', message))
-        message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
+        message = datetime.datetime.today().strftime("%Y-%m-%dT%H:%M") + f'({self.id})'+ message
         if level > 49:
             self.logger.critical(message)
         elif level > 39:
@@ -435,6 +435,7 @@ class Manager(Thread):
         Pauses all currently running tasks and queue execution.
         """
         self.paused = True
+        self.pause_flag = True
         for task in self.tasks:
             if not task.module_ready:
                 task.pause()
@@ -1060,7 +1061,7 @@ class Manager(Thread):
         valve = syringe.valve
         current_valve_port = valve.current_port
         self.write_log("Repositioning valve")
-        valve.home()
+        valve.home_valve()
         valve.move_to_pos(current_valve_port)
 
     def start_stirring(self, reactor_name, command, speed, stir_secs, wait):

@@ -145,7 +145,8 @@ class SelectorValve(modules.Module):
                 self.move_to_pos(port[0], target)
                 return
         self.write_log(f"{target} not found on valve {self.name}", level=logging.WARNING)
-        task.error = True
+        if task is not None:
+            task.error = True
 
     def find_target(self, target):
         target_found = False

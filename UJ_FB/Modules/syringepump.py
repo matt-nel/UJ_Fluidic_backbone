@@ -41,7 +41,7 @@ class SyringePump(modules.Module):
         self.max_volume = float(volume) * 1000.0
         self.syringe_length = self.syringe_lengths[self.max_volume]
 
-    def move_syringe(self, target, volume, flow_rate, direction, air, task):
+    def move_syringe(self, target, volume, flow_rate, direction, air, task=None):
         """Moves the syringe to aspirate (take in) or dispense fluid. Updates the target volume (if target is not None)
         Args:
             target (Module Object): Object representing the target module. Can be a SyringePump, Flask, or Reactor
@@ -97,7 +97,8 @@ class SyringePump(modules.Module):
                 if self.stepper.encoder_error:
                     new_step_pos = self.correct_error(actual_steps)
                     if self.stepper.encoder_error:
-                        task.error = True
+                        if task is not None:
+                            task.error = True
                         self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
                 else:
                     new_step_pos = self.stepper.get_current_position()
@@ -123,7 +124,8 @@ class SyringePump(modules.Module):
             return
         self.remaining_volume = abs(volume)
         self.ready = True
-        task.error = True
+        if task is not None:
+            task.error = True
 
     def home(self, task):
         """Moves the pump until the limit switch is triggered
@@ -150,7 +152,7 @@ class SyringePump(modules.Module):
             steps = -steps
         with self.lock:
             self.stepper.move_steps(steps)
-            if self.stepper.encoder_error:
+            if self.stepper.encoder_error and task is not None:
                 task.error = True
         self.last_dir = direction
         self.ready = True
