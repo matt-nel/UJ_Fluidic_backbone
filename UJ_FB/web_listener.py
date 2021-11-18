@@ -262,7 +262,7 @@ class WebListener:
                 flow_rate = (volume * 1000) / float(t_time[0])
         else:
             flow_rate = DEFAULT_FLOW
-        self.manager.move_fluid(source, target, volume, flow_rate, transfer=True)
+        self.manager.move_fluid(source, target, volume, flow_rate, account_for_dead_volume=False, transfer=True)
         return True
 
     def process_xdl_stir(self, stir_info):
