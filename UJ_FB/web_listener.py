@@ -8,7 +8,6 @@ import json
 
 # IP address of PI server
 DEFAULT_URL = "http://127.0.0.1:5000/robots_api"
-DEFAULT_FLOW = 5000
 
 
 class WebListener:
@@ -229,7 +228,7 @@ class WebListener:
             else:
                 flow_rate = (volume*1000)/float(a_time[0])
         else:
-            flow_rate = DEFAULT_FLOW
+            flow_rate = 0
         self.manager.move_fluid(source, target, volume, flow_rate)
         return True
     
@@ -261,7 +260,7 @@ class WebListener:
             else:
                 flow_rate = (volume * 1000) / float(t_time[0])
         else:
-            flow_rate = DEFAULT_FLOW
+            flow_rate = 0
         self.manager.move_fluid(source, target, volume, flow_rate, account_for_dead_volume=False, transfer=True)
         return True
 

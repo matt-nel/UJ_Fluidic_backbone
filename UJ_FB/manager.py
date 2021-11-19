@@ -73,6 +73,7 @@ class Manager(Thread):
         self.pause_flag = False
         self.paused = False
         self.ready = True
+        self.execute = False
         self.reaction_ready = False
         self.reaction_name = ""
         self.reaction_id = None
@@ -91,12 +92,13 @@ class Manager(Thread):
         graph_config = self.json_loader("Configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
+        self.default_fr = 10000
+        self.default_flush_fr = 20000
         self.init_syringes()
         self.listener = web_listener.WebListener(self, self.id, self.key)
         self.web_enabled = web_enabled
-        self.execute = False
-        self.write_running_config("Configs/running_config.json")
         self.rc_changes = False
+        self.write_running_config("Configs/running_config.json")
         self.xdl = ''
         if gui:
             self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
@@ -784,6 +786,8 @@ class Manager(Thread):
         """
         volume = (volume * 1000) + 50  # testing shows ~50 ul remains in the syringe after transfers
         pipelined_steps = []
+        if flow_rate == 0:
+            flow_rate = self.default_fr
         prev_max_vol = 999999.00
         min_vol = 0
         dead_volume = 0
@@ -896,12 +900,12 @@ class Manager(Thread):
                                     'parameters': {'target': 'empty', 'wait': True}})
             # Command to aspirate air to fill dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': None,
                                                    'direction': 'A', 'air': True, 'wait': True}})
         else:
             # dispense dead volume of air into target, emptying the dead volume in the tube
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': None,
                                                    'direction': 'D', 'air': True, 'wait': True}})
         return pipelined_steps, dead_volume
 
@@ -921,7 +925,7 @@ class Manager(Thread):
                                     'parameters': {'target': source, 'wait': True}})
             # Command to aspirate syringe to remove dead volume - doesn't update volumes
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': None,
                                                    'direction': 'A', 'air': True, 'wait': True}})
         else:
             # Command to index valve to required position for outlet
@@ -929,7 +933,7 @@ class Manager(Thread):
                                     'parameters': {'target': source, 'wait': True}})
             # Command to dispense air to blow out dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': source,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': source,
                                                    'direction': 'D', 'air': True, 'wait': True}})
         return pipelined_steps, dead_volume
 
@@ -1166,6 +1170,7 @@ class Task:
 
     def resume(self):
         resume_flag = self.module.resume(self.command_dicts)
+        self.error = False
         return resume_flag
 
     @property
