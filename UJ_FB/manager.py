@@ -65,6 +65,7 @@ class Manager(Thread):
         self.tasks = []
         self.serial_lock = Lock()
         self.interrupt_lock = Lock()
+        self.pause_after_rxn = False
         self.user_wait_flag = False
         self.waiting = False
         self.interrupt = False
@@ -298,7 +299,7 @@ class Manager(Thread):
                             self.write_log(f"Prepared to run {self.reaction_name} reaction.", level=logging.INFO)
                 # a reaction has been queued
                 else:
-                    if execute:
+                    if execute and not self.pause_after_rxn:
                         self.start_queue()
                         self.write_log(f"Started running {self.reaction_name}", level=logging.INFO)
                         self.reaction_ready = False
