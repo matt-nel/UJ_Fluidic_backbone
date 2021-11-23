@@ -287,7 +287,7 @@ class Manager(Thread):
                 if not self.reaction_ready:
                     # log reaction completion once
                     if self.reaction_name:
-                        self.write_log(f"Completed {self.reaction_name}", level=logging.INFO)
+                        self.write_log(f"Completed {self.reaction_name}, id {self.reaction_id}", level=logging.INFO)
                         if self.reaction_id:
                             self.listener.update_status(True, reaction_complete=True)
                         self.reaction_name = ""
@@ -301,7 +301,7 @@ class Manager(Thread):
                 else:
                     if execute and not self.pause_after_rxn:
                         self.start_queue()
-                        self.write_log(f"Started running {self.reaction_name}", level=logging.INFO)
+                        self.write_log(f"Started running {self.reaction_name}, id {self.reaction_id}", level=logging.INFO)
                         self.reaction_ready = False
                         self.ready = False
                         self.listener.update_status(False)
@@ -650,7 +650,7 @@ class Manager(Thread):
         """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if self.flasks[flask].contents[0] in reagent_name:
+            if reagent_name == self.flasks[flask].contents[0]:
                 return self.flasks[flask].name
         return ""
 
