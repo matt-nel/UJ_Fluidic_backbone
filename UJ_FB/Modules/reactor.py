@@ -192,7 +192,8 @@ class Reactor(modules.FBFlask):
         # J/k = Cp*vol*rho
         # DT/dt = V^2/(R*Cp*Vol*rho)
         # DT = V^2/(R*Cp*Vol*rho) * dt
-        voltage = math.sqrt(((control_signal/dt)*3.6*self.heat_rate))
+        # R = ~1.16ohm
+        voltage = math.sqrt(((control_signal/dt)*1.15*self.heat_rate))
         voltage = max(0.0, min(voltage, 12))
         voltage = voltage/12 * 255
         self.prev_error = error

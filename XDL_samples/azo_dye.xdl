@@ -1,0 +1,167 @@
+<?xdl version="1.0"?>
+<XDL>
+    <Synthesis>
+        <Metadata
+             description="XDL for the azo-dye collaborative reactions"
+             img_processing="azo">
+        </Metadata>
+        <Hardware>
+            <Component id="Reactor1" type="reactor"/>
+        </Hardware>
+        <Parameters>
+        </Parameters>
+        <Reagents>
+            <Reagent id="1 naphthylamine" />
+            <Reagent id="nitroaniline" />
+            <Reagent id="aniline" />
+            <Reagent id="sodium nitrate" />
+            <Reagent id="water" />
+            <Reagent id="sodium hydroxide" />
+        </Reagents>
+        <Procedure>
+            <!--Maintain stirrring-->
+            <StartStir
+                vessel="reactor"
+                stir_speed="2500 rpm"/>
+            <!-- reagent1 -->
+            <Add
+                reagent = "1 naphthylamine"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_0" />
+				
+            <Add
+                reagent = "nitroaniline"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_1" />
+            <Add
+                reagent = "aniline"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_2" />
+            <Add
+                reagent="water"
+                vessel="waste"
+                volume="1 ml" />
+            <!-- sodium nitrate -->
+            <Add
+                reagent = "sodium nitrate"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_3" />
+            <Add
+                reagent="water"
+                vessel="waste"
+                volume="1 ml" />
+            <Wait
+                time = "120 s"
+                comments = "wait_reason(mixing)" />
+            <StopStir
+                vessel="reactor1" />
+            <Wait
+                time= "0 s"
+                comments="Picture1" />
+            <StartStir
+                vessel="reactor1" 
+                stir_speed="2500 rpm" />
+            <!-- reagent2 -->
+            <Add
+                reagent = "1 naphthylamine"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_4" />
+            <Add
+                reagent = "nitroaniline"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_5" />
+            <Add
+                reagent = "aniline"
+                vessel = "reactor"
+                volume = ""
+                step_param0 = "param_6" />
+            <Add
+                reagent="water"
+                vessel="waste"
+                volume="1 ml" />
+            <!-- wait 30 min for reaction completion -->
+            <Wait
+                time= "30 min"
+                comments = "wait_reason(waiting for reaction completion)" />
+            <StopStir
+                vessel="reactor1" />
+            <Wait
+                time="20 s"
+                comments="Picture2" />
+            <StartStir
+                vessel="reactor1"
+                stir_speed="2500 rpm" />
+            <!-- Transfer 4.4 ml of products to waste for dilution (assume we've lost ~ 0.6 ml to residue in syringe-->
+            <Transfer
+                from_vessel="reactor"
+                to_vessel="waste"
+                volume="4.4 ml" />
+            <!-- dilute to 1/6 parts -->
+            <Add
+                reagent="water"
+                vessel="reactor"
+                volume="5 ml" />
+            <StopStir
+                vessel="reactor" />
+            <Wait
+                time= "20 s"
+                comments="Picture3" />
+            <StartStir
+                vessel="reactor"
+                stir_speed="2500 rpm" />
+            <!-- Add base -->
+            <Add
+                reagent="sodium hydroxide"
+                vessel="reactor"
+                volume="2 ml" />
+            <StopStir
+                vessel="reactor" />
+            <Wait
+                time= "20 s"
+                comments= "Picture4" />
+            <StartStir
+                vessel="reactor"
+                stir_speed="2500 rpm" />
+            <!-- empty reactor -->
+            <Transfer
+                from_vessel="reactor"
+                to_vessel="waste"
+                volume="8 ml" />
+            <!-- wash 1 -->
+            <Add
+                reagent="water"
+                vessel="reactor"
+                volume="8 ml" />
+            <Transfer
+                from_vessel="reactor"
+                to_vessel="waste"
+                volume="8 ml" />
+            <!-- wash 2 -->
+            <Add
+                reagent="water"
+                vessel="reactor"
+                volume="8 ml" />
+            <Transfer
+                from_vessel="reactor"
+                to_vessel="waste"
+                volume="8 ml" />
+            <!-- wash 3 -->
+            <Add
+                reagent="water"
+                vessel="reactor"
+                volume="8 ml" />
+            <Transfer
+                from_vessel="reactor"
+                to_vessel="waste"
+                volume="15 ml" />
+            <StopStir
+                vessel="reactor" />
+        </Procedure>
+    </Synthesis>
+</XDL>

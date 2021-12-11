@@ -145,7 +145,8 @@ class SelectorValve(modules.Module):
                 self.move_to_pos(port[0], target)
                 return
         self.write_log(f"{target} not found on valve {self.name}", level=logging.WARNING)
-        task.error = True
+        if task is not None:
+            task.error = True
 
     def find_target(self, target):
         target_found = False
@@ -213,7 +214,7 @@ class SelectorValve(modules.Module):
             self.current_port = None
         check_value = False
         for value in self.magnet_readings.values():
-            if 500 < value < 550:
+            if 500 < value < 550 or value == 0:
                 check_value = True
         if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 or check_value:
             self.check_magnets()
@@ -279,8 +280,8 @@ class SelectorValve(modules.Module):
                 if opt > self.magnet_readings[1]:
                     self.magnet_readings[1] = opt
                 self.reading = opt
-                self.stepper.set_running_speed(prev_speed)
                 break
+        self.stepper.set_running_speed(prev_speed)
         return True
 
     def check_all_positions(self):

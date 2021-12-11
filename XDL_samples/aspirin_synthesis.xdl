@@ -1,0 +1,82 @@
+<?xdl version="1.0"?>
+<XDL>
+    <Synthesis>
+        <Metadata>
+        </Metadata>
+        <Hardware>
+            <Component id="Reactor1" type="reactor"/>
+        </Hardware>
+        <Parameters>
+        </Parameters>
+        <Reagents>
+            <Reagent id="salicylic_acid" />
+            <Reagent id="acetic_anhydride" />
+            <Reagent id="sulphuric_acid" />
+            <Reagent id="water" />
+        </Reagents>
+        <Procedure>
+            <!--Preheat the reactor-->
+            <HeatChillToTemp
+                vessel="reactor"
+                temp=""
+                step_param0="param_0"/>
+            <!--Maintain reactor temperature-->
+            <StartHeatChill 
+                vessel="reactor" 
+                temp=""
+                step_param0="param_0"/>
+            <!--Maintain stirrring-->
+            <StartStir
+                vessel="reactor"
+                stir_speed="1000 rpm"/>
+            <!--Add bulk of acetic anhydride-->
+            <Add 
+                reagent="acetic_anhydride"
+                vessel="Reactor1" 
+                volume="" 
+                stir="False" 
+                step_param0="param_1"
+                />
+            <!--Add sulphuric acid-->
+            <Add
+                reagent="sulphuric_acid"
+		vessel="reactor"
+                volume="0.5 ml" 
+                stir="False"
+            />
+            <!--Flush sulphuric acid into reactor with 1ml acetic anhydride-->
+            <Add
+                reagent="acetic_anhydride"
+		vessel="reactor"
+                volume="1 ml"
+                stir="False"
+            />
+            <!--Flush last acetic anhydride into reactor with water-->
+            <Add
+                reagent="water"
+		vessel="reactor"
+                volume="0.3 ml"
+                stir="False"
+            />
+            <!--Maintain at temp for specified time-->
+            <HeatChill
+                vessel="Reactor1"
+                temp=""
+                time=""
+                step_param0="param_0"
+                step_param1="param_3"
+            />
+            <!--Add water to quench reaction-->
+            <Add
+                reagent="water"
+                vessel="Reactor1"
+                volume="10 ml"
+            />
+            <!--Wait while cooling-->
+            <HeatChill
+                vessel="Reactor1"
+                temp="25 °C"
+                time="600 seconds"/>
+        </Procedure>
+    </Synthesis>
+</XDL>

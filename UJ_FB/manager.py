@@ -43,7 +43,7 @@ class Manager(Thread):
     Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
     tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules
     """
-    def __init__(self, gui=True, simulation=False, web_enabled=False):
+    def __init__(self, gui=True, stdout_log=False, simulation=False, web_enabled=False):
         Thread.__init__(self)
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
@@ -65,6 +65,7 @@ class Manager(Thread):
         self.tasks = []
         self.serial_lock = Lock()
         self.interrupt_lock = Lock()
+        self.pause_after_rxn = False
         self.user_wait_flag = False
         self.waiting = False
         self.interrupt = False
@@ -73,6 +74,7 @@ class Manager(Thread):
         self.pause_flag = False
         self.paused = False
         self.ready = True
+        self.execute = False
         self.reaction_ready = False
         self.reaction_name = ""
         self.reaction_id = None
@@ -91,15 +93,20 @@ class Manager(Thread):
         graph_config = self.json_loader("Configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
+        self.default_fr = 10000
+        self.default_flush_fr = 20000
         self.init_syringes()
         self.listener = web_listener.WebListener(self, self.id, self.key)
         self.web_enabled = web_enabled
-        self.execute = False
-        self.write_running_config("Configs/running_config.json")
         self.rc_changes = False
+        self.write_running_config("Configs/running_config.json")
         self.xdl = ''
         if gui:
             self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
+        if stdout_log:
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.INFO)
+            self.logger.addHandler(handler)
         if web_enabled:
             self.listener.test_connection()
         self.start()
@@ -119,7 +126,7 @@ class Manager(Thread):
         if self.gui_main is not None:
             if level > 9:
                 self.gui_main.queue.put(('log', message))
-        message = datetime.datetime.today().strftime("%Y-%m-%d@%H:%M - ") + message
+        message = datetime.datetime.today().strftime("%Y-%m-%dT%H:%M") + f'({self.id})'+ message
         if level > 49:
             self.logger.critical(message)
         elif level > 39:
@@ -133,10 +140,9 @@ class Manager(Thread):
 
     def write_running_config(self, fp):
         fp = os.path.join(self.script_dir, fp)
-        rc_file = open(fp, 'w+')
-        running_config = json.dumps(self.prev_run_config, indent=4)
-        rc_file.write(running_config)
-        rc_file.close()
+        with open(fp, 'w+') as rc_file:
+            running_config = json.dumps(self.prev_run_config, indent=4)
+            rc_file.write(running_config)
         self.rc_changes = False
 
     def populate_modules(self):
@@ -281,7 +287,7 @@ class Manager(Thread):
                 if not self.reaction_ready:
                     # log reaction completion once
                     if self.reaction_name:
-                        self.write_log(f"Completed {self.reaction_name}", level=logging.INFO)
+                        self.write_log(f"Completed {self.reaction_name}, id {self.reaction_id}", level=logging.INFO)
                         if self.reaction_id:
                             self.listener.update_status(True, reaction_complete=True)
                         self.reaction_name = ""
@@ -293,9 +299,9 @@ class Manager(Thread):
                             self.write_log(f"Prepared to run {self.reaction_name} reaction.", level=logging.INFO)
                 # a reaction has been queued
                 else:
-                    if execute:
+                    if execute and not self.pause_after_rxn:
                         self.start_queue()
-                        self.write_log(f"Started running {self.reaction_name}", level=logging.INFO)
+                        self.write_log(f"Started running {self.reaction_name}, id {self.reaction_id}", level=logging.INFO)
                         self.reaction_ready = False
                         self.ready = False
                         self.listener.update_status(False)
@@ -340,7 +346,8 @@ class Manager(Thread):
         for valve in self.valves:
             self.prev_run_config['valve_pos'][valve] = self.valves[valve].current_port
         self.write_running_config("Configs\\running_config.json")
-        self.gui_main.primary.quit()
+        if self.gui_main:
+            self.gui_main.primary.quit()
 
     def add_to_queue(self, commands, queue=None):
         """
@@ -431,6 +438,7 @@ class Manager(Thread):
         Pauses all currently running tasks and queue execution.
         """
         self.paused = True
+        self.pause_flag = True
         for task in self.tasks:
             if not task.module_ready:
                 task.pause()
@@ -642,7 +650,7 @@ class Manager(Thread):
         """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if self.flasks[flask].contents[0] in reagent_name:
+            if reagent_name == self.flasks[flask].contents[0]:
                 return self.flasks[flask].name
         return ""
 
@@ -777,8 +785,10 @@ class Manager(Thread):
         Returns:
             True if successfully queued or False otherwise
         """
-        volume *= 1000
+        volume = (volume * 1000) + 50  # testing shows ~50 ul remains in the syringe after transfers
         pipelined_steps = []
+        if flow_rate == 0:
+            flow_rate = self.default_fr
         prev_max_vol = 999999.00
         min_vol = 0
         dead_volume = 0
@@ -876,7 +886,7 @@ class Manager(Thread):
         # find an unused port for air
         valve = self.valves[valve]
         tubing_length = self.graph.adj[valve.name][target][0]['tubing_length']
-        dead_volume = calc_volume(tubing_length) + 50
+        dead_volume = calc_volume(tubing_length)*1.15  # push out a bit extra to ensure tube empty
 
         if intake:
             air_port = None
@@ -891,12 +901,12 @@ class Manager(Thread):
                                     'parameters': {'target': 'empty', 'wait': True}})
             # Command to aspirate air to fill dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': None,
                                                    'direction': 'A', 'air': True, 'wait': True}})
         else:
             # dispense dead volume of air into target, emptying the dead volume in the tube
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': None,
                                                    'direction': 'D', 'air': True, 'wait': True}})
         return pipelined_steps, dead_volume
 
@@ -916,7 +926,7 @@ class Manager(Thread):
                                     'parameters': {'target': source, 'wait': True}})
             # Command to aspirate syringe to remove dead volume - doesn't update volumes
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': None,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': None,
                                                    'direction': 'A', 'air': True, 'wait': True}})
         else:
             # Command to index valve to required position for outlet
@@ -924,7 +934,7 @@ class Manager(Thread):
                                     'parameters': {'target': source, 'wait': True}})
             # Command to dispense air to blow out dead volume
             pipelined_steps.append({'mod_type': 'syringe', 'module_name': valve.syringe.name, 'command': 'move',
-                                    'parameters': {'volume': dead_volume, 'flow_rate': 5000, 'target': source,
+                                    'parameters': {'volume': dead_volume, 'flow_rate': self.default_flush_fr, 'target': source,
                                                    'direction': 'D', 'air': True, 'wait': True}})
         return pipelined_steps, dead_volume
 
@@ -1056,7 +1066,7 @@ class Manager(Thread):
         valve = syringe.valve
         current_valve_port = valve.current_port
         self.write_log("Repositioning valve")
-        valve.home()
+        valve.home_valve()
         valve.move_to_pos(current_valve_port)
 
     def start_stirring(self, reactor_name, command, speed, stir_secs, wait):
@@ -1161,6 +1171,7 @@ class Task:
 
     def resume(self):
         resume_flag = self.module.resume(self.command_dicts)
+        self.error = False
         return resume_flag
 
     @property
