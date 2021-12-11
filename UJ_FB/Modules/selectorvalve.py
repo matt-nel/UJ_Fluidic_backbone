@@ -280,8 +280,8 @@ class SelectorValve(modules.Module):
                 if opt > self.magnet_readings[1]:
                     self.magnet_readings[1] = opt
                 self.reading = opt
-                self.stepper.set_running_speed(prev_speed)
                 break
+        self.stepper.set_running_speed(prev_speed)
         return True
 
     def check_all_positions(self):
