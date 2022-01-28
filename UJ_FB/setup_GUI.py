@@ -462,6 +462,12 @@ class SetupGUI:
                     fields += ["Dead volume in ml"]
                     node_config.dual = False
                     self.flask_setup(node_config, fields, port_options_window, button)
+                elif variable == 'storage':
+                    node_config.mod_type = 'storage'
+                    node_config.class_type = 'FluidStorage'
+                    fields += ['Tubing length in mm', 'Maximum samples',]
+                    node_config.dual = True
+                    self.storage_setup(node_config, fields, port_options_window, button)
 
         if self.num_valves == 0 or self.num_syringes == 0:
             if self.num_valves == 0:
@@ -498,7 +504,7 @@ class SetupGUI:
             graph_setup.title('Backbone connections setup')
             graph_setup.configure(bg="#ffffff")
             self.graph_tmp = GraphConfig()
-            module_options = ['syringe', 'valve', 'reactor', 'flask', 'waste', 'filter']
+            module_options = ['filter', 'flask', 'reactor', 'storage', 'syringe', 'valve', 'waste', ]
             for i in range(0, self.num_valves):
                 valve_frame = tk.Frame(graph_setup)
                 left_ports = tk.Frame(valve_frame)
@@ -710,6 +716,9 @@ class SetupGUI:
                                   command=window.destroy)
         accept_button.grid(row=offset + 1, column=0)
         cancel_button.grid(row=offset + 1, column=1)
+
+    def storage_setup(self, node_config, fields, window, button):
+        motor_cxn = motor_connector.get()
     
     def camera_setup(self, camera_button):
         def accept():
