@@ -215,6 +215,7 @@ class SetupGUI:
         self.num_valves = 0
         self.conf_syr = 0
         self.conf_valves = 0
+        self.conf_storage = 0
         self.num_he_sens = 0
         self.config_flags = [False, False, False]
         self.es_options = {'X min': 3, 'X max': 2, 'Y min': 14, 'Y max': 15, 'Z min': 18, 'Z max': 19}
@@ -718,7 +719,55 @@ class SetupGUI:
         cancel_button.grid(row=offset + 1, column=1)
 
     def storage_setup(self, node_config, fields, window, button):
-        motor_cxn = motor_connector.get()
+        def accept():
+            motor_cxn = motor_connector.get()
+            select_new = False
+            if motor_cxn in self.used_motor_connectors.keys():
+                select_new = True
+                self.write_message(f'That motor connector is already in use by {self.used_motor_connectors[motor_cxn]}')
+            if not select_new:
+                self.conf_storage += 1
+                storage_name = f"storage{self.conf_storage}"
+                self.modules[storage_name] = ModConfig()
+                module = self.modules[storage_name]
+                stepper_name = f'stepper{motor_cxn}'
+                self.used_motor_connectors[motor_cxn] = storage_name
+                module.name = storage_name
+                module.mod_type = 'storage'
+                module.class_type = 'FluidStorage'
+                module.mod_config = {'linear_stepper': False}
+                self.motor_setup(storage_name, stepper_name, motor_cxn, config_type='default')
+                self.config_flags[0], self.config_flags[2] = False, False
+                self.read_fields(node_config)
+                node_dict = node_config.as_dict()
+                self.graph_tmp.add_node(node_dict)
+                target_id = self.graph_tmp.internalId
+                self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
+                                        target_name=node_config.name, target_id=target_id,
+                                        target_port=node_config.port_no, tubing_length=node_config.tubing_length,
+                                        dual=node_config.dual)
+                button.configure(bg='lawn green')
+                window.destroy()
+
+        label = tk.Label(window, text='Storage setup', font=self.fonts['heading'], fg=self.colours['heading'])
+        label.grid(row=2, column=0, columnspan=2)
+        motor_connector = tk.StringVar(window)
+        motor_connector_label = tk.Label(window, text="Which motor connector is used for the storage?",
+                                         font=self.fonts['heading'], fg=self.colours['heading'])
+        motor_connector_label.grid(row=3, column=0)
+        options = self.motor_options.keys()
+        selected = self.used_motor_connectors.keys()
+        i = 4
+        for motor in options:
+            tk.Radiobutton(window, text=motor, variable=motor_connector, value=motor).grid(row=i, column=0)
+            i += 1
+        motor_connector.set(self.find_unselected(options, selected))
+        offset = i
+        offset = self.generate_fields(node_config, window, fields, offset) + 1
+        accept_button = tk.Button(window, text="Accept", fg='black', bg='lawn green', command=accept)
+        cancel_button = tk.Button(window, text='Cancel', fg='black', bg='tomato2', command=window.destroy)
+        accept_button.grid(row=offset, column=0)
+        cancel_button.grid(row=offset, column=1)
     
     def camera_setup(self, camera_button):
         def accept():

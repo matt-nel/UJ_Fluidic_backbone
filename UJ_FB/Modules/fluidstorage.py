@@ -1,6 +1,6 @@
 from UJ_FB.Modules import modules
 import logging
-import time
+import datetime
 
 
 class FluidStorage(modules.Module):
@@ -48,8 +48,19 @@ class FluidStorage(modules.Module):
         self.turn_wheel(diff, direction)
 
     def add_sample(self):
-        if self.manager.reaction_id !=
-        self.contents[self.current_position]
+        if self.manager.reaction_id is None:
+            sample_name = f'sample{self.current_sample}'
+        else:
+            sample_name = f'Reaction id: {self.manager.reaction_id}'
+        self.contents[self.current_position]['sample_id'] = sample_name
+        self.contents[self.current_position]['time_created'] = datetime.datetime.today().strftime("%Y-%m-%dT%H:%M")
+        self.write_log(f"Stored {sample_name} in vessel {self.current_position}")
+
+    def print_contents(self):
+        self.write_log(f"Samples currently stored in {self.name}:")
+        for item in self.contents.keys():
+            if self.contents[item]['sample_id'] is not None:
+                self.write_log(f"{self.contents[item]['sample_id']} in vessel {item}")
 
 
 class FluidStorageExt:
