@@ -63,10 +63,12 @@ class GraphConfig:
 
     def add_link(self, source_name, source_id, target_name, target_id, target_port, dual, tubing_length=0):
         self.links_tmp.append({'id': None, 'sourceInternal': source_id, 'targetInternal': target_id,
-                               'source': source_name, 'target': target_name, 'tubing_length': tubing_length, 'port': (source_id, target_port)})
+                               'source': source_name, 'target': target_name, 'tubing_length': tubing_length,
+                               'port': (source_id, target_port)})
         if dual:
             self.links_tmp.append({'id': None, 'sourceInternal': target_id, 'targetInternal': source_id,
-                                   'source': target_name, 'target': source_name, 'tubing_length': tubing_length, 'port': (source_id, target_port)})
+                                   'source': target_name, 'target': source_name, 'tubing_length': tubing_length,
+                                   'port': (source_id, target_port)})
 
     def update_links(self):
         for link in self.links_tmp:
@@ -108,8 +110,11 @@ class NodeConfig:
 
     @staticmethod
     def clean_names(raw_dict):
-        raw_dict["Maximum volume"] = raw_dict["Maximum volume in ml"]
-        raw_dict["Current volume"] = raw_dict["Current volume in ml"]
+        try:
+            raw_dict["Maximum volume"] = raw_dict["Maximum volume in ml"]
+            raw_dict["Current volume"] = raw_dict["Current volume in ml"]
+        except KeyError:
+            pass
         return raw_dict
 
     def generate_flask(self):
@@ -172,11 +177,12 @@ class SetupGUI:
         # todo select connections from graph file
         # todo add means to change syringe start position
         self.script_dir = os.path.dirname(__file__)
-       
+
         self.fonts = {'buttons': ('Calibri', 12), 'labels': ('Calibri', 14), 'default': ('Calibri', 16),
                       'heading': ('Calibri', 16), 'text': ('Calibri', 14)}
         self.colours = {'accept-button': '#4de60b', 'cancel-button': '#e6250b',
-         'heading': '#e65525',  "other-button": "#45296e", "other-button-text": "#FFFFFF", 'form-bg': '#b5d5ff'}
+                        'heading': '#e65525', "other-button": "#45296e", "other-button-text": "#FFFFFF",
+                        'form-bg': '#b5d5ff'}
         self.primary = primary
         self.primary.title("Fluidic backbone setup")
         self.primary.configure(background="#FFFFFF")
@@ -191,7 +197,8 @@ class SetupGUI:
         self.log_frame = tk.Frame(self.primary)
         self.log = tk.Text(self.log_frame, state='disable', width=80, height=16, wrap='none', borderwidth=5)
 
-        self.setup_label = tk.Label(self.primary, text='Fluidic backbone setup:', font=self.fonts['heading'], fg=self.colours['heading'], bg="#FFFFFF",
+        self.setup_label = tk.Label(self.primary, text='Fluidic backbone setup:', font=self.fonts['heading'],
+                                    fg=self.colours['heading'], bg="#FFFFFF",
                                     padx=2)
         self.utilities_label = tk.Label(self.primary, text='Utilities', font=self.fonts['heading'], padx=2,
                                         bg="#ffffff", fg=self.colours['heading'])
@@ -223,9 +230,9 @@ class SetupGUI:
                                           "max_speed": 10000, "acceleration": 1000},
                               "cmd_default": {"enabled_acceleration": False, "speed": 1000, "max_speed": 10000,
                                               "acceleration": 1000},
-                            "valve" : {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 1000,
-                             "max_speed": 4000, "acceleration": 1000}
-                            }
+                              "valve": {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 1000,
+                                        "max_speed": 4000, "acceleration": 1000}
+                              }
         self.motor_options = {'X': {'stepperX': {'cmd_id': 'STPX',
                                                  'device_config': {}}},
                               'Y': {'stepperY': {'cmd_id': 'STPY',
@@ -239,8 +246,10 @@ class SetupGUI:
         self.default_running_config = {
             "url": "http://127.0.0.1:5000/robots_api",
             "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
-                                                                                               "5": 0, "7": 0, "9": 0}, 'check_magnets': 0},
-            "valve_backlash": {"valve1": {"check_backlash": 0, 'backlash_steps': 0}, "valve2": {"check_backlash": 0, "backlash_steps": 0}},
+                                                                                               "5": 0, "7": 0, "9": 0},
+                                'check_magnets': 0},
+            "valve_backlash": {"valve1": {"check_backlash": 0, 'backlash_steps': 0},
+                               "valve2": {"check_backlash": 0, "backlash_steps": 0}},
             "valve_pos": {"valve1": None, "valve2": None}}
         self.used_motor_connectors = {}
         self.used_endstop_connectors = {}
@@ -268,7 +277,8 @@ class SetupGUI:
         def display_ports(ports, refresh=False):
             if ports:
                 i = 0
-                label = tk.Label(com_frame, text="Available ports:", font=self.fonts['heading'], bg=self.colours['form-bg'], fg=self.colours['heading'])
+                label = tk.Label(com_frame, text="Available ports:", font=self.fonts['heading'],
+                                 bg=self.colours['form-bg'], fg=self.colours['heading'])
                 label.grid(row=2, columnspan=2)
 
                 for name in ports:
@@ -299,7 +309,7 @@ class SetupGUI:
             self.key = self.text_temp
             robot_key_entry.delete(0, 'end')
             self.write_message(f'Robot key added')
-        
+
         def add_id():
             self.id = self.text_temp
             robot_id_entry.delete(0, 'end')
@@ -320,7 +330,7 @@ class SetupGUI:
         com_port_label.grid(row=1, column=0)
         avail_ports = populate_ports()
         refresh_button = tk.Button(com_frame, text="Refresh", font=button_font, bg="LemonChiffon2",
-                                    fg="black", command=lambda: display_ports(avail_ports, refresh=True))
+                                   fg="black", command=lambda: display_ports(avail_ports, refresh=True))
         refresh_button.grid(row=4, column=2)
         display_ports(avail_ports)
 
@@ -333,14 +343,20 @@ class SetupGUI:
 
         com_port_entry.grid(row=4, column=0, padx=4)
         com_port_button.grid(row=4, column=1, padx=4)
-        
-        robot_id_label = tk.Label(com_frame, text='Please enter the robot ID', bg=self.colours['form-bg'], font=self.fonts['labels'], fg=self.colours['heading'])
-        robot_id_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'), bg='#FFFFFF', fg='black', width=25)
-        robot_id_button = tk.Button(com_frame, text='Accept ID', font=button_font, bg='lawn green', fg='black', command=add_id)
 
-        robot_key_label = tk.Label(com_frame, text='Please enter the robot key', font=self.fonts['labels'], bg=self.colours['form-bg'], fg=self.colours['heading'])
-        robot_key_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'), bg='#FFFFFF', fg='black', width=25)
-        robot_key_button = tk.Button(com_frame, text='Accept key', font=button_font, bg='lawn green', fg='black', command=add_key)
+        robot_id_label = tk.Label(com_frame, text='Please enter the robot ID', bg=self.colours['form-bg'],
+                                  font=self.fonts['labels'], fg=self.colours['heading'])
+        robot_id_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'), bg='#FFFFFF', fg='black',
+                                  width=25)
+        robot_id_button = tk.Button(com_frame, text='Accept ID', font=button_font, bg='lawn green', fg='black',
+                                    command=add_id)
+
+        robot_key_label = tk.Label(com_frame, text='Please enter the robot key', font=self.fonts['labels'],
+                                   bg=self.colours['form-bg'], fg=self.colours['heading'])
+        robot_key_entry = tk.Entry(com_frame, validate='key', validatecommand=(val_text, '%P'), bg='#FFFFFF',
+                                   fg='black', width=25)
+        robot_key_button = tk.Button(com_frame, text='Accept key', font=button_font, bg='lawn green', fg='black',
+                                     command=add_key)
 
         robot_id_label.grid(row=5, column=0, padx=4)
         robot_id_entry.grid(row=5, column=1, padx=4)
@@ -351,12 +367,14 @@ class SetupGUI:
 
         mod_frame = tk.Frame(self.setup_frame, bg=self.colours['form-bg'])
         mod_label = tk.Label(mod_frame, text='Backbone modules and connections setup', font=self.fonts['labels'],
-                            bg=self.colours['form-bg'], fg=self.colours['heading'])
+                             bg=self.colours['form-bg'], fg=self.colours['heading'])
         mod_button = tk.Button(mod_frame, text='Configure modules', font=button_font, bg=self.colours['other-button'],
                                fg=self.colours['other-button-text'], command=self.graph_setup)
-        reaction_name_label = tk.Label(mod_frame, text="Please enter reaction name: ", font=self.fonts['labels'], bg=self.colours['form-bg'], fg=self.colours['heading'])
+        reaction_name_label = tk.Label(mod_frame, text="Please enter reaction name: ", font=self.fonts['labels'],
+                                       bg=self.colours['form-bg'], fg=self.colours['heading'])
         reaction_name_entry = tk.Entry(mod_frame, width=20)
-        reaction_name_butt = tk.Button(mod_frame, text="Accept name", font=self.fonts['buttons'], bg=self.colours['accept-button'], command=add_rxn_name)
+        reaction_name_butt = tk.Button(mod_frame, text="Accept name", font=self.fonts['buttons'],
+                                       bg=self.colours['accept-button'], command=add_rxn_name)
         gen_button = tk.Button(mod_frame, text='Create config', font=button_font, bg='lawn green',
                                fg='black', command=self.generate_config)
 
@@ -373,11 +391,14 @@ class SetupGUI:
         run_fb_button = tk.Button(self.utilities_frame, text='Run Fluidic Backbone', font=self.fonts['buttons'],
                                   bg='DeepSkyBlue', fg='black', command=self.run_fb_menu)
         lc_butt = tk.Button(self.utilities_frame, text='Load existing commanduino config', font=button_font,
-                            bg=self.colours['other-button'], fg=self.colours['other-button-text'], command=lambda: self.load_configs(1, 0, 0))
+                            bg=self.colours['other-button'], fg=self.colours['other-button-text'],
+                            command=lambda: self.load_configs(1, 0, 0))
         lg_butt = tk.Button(self.utilities_frame, text='Load existing graph config', font=button_font,
-                            bg=self.colours['other-button'], fg=self.colours['other-button-text'], command=lambda: self.load_configs(0, 1, 0))
+                            bg=self.colours['other-button'], fg=self.colours['other-button-text'],
+                            command=lambda: self.load_configs(0, 1, 0))
         lm_butt = tk.Button(self.utilities_frame, text='Load existing module config', font=button_font,
-                            bg=self.colours['other-button'], fg=self.colours['other-button-text'], command=lambda: self.load_configs(0, 0, 1))
+                            bg=self.colours['other-button'], fg=self.colours['other-button-text'],
+                            command=lambda: self.load_configs(0, 0, 1))
         lc_butt.grid(row=1, column=0, padx=4, pady=4)
         lg_butt.grid(row=2, column=0, padx=4, pady=4)
         lm_butt.grid(row=3, column=0, padx=4, pady=4)
@@ -418,32 +439,34 @@ class SetupGUI:
             if variable != '':
                 port_options_window = tk.Toplevel(self.primary)
                 node_config = NodeConfig()
-                fields = ["Name", "Current volume in ml", "Maximum volume in ml"]
                 node_config.valve_name = f'valve{valve_no + 1}'
                 node_config.valve_id = valve_no
                 node_config.port_no = port_no
                 title = tk.Label(port_options_window, text=f'Configure port {port_no} on {node_config.valve_name}',
                                  font=self.fonts['heading'], fg=self.colours['heading'])
                 title.grid(row=0, column=0, columnspan=2)
-                type_label = tk.Label(port_options_window, text=variable.capitalize(), font=self.fonts['heading'], fg=self.colours['heading'])
+                type_label = tk.Label(port_options_window, text=variable.capitalize(), font=self.fonts['heading'],
+                                      fg=self.colours['heading'])
                 type_label.grid(row=1, column=0, columnspan=2)
                 if variable == 'flask':
                     node_config.mod_type = 'flask'
                     node_config.class_type = 'FBFlask'
-                    fields += ['Contents', 'Tubing length in mm']
+                    fields = ['Name', 'Current volume in ml', 'Maximum volume in ml', 'Contents',
+                              'Tubing length in mm']
                     node_config.dual = True
                     self.flask_setup(node_config, fields, port_options_window, button)
                 elif variable == 'reactor':
                     node_config.mod_type = 'reactor'
                     node_config.class_type = "Reactor"
-                    fields += ['Contents', 'Fan speed RPM', "Number of heaters", "Aluminium volume (m3)", "Tubing length in mm"]
+                    fields = ['Name', 'Current volume in ml', 'Maximum volume in ml',
+                              'Contents', 'Fan speed RPM', "Number of heaters",
+                              "Aluminium volume (m3)", "Tubing length in mm"]
                     node_config.dual = True
                     self.reactor_setup(node_config, fields, port_options_window, button)
                 elif variable == 'syringe':
-                    node_config.name = f"syringe{self.conf_syr + 1}"
                     node_config.mod_type = 'syringe'
                     node_config.class_type = 'SyringePump'
-                    fields += ['Contents']
+                    fields = ['Name', 'Current volume in ml', 'Maximum volume in ml', 'Contents']
                     fields.pop(0)
                     node_config.dual = True
                     self.syringe_setup(node_config, fields, port_options_window, button)
@@ -454,19 +477,20 @@ class SetupGUI:
                     node_config.mod_type = 'waste'
                     node_config.class_type = 'FBFlask'
                     node_config.add_params.append(("Contents", "Waste"))
-                    fields += ['Tubing length in mm']
+                    fields = ['Name', 'Current volume in ml', 'Maximum volume in ml', 'Tubing length in mm']
                     node_config.dual = False
                     self.flask_setup(node_config, fields, port_options_window, button)
                 elif variable == 'filter':
                     node_config.mod_type = 'filter'
                     node_config.class_type = 'FBFlask'
-                    fields += ["Dead volume in ml"]
+                    fields = ['Name', 'Current volume in ml', 'Maximum volume in ml', "Dead volume in ml"]
                     node_config.dual = False
                     self.flask_setup(node_config, fields, port_options_window, button)
                 elif variable == 'storage':
                     node_config.mod_type = 'storage'
                     node_config.class_type = 'FluidStorage'
-                    fields += ['Tubing length in mm', 'Maximum samples',]
+                    fields = ['Maximum volume in ml',
+                              'Tubing length in mm', 'Maximum samples']
                     node_config.dual = True
                     self.storage_setup(node_config, fields, port_options_window, button)
 
@@ -474,7 +498,8 @@ class SetupGUI:
             if self.num_valves == 0:
                 valves_query = tk.Toplevel(self.primary)
                 valves_query.attributes('-topmost', 'true')
-                q_label = tk.Label(valves_query, text='How many valves are attached to the backbone?', font=self.fonts['heading'], fg=self.colours['heading'])
+                q_label = tk.Label(valves_query, text='How many valves are attached to the backbone?',
+                                   font=self.fonts['heading'], fg=self.colours['heading'])
                 validate_valves = valves_query.register(self.validate_int)
                 q_entry = tk.Entry(valves_query, validate='key', validatecommand=(validate_valves, '%P'))
                 ok_button = tk.Button(valves_query, text='Accept', bg='lawn green',
@@ -489,7 +514,8 @@ class SetupGUI:
             if self.num_syringes == 0:
                 syringe_query = tk.Toplevel(self.primary)
                 syringe_query.attributes('-topmost', 'true')
-                q_label = tk.Label(syringe_query, text="How many syringes are attached to the backbone?", font=self.fonts['heading'], fg=self.colours['heading'])
+                q_label = tk.Label(syringe_query, text="How many syringes are attached to the backbone?",
+                                   font=self.fonts['heading'], fg=self.colours['heading'])
                 validate_syr = syringe_query.register(self.validate_int)
                 q_entry = tk.Entry(syringe_query, validate='key', validatecommand=(validate_syr, '%P'))
                 ok_button = tk.Button(syringe_query, text='Accept', bg='lawn green',
@@ -514,7 +540,8 @@ class SetupGUI:
 
                 valve_name = f'valve{i + 1}'
                 self.graph_tmp.add_valve(valve_name)
-                top_label = tk.Label(valve_frame, text=f'Valve {i + 1}', font=self.fonts['heading'], fg=self.colours['heading'])
+                top_label = tk.Label(valve_frame, text=f'Valve {i + 1}', font=self.fonts['heading'],
+                                     fg=self.colours['heading'])
 
                 top_label.grid(row=0, column=1)
                 valve_frame.grid(row=1, column=i, padx=10)
@@ -545,7 +572,7 @@ class SetupGUI:
             camera_butt.configure(command=lambda: self.camera_setup(camera_butt))
             accept_butt = tk.Button(graph_setup, text='Accept', bg='lawn green', command=accept)
             cancel_butt = tk.Button(graph_setup, text='Cancel', bg='tomato2', command=reset_graph_setup)
-            camera_butt.grid(row=2, column =0)
+            camera_butt.grid(row=2, column=0)
             accept_butt.grid(row=3, column=1)
             cancel_butt.grid(row=3, column=2)
 
@@ -575,6 +602,7 @@ class SetupGUI:
                 if not select_new:
                     self.conf_syr += 1
                     syringe_name = f'syringe{self.conf_syr}'
+                    node_config.name = syringe_name
                     self.modules[syringe_name] = ModConfig()
                     module = self.modules[syringe_name]
                     stepper_name = f'stepper{motor_cxn}'
@@ -592,7 +620,8 @@ class SetupGUI:
                     target_id = self.graph_tmp.internalId
                     self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
                                             target_name=node_config.name, target_id=target_id,
-                                            target_port=node_config.port_no, tubing_length=node_config.tubing_length, dual=node_config.dual)
+                                            target_port=node_config.port_no, tubing_length=node_config.tubing_length,
+                                            dual=node_config.dual)
                     button.configure(bg='lawn green')
                     window.destroy()
             else:
@@ -601,7 +630,8 @@ class SetupGUI:
                 if not endstop:
                     self.write_message('Please select an endstop connector')
 
-        label = tk.Label(window, text=f'syringe{self.conf_syr + 1}', font=self.fonts['heading'], fg=self.colours['heading'])
+        label = tk.Label(window, text=f'syringe{self.conf_syr + 1}', font=self.fonts['heading'],
+                         fg=self.colours['heading'])
         label.grid(row=2, column=0, columnspan=2)
         motor_connector = tk.StringVar(window)
         endstop_connector = tk.StringVar(window)
@@ -617,7 +647,8 @@ class SetupGUI:
             i += 1
         motor_connector.set(self.find_unselected(options, selected))
 
-        endstop_label = tk.Label(window, text='Which endstop connection is used for this syringe?', font=self.fonts['heading'], fg=self.colours['heading'])
+        endstop_label = tk.Label(window, text='Which endstop connection is used for this syringe?',
+                                 font=self.fonts['heading'], fg=self.colours['heading'])
         endstop_label.grid(row=9, column=0)
         i = 10
         options = self.es_options.keys()
@@ -681,7 +712,8 @@ class SetupGUI:
         hall_connector = tk.StringVar(window)
         geared_motor = tk.StringVar(window)
 
-        motor_connection_label = tk.Label(window, text='Which motor connector is used for this valve?', font=self.fonts['heading'])
+        motor_connection_label = tk.Label(window, text='Which motor connector is used for this valve?',
+                                          font=self.fonts['heading'])
         motor_connection_label.grid(row=3, column=0)
         i = 4
         options = self.motor_options.keys()
@@ -691,7 +723,8 @@ class SetupGUI:
             i += 1
         motor_connector.set(self.find_unselected(options, selected))
 
-        hall_sensor_label = tk.Label(window, text='Which pin is the hall sensor plugged into?', font=self.fonts['heading'])
+        hall_sensor_label = tk.Label(window, text='Which pin is the hall sensor plugged into?',
+                                     font=self.fonts['heading'])
         hall_sensor_label.grid(row=9, column=0)
         hall_options = list(pins.keys())
         pin_to_remove = None
@@ -728,6 +761,7 @@ class SetupGUI:
             if not select_new:
                 self.conf_storage += 1
                 storage_name = f"storage{self.conf_storage}"
+                node_config.name = storage_name
                 self.modules[storage_name] = ModConfig()
                 module = self.modules[storage_name]
                 stepper_name = f'stepper{motor_cxn}'
@@ -735,11 +769,12 @@ class SetupGUI:
                 module.name = storage_name
                 module.mod_type = 'storage'
                 module.class_type = 'FluidStorage'
-                module.mod_config = {'linear_stepper': False}
                 self.motor_setup(storage_name, stepper_name, motor_cxn, config_type='default')
                 self.config_flags[0], self.config_flags[2] = False, False
                 self.read_fields(node_config)
                 node_dict = node_config.as_dict()
+                module.mod_config = {'linear_stepper': False, 'Maximum samples': int(node_dict['Maximum samples']),
+                                     'Maximum volume': int(node_dict['Maximum volume'])}
                 self.graph_tmp.add_node(node_dict)
                 target_id = self.graph_tmp.internalId
                 self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
@@ -768,7 +803,7 @@ class SetupGUI:
         cancel_button = tk.Button(window, text='Cancel', fg='black', bg='tomato2', command=window.destroy)
         accept_button.grid(row=offset, column=0)
         cancel_button.grid(row=offset, column=1)
-    
+
     def camera_setup(self, camera_button):
         def accept():
             self.modules['camera1'] = ModConfig()
@@ -794,7 +829,7 @@ class SetupGUI:
             img_label.imgtk = imgtk
             img_label.configure(image=imgtk)
             img_label.after(1, video_stream)
-        
+
         def setup_roi():
             warning2 = tk.Toplevel(window)
             warn_label2 = tk.Label(warning2, text="Press space or enter when done. Press c to cancel")
@@ -807,14 +842,18 @@ class SetupGUI:
         cap = cv.VideoCapture(0)
         label = tk.Label(window, text="Camera", font=self.fonts['heading'], fg=self.colours['heading'])
         label.grid(row=1, column=0, columnspan=2)
-        label = tk.Label(window, text="Please place the camera, then use the button to set the region of interest.", font=self.fonts['labels'])
+        label = tk.Label(window, text="Please place the camera, then use the button to set the region of interest.",
+                         font=self.fonts['labels'])
         img_label = tk.Label(window)
         label.grid(row=2, column=0, columnspan=2)
         img_label.grid(row=3, column=0, columnspan=2)
-        roi_butt = tk.Button(window, text="Configure ROI", font=self.fonts['buttons'], bg=self.colours['other-button'], command=setup_roi)
-        roi_butt.grid(row=4, column =0, columnspan=2)
-        accept_butt = tk.Button(window, text="Accept", font=self.fonts['buttons'], bg=self.colours['accept-button'], command=accept)
-        cancel_butt = tk.Button(window, text="Cancel", font=self.fonts['buttons'], bg=self.colours['cancel-button'], command=cancel)
+        roi_butt = tk.Button(window, text="Configure ROI", font=self.fonts['buttons'], bg=self.colours['other-button'],
+                             command=setup_roi)
+        roi_butt.grid(row=4, column=0, columnspan=2)
+        accept_butt = tk.Button(window, text="Accept", font=self.fonts['buttons'], bg=self.colours['accept-button'],
+                                command=accept)
+        cancel_butt = tk.Button(window, text="Cancel", font=self.fonts['buttons'], bg=self.colours['cancel-button'],
+                                command=cancel)
         accept_butt.grid(row=5, column=1)
         cancel_butt.grid(row=5, column=3)
         video_stream()
@@ -827,13 +866,15 @@ class SetupGUI:
             window (tkinter Window Object): Parent window of this menu
             button (Tkinter Button): The button to colour once this method is run
         """
+
         def accept_valve_link(sel_valve, valve_button):
             valve_name = sel_valve.get()
             if valve_name != "":
                 valve = self.graph_tmp.valves[valve_name]
                 self.used_valves.append(valve_name)
                 self.graph_tmp.add_link(node_config.valve_name, node_config.valve_id, valve["name"],
-                                        valve["internalId"], node_config.port_no, node_config.tubing_length, node_config.dual)
+                                        valve["internalId"], node_config.port_no, node_config.tubing_length,
+                                        node_config.dual)
                 valve_button.configure(bg="lawn green")
                 window.destroy()
             else:
@@ -875,7 +916,8 @@ class SetupGUI:
             self.modules[flask.name] = flask
             self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
                                     target_name=node_config.name, target_id=target_id,
-                                    target_port=node_config.port_no, tubing_length=node_config.tubing_length, dual=node_config.dual)
+                                    target_port=node_config.port_no, tubing_length=node_config.tubing_length,
+                                    dual=node_config.dual)
             flask_button.configure(bg='lawn green')
             window.destroy()
 
@@ -906,7 +948,8 @@ class SetupGUI:
                 self.modules[reactor.name] = reactor
                 self.graph_tmp.add_link(source_name=node_config.valve_name, source_id=node_config.valve_id,
                                         target_name=node_config.name, target_id=target_id,
-                                        target_port=node_config.port_no, dual=node_config.dual, tubing_length=node_config.tubing_length)
+                                        target_port=node_config.port_no, dual=node_config.dual,
+                                        tubing_length=node_config.tubing_length)
                 self.cmd_devices.devices[thermistor] = {'command_id': thermistor}
                 self.cmd_devices.devices[stirrer] = {'command_id': stirrer}
                 self.cmd_devices.devices[heater] = {'command_id': heater}

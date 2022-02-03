@@ -27,6 +27,10 @@ class FluidStorage(modules.Module):
             self.current_position -= n_turns
         else:
             self.current_position += n_turns
+        if self.current_position < 1:
+            self.current_position += self.max_samples
+        elif self.current_position > self.max_samples:
+            self.current_position -= self.max_samples
         self.write_log(f"{self.name} moving to {self.current_position}")
         for i in range(n_turns):
             self.stepper.move_steps(steps)
@@ -47,14 +51,33 @@ class FluidStorage(modules.Module):
             diff = diff_rev
         self.turn_wheel(diff, direction)
 
-    def add_sample(self):
-        if self.manager.reaction_id is None:
-            sample_name = f'sample{self.current_sample}'
+    def add_sample(self, task):
+        found_empty = False
+        for i in range(self.current_position, self.max_samples + 1):
+            if self.contents[i]['sample_id'] is None:
+                found_empty = True
+        if not found_empty:
+            for i in range(1, self.current_position):
+                if self.contents[i]['sample_id'] is None:
+                    found_empty = True
+        if found_empty:
+            self.move_to_position(i)
+            self.current_position = i
+            if self.manager.reaction_id is None:
+                sample_name = f'sample{self.current_sample}'
+            else:
+                sample_name = f'Reaction id: {self.manager.reaction_id}'
+            self.contents[self.current_position]['sample_id'] = sample_name
+            self.contents[self.current_position]['time_created'] = datetime.datetime.today().strftime("%Y-%m-%dT%H:%M")
+            self.write_log(f"Stored {sample_name} in vessel {self.current_position}")
         else:
-            sample_name = f'Reaction id: {self.manager.reaction_id}'
-        self.contents[self.current_position]['sample_id'] = sample_name
-        self.contents[self.current_position]['time_created'] = datetime.datetime.today().strftime("%Y-%m-%dT%H:%M")
-        self.write_log(f"Stored {sample_name} in vessel {self.current_position}")
+            self.write_log(f"No more empty slots on {self.name}")
+            task.error_flag = True
+
+    def remove_sample(self):
+        self.write_log(f'Removed {self.contents[self.current_position]}')
+        self.contents[self.current_position]['sample_id'] = None
+        self.contents[self.current_position]['time_created'] = None
 
     def print_contents(self):
         self.write_log(f"Samples currently stored in {self.name}:")

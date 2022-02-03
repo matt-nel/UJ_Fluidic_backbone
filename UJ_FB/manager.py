@@ -12,7 +12,7 @@ from threading import Thread, Lock
 import commanduino
 import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
 import UJ_FB.web_listener as  web_listener
-from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules, camera
+from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules, camera, fluidstorage
 import UJ_FB.fbexceptions as fbexceptions
 
 
@@ -82,12 +82,14 @@ class Manager(Thread):
         self.error_start = None
         self.error_flag = False
         self.valid_nodes = []
-        self.valves = {}
+        self.modules = {'valves':{}, 'syringes':{}, 'reactors':{}, 'flasks':{}, 'cameras':{}, 'storage':{}}
+        self.valves = self.modules['valves']
         self.num_valves = 0
-        self.syringes = {}
-        self.reactors = {}
-        self.flasks = {}
-        self.cameras ={}
+        self.syringes = self.modules['syringes']
+        self.reactors = self.modules['reactors']
+        self.flasks = self.modules['flasks']
+        self.cameras = self.modules['cameras']
+        self.storage = self.modules['storage']
         self.gui_main = None
         self.populate_modules()
         graph_config = self.json_loader("Configs/module_connections.json")
@@ -165,6 +167,8 @@ class Manager(Thread):
                 self.flasks[module_name] = modules.FBFlask(module_name, module_info, self.cmd_mng, self)
             elif module_type == "camera":
                 self.cameras[module_name] = camera.Camera(module_name, module_info, self)
+            elif module_type == 'storage':
+                self.storage[module_name] = fluidstorage.FluidStorage(module_name, module_info, self.cmd_mng, self)
         if syringes == 0:
             self.write_log('No pumps configured', level=logging.WARNING)
             time.sleep(2)
@@ -202,6 +206,8 @@ class Manager(Thread):
                     g.nodes[n]['object'] = self.flasks[name]
                 elif 'reactor' in mod_type:
                     g.nodes[n]['object'] = self.reactors[name]
+                elif 'storage' in mod_type:
+                    g.nodes[n]['object'] = self.storage[name]
         for valve in valves_list:
             name = g.nodes[valve]['name']
             g.nodes[valve]['object'] = self.valves[name]
@@ -252,6 +258,7 @@ class Manager(Thread):
         This is the primary loop of the program. This loop monitors for errors or interrupts, dispatches tasks,
          updates the server and has logic to handle pauses.
         """
+        rxn_last_check = time.time()
         heat_update_time = time.time()
         while not self.exit_flag:
             self.check_task_completion()
@@ -295,8 +302,11 @@ class Manager(Thread):
                         self.home_all_valves()
                     # Attempt to request reaction from server
                     if self.web_enabled:
-                        if self.listener.request_reaction():
-                            self.write_log(f"Prepared to run {self.reaction_name} reaction.", level=logging.INFO)
+                        if time.time() - rxn_last_check > 10:
+                            rxn_last_check = time.time()
+                            if self.listener.request_reaction():
+                                self.write_log(f"Prepared to run {self.reaction_name} reaction.", level=logging.INFO)
+                    time.sleep(2)
                 # a reaction has been queued
                 else:
                     if execute and not self.pause_after_rxn:
@@ -609,34 +619,10 @@ class Manager(Thread):
             module object (Module): The target module if found, otherwise None
         """
         target_name = target.lower()
-        if "syringe" in target_name:
-            target = self.syringes.get(target)
-            if target is None: 
-                for syringe in self.syringes:
-                    target = self.syringes[syringe]
-                    break
-        elif "reactor" in target_name:
-            target = self.reactors.get(target)
-            if target is None: 
-                for r in self.reactors:
-                    target = self.reactors[r]
-                    break
-        elif "camera" in target_name:
-            target = self.cameras.get(target)
-            if target is None: 
-                for cam in self.cameras:
-                    target = self.cameras[cam]
-                    break
-        elif "waste" in target_name:
-            target = self.flasks.get(target)
-            if target is None: 
-                return None
-        else:
-            target = self.flasks.get(target)
-            if target is None:
-                for flask in self.flasks:
-                    target = self.flasks[flask]
-                    break
+        for key in self.modules.keys():
+            target = self.modules[key].get(target)
+            if target is not None:
+                break
         return target
 
     def find_reagent(self, reagent_name):
@@ -744,6 +730,37 @@ class Manager(Thread):
             self.wait_until_ready()
         return True
 
+    def command_storage(self, name, command, parameters, command_dict):
+        """
+        Interprets the command dictionary for the storage device
+
+        Args:
+            name (str): the name of the storage device
+            command (str): the command type
+            parameters (dict): the parameters for the action
+            command_dict (dict): the full dictionary for the action
+        Returns:
+            bool - True if command successfully sent
+        """
+        new_task = Task(command_dict, self.storage[name])
+        self.tasks.append(new_task)
+        if command == 'turn':
+            cmd_thread = Thread(target=self.storage[name].turn_wheel, name=name + "turnwheel", args=(parameters['num_turns'], parameters['direction']))
+        elif command == 'move_to':
+            cmd_thread = Thread(target=self.storage[name].move_to_position, name=name + "moveto", args=(parameters['position'],))
+        elif command == 'store':
+            cmd_thread = Thread(target=self.storage[name].add_sample, name=name + "store", args=(new_task,))
+        elif command == "remove":
+            cmd_thread = Thread(target=self.storage[name].remove_sample, name=name + "remove")
+        else:
+            self.write_log(f"{command} is not a valid command", level=logging.WARNING)
+            return False
+        new_task.add_worker(cmd_thread)
+        cmd_thread.start()
+        if parameters['wait']:
+            self.wait_until_ready()
+        return True
+
     def wait_until_ready(self):
         """
         Waits for the last sent action to complete
@@ -816,6 +833,7 @@ class Manager(Thread):
             if cur_max_vol < prev_max_vol:
                 max_vol = cur_max_vol
                 min_vol = self.valves[valve].syringe.min_volume
+
         max_volume = max_vol - min_vol - dead_volume
         # Determine number of moves required
         nr_full_moves = int(volume / max_volume)

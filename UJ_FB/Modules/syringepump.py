@@ -1,6 +1,7 @@
 import logging
 import time
 from UJ_FB.Modules import modules
+from UJ_FB.Modules import fluidstorage
 
 
 class SyringePump(modules.Module):
@@ -204,32 +205,38 @@ class SyringePump(modules.Module):
         if target is not None:
             # we are aspirating
             if volume_change > 0:
-                message += f'aspirate {round(abs(volume_change),2)} ul of '
-                if not air:
-                    if target.type != "SP":
-                        target.change_volume(self.contents[1][0], -volume_change)
-                        message += f'{target.contents[0]} '
-                        self.contents[1][0] = target.contents[0]
-                    else:
-                        message += f'{target.contents[0][0]}'
-                        self.contents[1][0] = target.contents[1][0]
-                    self.contents[1][1] += volume_change
+                if target.type == 'FS':
+                    target.remove_sample()
                 else:
-                    message += 'air '
-                    self.contents[0][1] += volume_change
-                message += f'from {target.name}'
+                    message += f'aspirate {round(abs(volume_change),2)} ul of '
+                    if not air:
+                        if target.type != "SP":
+                            target.change_volume(self.contents[1][0], -volume_change)
+                            message += f'{target.contents[0]} '
+                            self.contents[1][0] = target.contents[0]
+                        else:
+                            message += f'{target.contents[0][0]}'
+                            self.contents[1][0] = target.contents[1][0]
+                        self.contents[1][1] += volume_change
+                    else:
+                        message += 'air '
+                        self.contents[0][1] += volume_change
+                    message += f'from {target.name}'
             # we are dispensing
             else:
-                message += f'dispense {int(abs(volume_change))} ul of '
-                if not air:
-                    message += f'{self.contents[1][0]} '
-                    self.contents[1][1] += volume_change
-                    if target.type != "SP":
-                        target.change_volume(self.contents[1][0], -volume_change)
+                if target.type == 'FS':
+                    target.add_sample()
                 else:
-                    message += 'air '
-                    self.contents[0][1] += volume_change
-                message += f'to {target.name}'
+                    message += f'dispense {int(abs(volume_change))} ul of '
+                    if not air:
+                        message += f'{self.contents[1][0]} '
+                        self.contents[1][1] += volume_change
+                        if target.type != "SP":
+                            target.change_volume(self.contents[1][0], -volume_change)
+                    else:
+                        message += 'air '
+                        self.contents[0][1] += volume_change
+                    message += f'to {target.name}'
             self.write_log(message)
             self.contents[1][1] = max(self.contents[1][1], 0)
             self.contents[0][1] = max(self.contents[0][1], 0)

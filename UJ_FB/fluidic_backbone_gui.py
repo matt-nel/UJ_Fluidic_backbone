@@ -90,7 +90,7 @@ class FluidicBackboneUI:
         except queue.Empty:
             pass
         finally:
-            self.primary.after(50, self.read_queue)
+            self.primary.after(500, self.read_queue)
 
     def populate_syringes(self, syringe_name):
         """

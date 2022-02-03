@@ -35,12 +35,13 @@ class WebListener:
         self.test_connection()
 
     def test_connection(self):
+        retry = False
         with self.url_lock:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 s.connect((self.ip, 80))
                 ip_address = s.getsockname()[0]
-                r = requests.get(self.url + "/", json={"robot_id": self.id, 'robot_key': self.key, "cmd": "connect", "ip": ip_address})
+                r = requests.get(self.url + "/", json={"robot_id": self.id, 'robot_key': self.key, "cmd": "connect", "ip": ip_address}, timeout=10)
                 r = r.json()
                 self.manager.prev_run_config['url'] = self.url
                 self.manager.rc_changes = True
@@ -48,14 +49,16 @@ class WebListener:
                     self.manager.write_log(f'Connection established to {self.url}', level=logging.INFO)
                     self.valid_connection = True
                 else:
-                    self.manager.write_log('Connection refused. Please check robot ID and key in configuration files.',  level=logging.WARNING)
+                    self.manager.write_log('Connection refused. Please check robot ID and key in configuration files.', level=logging.WARNING)
             except (requests.ConnectionError, json.decoder.JSONDecodeError, socket.gaierror) as e:
                 if self.url != DEFAULT_URL:
                     self.url = DEFAULT_URL
-                    self.test_connection()
+                    retry = True
                 else:
                     self.valid_connection = False
                     self.manager.write_log("Could not connect to server, running offline. ", level=logging.WARNING)
+        if retry:
+            self.test_connection()
 
     def update_status(self, ready, error=False, reaction_complete=False):
         time_elapsed = time.time() - self.last_error_update
