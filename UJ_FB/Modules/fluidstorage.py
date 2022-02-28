@@ -16,7 +16,7 @@ class FluidStorage(modules.Module):
         self.current_sample = 0
         self.contents = {}
         for i in range(1, self.max_samples + 1):
-            self.contents[i] = {"sample_id": None, "time_created": None}
+            self.contents[i] = {"sample_id": "", "time_created": ""}
         self.max_volume = module_config['Maximum volume']
         self.stepper = self.steppers[0]
 
@@ -53,12 +53,13 @@ class FluidStorage(modules.Module):
 
     def add_sample(self, task):
         found_empty = False
+        i = 0
         for i in range(self.current_position, self.max_samples + 1):
-            if self.contents[i]['sample_id'] is None:
+            if not self.contents[i]['sample_id']:
                 found_empty = True
         if not found_empty:
             for i in range(1, self.current_position):
-                if self.contents[i]['sample_id'] is None:
+                if not self.contents[i]['sample_id']:
                     found_empty = True
         if found_empty:
             self.move_to_position(i)
@@ -76,13 +77,13 @@ class FluidStorage(modules.Module):
 
     def remove_sample(self):
         self.write_log(f'Removed {self.contents[self.current_position]}')
-        self.contents[self.current_position]['sample_id'] = None
-        self.contents[self.current_position]['time_created'] = None
+        self.contents[self.current_position]['sample_id'] = ""
+        self.contents[self.current_position]['time_created'] = ""
 
     def print_contents(self):
         self.write_log(f"Samples currently stored in {self.name}:")
         for item in self.contents.keys():
-            if self.contents[item]['sample_id'] is not None:
+            if self.contents[item]['sample_id']:
                 self.write_log(f"{self.contents[item]['sample_id']} in vessel {item}")
 
 

@@ -166,7 +166,7 @@ float LinearAccelStepperActuator::maxSpeed(){
 }
 
 float LinearAccelStepperActuator::acceleration(){
-  return stepper->acceleration();
+  return lastSetAcceleration;
 }
 
 
