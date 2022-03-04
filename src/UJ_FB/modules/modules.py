@@ -1,5 +1,5 @@
 import logging
-from UJ_FB.Devices import devices, steppermotor
+from UJ_FB.devices import devices, steppermotor
 from threading import Lock
 
 

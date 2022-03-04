@@ -1,4 +1,4 @@
-from UJ_FB.Modules import modules
+from UJ_FB.modules import modules
 from threading import Thread
 from commanduino import exceptions
 import math

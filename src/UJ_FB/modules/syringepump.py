@@ -1,7 +1,7 @@
 import logging
 import time
-from UJ_FB.Modules import modules
-from UJ_FB.Modules import fluidstorage
+from UJ_FB.modules import modules
+from UJ_FB.modules import fluidstorage
 
 
 class SyringePump(modules.Module):

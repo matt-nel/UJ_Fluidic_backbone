@@ -9,6 +9,12 @@ import cv2 as cv
 import numpy as np
 
 
+def start_gui():
+    root = tk.Tk()
+    SetupGUI(root)
+    root.mainloop()
+
+
 def populate_ports():
     """
     Gets the serial ports available for connection
@@ -255,10 +261,8 @@ class SetupGUI:
         self.used_endstop_connectors = {}
         self.used_he_pins = []
         self.used_valves = []
-        self.config_filenames = ['Configs/cmd_config.json', 'Configs/module_connections.json',
-                                 'Configs/module_info.json', 'Configs/running_config.json']
-        for file in self.config_filenames:
-            file = os.path.join(self.script_dir, file)
+        self.config_filenames = ['configs/cmd_config.json', 'configs/module_connections.json',
+                                 'configs/module_info.json', 'configs/running_config.json']
 
         image_dir = os.path.join(self.script_dir, 'valve.png')
         self.valve_image = ImageTk.PhotoImage(Image.open(image_dir))
@@ -1063,11 +1067,12 @@ class SetupGUI:
         for filename in self.config_filenames[:3]:
             filename = os.path.join(self.script_dir, filename)
             config_files.append(open(filename, 'w'))
+        self.config_filenames[3] = os.path.join(self.script_dir, self.config_filenames[3])
         # only write running config if it doesn't already exist.
         if not os.path.exists(self.config_filenames[3]):
-            running_config = open(self.config_filenames[3], 'w')
-            prev_running_config = json.dumps(self.default_running_config, indent=4)
-            running_config.write(prev_running_config)
+            with open(self.config_filenames[3], 'w') as running_config:
+                default_running_config = json.dumps(self.default_running_config, indent=4)
+                running_config.write(default_running_config)
         cmd_config = json.dumps(self.cmd_devices.as_dict(), indent=4)
         config_files[0].write(cmd_config)
         module_connections = json.dumps(self.graph.as_dict(), indent=4)
@@ -1080,7 +1085,7 @@ class SetupGUI:
         config_files[2].write(module_config)
         for file in config_files:
             file.close()
-        self.write_message("Config files written")
+        self.write_message(f"Config files written to {self.script_dir}/configs")
 
     def load_configs(self, cmd_cnf, md_cxn, md_cnf):
         if cmd_cnf:
@@ -1153,6 +1158,4 @@ class SetupGUI:
 
 
 if __name__ == '__main__':
-    root = tk.Tk()
-    program = SetupGUI(root)
-    root.mainloop()
+    start_gui()

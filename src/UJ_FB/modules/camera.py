@@ -1,4 +1,4 @@
-from UJ_FB.Modules import modules
+from UJ_FB.modules import modules
 import logging
 import cv2 as cv
 from threading import Thread, Lock

@@ -1,4 +1,4 @@
-from UJ_FB.Modules import modules
+from UJ_FB.modules import modules
 import time
 import logging
 

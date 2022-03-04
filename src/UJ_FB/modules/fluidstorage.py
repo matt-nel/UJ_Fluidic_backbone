@@ -1,4 +1,4 @@
-from UJ_FB.Modules import modules
+from UJ_FB.modules import modules
 import logging
 import datetime
 
@@ -21,8 +21,8 @@ class FluidStorage(modules.Module):
         self.stepper = self.steppers[0]
 
     def turn_wheel(self, n_turns, direction):
-        steps = 6400
-        if direction == 'R':
+        steps = 3200
+        if direction.upper() == 'R':
             steps *= -1
             self.current_position -= n_turns
         else:

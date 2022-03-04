@@ -11,9 +11,18 @@ from queue import Queue
 from threading import Thread, Lock
 import commanduino
 import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
-import UJ_FB.web_listener as  web_listener
-from UJ_FB.Modules import syringepump, selectorvalve, reactor, modules, camera, fluidstorage
+import UJ_FB.web_listener as web_listener
+from UJ_FB.modules import syringepump, selectorvalve, reactor, modules, camera, fluidstorage
 import UJ_FB.fbexceptions as fbexceptions
+
+
+def json_loader(root, fp, object_hook=None):
+    fp = os.path.join(root, fp)
+    try:
+        with open(fp) as file:
+            return json.load(file, object_hook=object_hook)
+    except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
+        raise fbexceptions.FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
 
 def load_graph(graph_config):
@@ -38,6 +47,10 @@ def object_hook_int(obj):
     return output
 
 
+def get_log_location():
+    pass
+
+
 class Manager(Thread):
     """
     Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
@@ -47,16 +60,14 @@ class Manager(Thread):
         Thread.__init__(self)
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
-        cm_config = os.path.join(self.script_dir, "Configs/cmd_config.json")
+        cm_config = os.path.join(self.script_dir, "configs/cmd_config.json")
         self.cmd_mng = commanduino.CommandManager.from_configfile(cm_config, simulation)
-        self.module_info = self.json_loader("Configs/module_info.json")
+        self.module_info = json_loader(self.script_dir, "configs/module_info.json")
         self.key = self.module_info['key']
         self.id = self.module_info['id']
         self.module_info = self.module_info['modules']
-        self.prev_run_config = self.json_loader("Configs/running_config.json", object_hook=object_hook_int)
+        self.prev_run_config = json_loader(self.script_dir, "configs/running_config.json", object_hook=object_hook_int)
         self.name = "Manager" + self.id
-        logfile = 'UJ_FB/Logs/log' + datetime.datetime.today().strftime('%Y%m%d')
-        logging.basicConfig(filename=logfile, level=logging.INFO)
         self.logger = logging.getLogger(self.id)
         self.q = Queue()
         self.pipeline = Queue()
@@ -92,7 +103,7 @@ class Manager(Thread):
         self.storage = self.modules['storage']
         self.gui_main = None
         self.populate_modules()
-        graph_config = self.json_loader("Configs/module_connections.json")
+        graph_config = json_loader(self.script_dir, "configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
         self.default_fr = 10000
@@ -101,10 +112,8 @@ class Manager(Thread):
         self.listener = web_listener.WebListener(self, self.id, self.key)
         self.web_enabled = web_enabled
         self.rc_changes = False
-        self.write_running_config("Configs/running_config.json")
+        self.write_running_config("configs/running_config.json")
         self.xdl = ''
-        if gui:
-            self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
         if stdout_log:
             handler = logging.StreamHandler(sys.stdout)
             handler.setLevel(logging.INFO)
@@ -112,17 +121,13 @@ class Manager(Thread):
         if web_enabled:
             self.listener.test_connection()
         self.start()
+        if gui:
+            self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
+            self.gui_main.mainloop()
+        
 
     def update_url(self, url):
         self.listener.update_url(url)
-
-    def json_loader(self, fp, object_hook=None):
-        fp = os.path.join(self.script_dir, fp)
-        try:
-            with open(fp) as file:
-                return json.load(file, object_hook=object_hook)
-        except (FileNotFoundError, json.decoder.JSONDecodeError) as e:
-            raise fbexceptions.FBConfigurationError(f'The JSON provided {fp} is invalid. \n {e}')
 
     def write_log(self, message, level=logging.INFO):
         if self.gui_main is not None:
@@ -249,7 +254,7 @@ class Manager(Thread):
             self.start_queue()
     
     def reload_graph(self):
-        graph_config = self.json_loader("Configs/module_connections.json")
+        graph_config = json_loader(self.script_dir, "configs/module_connections.json")
         self.graph = load_graph(graph_config)
         self.check_connections()
 
@@ -348,16 +353,8 @@ class Manager(Thread):
                         temp = "-"
                     self.gui_main.queue.put(("temp", (r.name, temp)))
             if self.rc_changes:
-                self.write_running_config("Configs\\running_config.json")
-        self.stop_flag = True
-        self.pause_all()
-        for cam in self.cameras:
-            self.cameras[cam].exit_flag = True
-        for valve in self.valves:
-            self.prev_run_config['valve_pos'][valve] = self.valves[valve].current_port
-        self.write_running_config("Configs\\running_config.json")
-        if self.gui_main:
-            self.gui_main.primary.quit()
+                self.write_running_config("configs\\running_config.json")
+        self.exit_program()
 
     def add_to_queue(self, commands, queue=None):
         """
@@ -379,7 +376,7 @@ class Manager(Thread):
     def export_queue(self):
         output = {"pipeline": list(self.pipeline.queue)}
         export_queue = json.dumps(output, indent=4)
-        pipeline_path = os.path.join(self.script_dir, "Configs/Pipeline.json")
+        pipeline_path = os.path.join(self.script_dir, "configs/Pipeline.json")
         file = open(pipeline_path, 'w+')
         file.write(export_queue)
         file.close()
@@ -1164,6 +1161,21 @@ class Manager(Thread):
                             'command': 'home', 'parameters': {'wait': True}})
         self.add_to_queue(home_cmds, self.q)
 
+    def exit_program(self):
+        self.stop_flag = True
+        self.pause_all()
+        for cam in self.cameras:
+            self.cameras[cam].exit_flag = True
+        for valve in self.valves:
+            self.prev_run_config['valve_pos'][valve] = self.valves[valve].current_port
+        self.write_running_config("configs\\running_config.json")
+        if self.gui_main:
+            while not self.gui_main.safe_quit_flag:
+                time.sleep(0.2)
+            self.gui_main.primary.destroy()
+            self.gui_main.primary.quit()
+        for handler in self.cmd_mng.commandhandlers:
+            handler.stop()
 
 class Task:
     """

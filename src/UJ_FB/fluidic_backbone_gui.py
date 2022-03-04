@@ -12,6 +12,8 @@ class FluidicBackboneUI:
         """
         self.primary = tk.Tk()
         self.queue = queue.Queue()
+        self.quit_flag = False
+        self.safe_quit_flag = False
         self.primary.protocol('WM_DELETE_WINDOW', self.end_program)
         self.manager = robot_manager
         self.fonts = {'buttons': ('Calibri', 12), 'labels': ('Calibri', 14), 'default': ('Calibri', 16),
@@ -90,7 +92,10 @@ class FluidicBackboneUI:
         except queue.Empty:
             pass
         finally:
-            self.primary.after(500, self.read_queue)
+            if not self.quit_flag:
+                self.primary.after(300, self.read_queue)
+            else:
+                self.safe_quit_flag = True
 
     def populate_syringes(self, syringe_name):
         """
@@ -563,6 +568,7 @@ class FluidicBackboneUI:
     def end_program(self):
         parameters = {'pause': False, 'stop': False, 'resume': False, 'exit': True}
         self.send_interrupt(parameters)
+        self.quit_flag = True
 
     def validate_vol(self, new_num):
         if not new_num:  # field is being cleared
