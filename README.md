@@ -64,7 +64,7 @@ Linux:
 
 Open a terminal and use your favourite package manager to install OpenCV:
 
-`sudo apt install pytho3-opencv`
+`sudo apt install python3-opencv`
 
 ### **Arduino IDE and libraries**
 
