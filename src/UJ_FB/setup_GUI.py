@@ -188,9 +188,9 @@ class SetupGUI:
                 com_port_entry.delete(0, "end")
             else:
                 if "tty" in port_name:
-                    port = "/dev/" + port_name
-                self.cmd_devices.ios.append({"port": port})
-                self.write_message(f"Port {port} added")
+                    port_name = "/dev/" + port_name
+                self.cmd_devices.ios.append({"port": port_name})
+                self.write_message(f"Port {port_name} added")
 
         def add_key():
             self.key = self.text_temp
@@ -510,7 +510,7 @@ class SetupGUI:
                     node["mod_type"] = "syringe_pump"
                     node["class_type"] = "SyringePump"
                     node["mod_config"] = {"screw_lead": 8, "linear_stepper": True, "backlash": 780}
-                    node["devices"] = self.motor_setup(syringe_name, stepper_name, motor_cxn, config_type="default")
+                    node["devices"] = self.motor_setup(stepper_name, motor_cxn, config_type="default")
                     node["endstop"] = self.es_options[endstop]
                     self.read_fields(node_info, node)
                     self.add_edge(True, node["name"], valve_info["valve_name"], False,
@@ -595,7 +595,7 @@ class SetupGUI:
                         node["mod_config"] = {"ports": 10, "linear_stepper": False, "gear": gear}
                         node["devices"] = {}
                         node["devices"].update(
-                            self.motor_setup(valve_name, stepper_name, motor_cxn, config_type="valve"))
+                            self.motor_setup(stepper_name, motor_cxn, config_type="valve"))
                         node["devices"]["he_sens"] = {"name": he_sens_name, "cmd_id": hall_sensor, "device_config": {}}
                         self.cmd_devices.devices[hall_sensor] = {"command_id": hall_sensor}
                         button.configure(bg="lawn green")
@@ -672,7 +672,7 @@ class SetupGUI:
                 node["name"] = storage_name
                 node["mod_type"] = "storage"
                 node["class_type"] = "FluidStorage"
-                node["devices"] = self.motor_setup(storage_name, stepper_name, motor_cxn, config_type="default")
+                node["devices"] = self.motor_setup(stepper_name, motor_cxn, config_type="default")
                 node["mod_config"] = {"linear_stepper": False}
                 tubing_length = self.read_fields(node_info, node)
                 self.add_edge(True, node["name"], valve_info["valve_name"], found_node,
@@ -1031,13 +1031,16 @@ class SetupGUI:
 
     def generate_config(self):
         config_files = []
+        if not os.path.exists(os.path.join(self.script_dir, "configs")):
+            os.chdir(self.script_dir)
+            os.mkdir("configs")
         for filename in self.config_filenames[:2]:
             filename = os.path.join(self.script_dir, filename)
             config_files.append(open(filename, "w"))
         self.config_filenames[2] = os.path.join(self.script_dir, self.config_filenames[2])
         # only write running config if it doesn't already exist.
         if not os.path.exists(self.config_filenames[2]):
-            with open(self.config_filenames[3], "w") as running_config:
+            with open(self.config_filenames[2], "w") as running_config:
                 default_running_config = json.dumps(self.default_running_config, indent=4)
                 running_config.write(default_running_config)
         # write cmd_config
