@@ -12,11 +12,10 @@ class Reactor(modules.FBFlask):
     """
     def __init__(self, name, module_info, cmduino, manager):
         super(Reactor, self).__init__(name, module_info, cmduino, manager)
-        self.type = "RCT"
-        self.num_heaters = module_info['mod_config']['num_heaters']
+        self.mod_type = "reactor"
         # specific heat capacity, volume, density
-        volume = module_info['mod_config']['aluminium_volume']
-        split_num = volume.split('e')
+        volume = module_info["mod_config"]["aluminium_volume"]
+        split_num = volume.split("e")
         if len(split_num) > 1:
             volume = float(split_num[0]) * math.pow(10, int(split_num[1]))
         else:
@@ -69,12 +68,12 @@ class Reactor(modules.FBFlask):
         self.ready = False
         if target:
             self.target = True
-        self.write_log(f'{self.name} started heating', level=logging.INFO)
+        self.write_log(f"{self.name} started heating", level=logging.INFO)
         for heater in self.heaters:
             heater.start_heat(cart_voltage)
         self.heat_time = heat_secs
 
-    def start_stir(self, speed, stir_secs, task):
+    def start_stir(self, speed, stir_secs):
         self.stirring = True
         max_speed = self.mag_stirrers[0].max_speed
         if speed < (0.5 * max_speed):
@@ -90,7 +89,7 @@ class Reactor(modules.FBFlask):
             self.mag_stirrers[0].start_stir(speed)
         self.stir_start_time = time.time()
         self.stir_time = stir_secs
-        self.write_log(f'{self.name} started stirring at {speed}', level=logging.INFO)
+        self.write_log(f"{self.name} started stirring at {speed}", level=logging.INFO)
 
     def run(self):
         while not self.exit:
@@ -229,12 +228,11 @@ class Reactor(modules.FBFlask):
         :param command_dicts: dictionary representing heat and stir command
         :return: True if resuming, else returns False.
         """
-        heat_flag, stir_flag = False, False
         if self.heat_rem_time > 0:
-            command_dicts[0]['heat_secs'] = self.heat_rem_time
+            command_dicts[0]["heat_secs"] = self.heat_rem_time
             self.heat_rem_time = 0
         if self.stir_rem_time > 0:
-            command_dicts[0]['stir_secs'] = self.stir_rem_time
+            command_dicts[0]["stir_secs"] = self.stir_rem_time
             self.stir_rem_time = 0
         if self.resume_heating or self.resume_stirring:
             return True

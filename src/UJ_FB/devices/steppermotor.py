@@ -18,10 +18,10 @@ class StepperMotor:
         self.stop_lock = Lock()
         self.stop_cmd = False
         self.enabled = True
-        self.steps_per_rev = device_config['steps_per_rev']
-        self.enabled_acceleration = device_config['enabled_acceleration']
-        self.running_speed = device_config['speed']
-        self.max_speed = device_config['max_speed']
+        self.steps_per_rev = device_config["steps_per_rev"]
+        self.enabled_acceleration = device_config["enabled_acceleration"]
+        self.running_speed = device_config["speed"]
+        self.max_speed = device_config["max_speed"]
         self.acceleration = device_config["acceleration"]
         self.set_max_speed(self.max_speed)
         self.enable_acceleration(self.enabled_acceleration)

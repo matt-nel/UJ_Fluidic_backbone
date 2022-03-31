@@ -16,7 +16,7 @@ class SyringePump(modules.Module):
         :param cmduino: commanduino command manager object
         """
         super(SyringePump, self).__init__(name, module_info, cmduino, manager)
-        self.type = "SP"
+        self.mod_type = "syringe_pump"
         module_config = module_info["mod_config"]
         # todo update this in Manager.check_connections
         self.cor_fact = 0.993  # correction factor for dispensed volume
@@ -33,7 +33,7 @@ class SyringePump(modules.Module):
         self.error_count = 0
         self.last_dir = "D"
         self.backlash = module_config["backlash"]
-        self.contents = (['air', 0.0], ['', 0.0])
+        self.contents = (["air", 0.0], ["", 0.0])
         self.stepper = self.steppers[0]
         self.steps_per_rev = self.stepper.steps_per_rev
         self.valve = None
@@ -48,7 +48,7 @@ class SyringePump(modules.Module):
             target (Module Object): Object representing the target module. Can be a SyringePump, Flask, or Reactor
             volume (float): Volume in uL to be aspirated or dispensed
             flow_rate (float): Flow rate in uL/min for pump
-            direction (str): 'A' - aspirate syringe, motor moves CCW. 'D' - dispense syringe, motor moves CW
+            direction (str): "A" - aspirate syringe, motor moves CCW. "D" - dispense syringe, motor moves CW
             air (bool): True if syringe is pumping air
             task (Task Object): Object used to track task completion
         """
@@ -83,12 +83,12 @@ class SyringePump(modules.Module):
         if target is not None:
             if not target.check_volume(volume):
                 move_flag = False
-            elif direction == 'A':
-                self.write_log(f'{self.name}: start aspirate {abs(round(volume,2))} ul from {target.name}')
+            elif direction == "A":
+                self.write_log(f"{self.name}: start aspirate {abs(round(volume,2))} ul from {target.name}")
             else:
-                self.write_log(f'{self.name}: start dispense {abs(round(volume,2))} ul to {target.name}')
-        elif air and direction == 'A':
-            self.write_log(f'{self.name}: start aspirate {abs(round(volume,2))} air')
+                self.write_log(f"{self.name}: start dispense {abs(round(volume,2))} ul to {target.name}")
+        elif air and direction == "A":
+            self.write_log(f"{self.name}: start aspirate {abs(round(volume,2))} air")
         if move_flag:
             with self.lock:
                 self.cur_step_pos = self.stepper.get_current_position()
@@ -100,13 +100,13 @@ class SyringePump(modules.Module):
                     if self.stepper.encoder_error:
                         if task is not None:
                             task.error = True
-                        self.write_log(f'{self.name}: Unable to move, check for obstructions', level=logging.ERROR)
+                        self.write_log(f"{self.name}: Unable to move, check for obstructions", level=logging.ERROR)
                 else:
                     new_step_pos = self.stepper.get_current_position()
                 # if aspirating, step change is neg.
                 step_change = new_step_pos - self.cur_step_pos
                 if adj_steps:
-                    if direction == 'A':
+                    if direction == "A":
                         step_change += self.backlash
                     else:
                         step_change -= self.backlash
@@ -128,7 +128,7 @@ class SyringePump(modules.Module):
         if task is not None:
             task.error = True
 
-    def home(self, task):
+    def home(self):
         """Moves the pump until the limit switch is triggered
         Args:
             task (Task): Task object that is associated with this function call
@@ -137,7 +137,7 @@ class SyringePump(modules.Module):
             self.ready = False
             self.stepper.home()
             self.position = 0.0
-            self.last_dir = 'D'
+            self.last_dir = "D"
             self.ready = True
 
     def jog(self, steps, direction, task):
@@ -145,7 +145,7 @@ class SyringePump(modules.Module):
 
         Args:
             steps (int): number of steps to move
-            direction (string): 'A' - aspirate the syringe, 'D' - Dispense the syringe
+            direction (string): "A" - aspirate the syringe, "D" - Dispense the syringe
             task (Task): Task object associated with this function call.
         """
         self.ready = False
@@ -199,44 +199,44 @@ class SyringePump(modules.Module):
             air (bool): whether the pump is moving air
 
         """
-        # contents: (['air', air_volume], [other contents, other_contents_volume])
+        # contents: (["air", air_volume], [other contents, other_contents_volume])
         volume_change = round(volume_change, 2)
-        message = f'{self.name}: '
+        message = f"{self.name}: "
         if target is not None:
             # we are aspirating
             if volume_change > 0:
-                if target.type == 'FS':
+                if target.mod_type == "FS":
                     target.remove_sample()
                 else:
-                    message += f'aspirate {round(abs(volume_change),2)} ul of '
+                    message += f"aspirate {round(abs(volume_change),2)} ul of "
                     if not air:
-                        if target.type != "SP":
+                        if target.mod_type != "SP":
                             target.change_volume(self.contents[1][0], -volume_change)
-                            message += f'{target.contents[0]} '
+                            message += f"{target.contents[0]} "
                             self.contents[1][0] = target.contents[0]
                         else:
-                            message += f'{target.contents[0][0]}'
+                            message += f"{target.contents[0][0]}"
                             self.contents[1][0] = target.contents[1][0]
                         self.contents[1][1] += volume_change
                     else:
-                        message += 'air '
+                        message += "air "
                         self.contents[0][1] += volume_change
-                    message += f'from {target.name}'
+                    message += f"from {target.name}"
             # we are dispensing
             else:
-                if target.type == 'FS':
+                if target.mod_type == "FS":
                     target.add_sample()
                 else:
-                    message += f'dispense {int(abs(volume_change))} ul of '
+                    message += f"dispense {int(abs(volume_change))} ul of "
                     if not air:
-                        message += f'{self.contents[1][0]} '
+                        message += f"{self.contents[1][0]} "
                         self.contents[1][1] += volume_change
-                        if target.type != "SP":
+                        if target.mod_type != "SP":
                             target.change_volume(self.contents[1][0], -volume_change)
                     else:
-                        message += 'air '
+                        message += "air "
                         self.contents[0][1] += volume_change
-                    message += f'to {target.name}'
+                    message += f"to {target.name}"
             self.write_log(message)
             self.contents[1][1] = max(self.contents[1][1], 0)
             self.contents[0][1] = max(self.contents[0][1], 0)
@@ -272,9 +272,9 @@ class SyringePump(modules.Module):
         Returns:
             bool: True if resuming, False otherwise
         """
-        params = command_dicts[0]['parameters']
+        params = command_dicts[0]["parameters"]
         # if aspirating, and there is more liquid to take up
         if self.remaining_volume > 0:
-            command_dicts[0]['parameters']['volume'] = self.remaining_volume
+            command_dicts[0]["parameters"]["volume"] = self.remaining_volume
             return True
         return False

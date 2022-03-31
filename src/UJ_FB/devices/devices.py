@@ -39,7 +39,7 @@ class Device:
 class TempSensor(Device):
     def __init__(self, ts_obj, device_config, s_lock):
         super(TempSensor, self).__init__(ts_obj, s_lock)
-        self.coefficients = device_config['SH_C']
+        self.coefficients = device_config["SH_C"]
         self.last_temp = 0.0
 
     def read_temp(self):
@@ -65,7 +65,7 @@ class TempSensor(Device):
 
 
 class Heater(Device):
-    def __init__(self, heater_obj, device_config, s_lock):
+    def __init__(self, heater_obj, s_lock):
         super(Heater, self).__init__(heater_obj, s_lock)
         self.voltage = 0.0
 
@@ -86,7 +86,7 @@ class MagStirrer(Device):
 
     def __init__(self, stirrer_obj, device_config, s_lock):
         super(MagStirrer, self).__init__(stirrer_obj, s_lock)
-        self.max_speed = device_config['fan_speed']
+        self.max_speed = device_config["fan_speed"]
         self.speed = 0.0
 
     def start_stir(self, speed):
@@ -98,4 +98,3 @@ class MagStirrer(Device):
     def stop_stir(self):
         self.speed = 0.0
         self.analog_write(0)
-

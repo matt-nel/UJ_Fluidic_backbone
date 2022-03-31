@@ -25,7 +25,7 @@ class SelectorValve(modules.Module):
         :param manager: Manager Object: coordinates modules
         """
         super(SelectorValve, self).__init__(name, module_info, cmduino, manager)
-        self.type = "SV"
+        self.mod_type = "selector_valve"
         self.syringe = None
         module_config = module_info["mod_config"]
         self.num_ports = module_config["ports"]
@@ -89,7 +89,8 @@ class SelectorValve(modules.Module):
             self.home_valve()
         # check magnet positions against config
         if self.geared:
-            if self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] % 10 == 0 or self.backlash == 0:
+            if self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] % 10 == 0\
+                    or self.backlash == 0:
                 self.check_backlash()
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
         self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] += 1
@@ -157,6 +158,12 @@ class SelectorValve(modules.Module):
                 target_found = True
         return target_found
 
+    def find_open_port(self):
+        for i in range(1, 11):
+            if self.ports[i] is None:
+                return i
+        return None
+
     def jog(self, steps, invert_direction):
         """Jogs the pump a number of steps
 
@@ -188,7 +195,8 @@ class SelectorValve(modules.Module):
         self.stepper.set_current_position(0)
         self.reading = self.he_sensor.analog_read()
         # Keep looking for home pos (reading >= max saved reading)
-        while (self.reading < self.magnet_readings[1] - MIN_DIFF_THRESHOLD) or (self.reading > 1000) or self.reading < POS_THRESHOLD :
+        while (self.reading < self.magnet_readings[1] - MIN_DIFF_THRESHOLD) or (self.reading > 1000)\
+                or self.reading < POS_THRESHOLD:
             self.reading = self.he_sensor.analog_read()
             # if close to home pos
             if self.reading > POS_THRESHOLD:
@@ -200,7 +208,8 @@ class SelectorValve(modules.Module):
                     # Move between magnets until close to home position
                     self.reading = self.check_all_positions()
             else:
-                # We must be between magnets. Move 1/4 magnet distance looking for magnet positions. Testing shows magnet detection at ~1/4 spr to either side
+                # We must be between magnets. Move 1/4 magnet distance looking for magnet positions.
+                # Testing shows magnet detection at ~1/4 spr to either side
                 self.find_next_magnet()
             if self.check_stop:
                 break
@@ -330,12 +339,7 @@ class SelectorValve(modules.Module):
             position (int): The port number to check
         """
         magnets_passed = self.stepper.magnets_passed
-        positions_moved = 0
         pos_diff = abs(self.current_port - position)
-        invert_direction = False
-        # moving CCW
-        if self.current_port > position:
-            invert_direction = True
         req_magnets = pos_diff//2
         # if we start on an even position, will pass an additional magnet (magnets on starting position aren't counted)
         if self.current_port % 2 == 0 and position % 2 == 1:
@@ -415,7 +419,7 @@ class SelectorValve(modules.Module):
         Reads the hall effect sensor
         """
         reading = self.he_sensor.analog_read()
-        self.write_log( f'{self.name} he sensor reading is {reading}', level=logging.INFO)
+        self.write_log(f'{self.name} he sensor reading is {reading}', level=logging.INFO)
 
     @staticmethod
     def reverse_steps(steps, fwd):
