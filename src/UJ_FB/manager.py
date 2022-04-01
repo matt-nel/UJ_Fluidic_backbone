@@ -316,7 +316,7 @@ class Manager(Thread):
                     self.ensure_reactors_disabled()
             if self.execute != execute:
                 if self.gui_main is not None:
-                    self.gui_main.update_execution()
+                    self.gui_main.queue.put(("execution", self.execute))
             if not pause_flag:
                 # waiting for task completion
                 if self.waiting:

@@ -24,7 +24,6 @@ class FluidicBackboneUI:
         self.primary.title("Fluidic Backbone Prototype")
         self.primary.configure(background=self.colours["form-background"])
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
-        self.execute = True
 
         icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), "Syringe.png"))
         self.primary.iconphoto(True, icon)
@@ -57,11 +56,11 @@ class FluidicBackboneUI:
                                    bg=self.colours["cancel-button"], fg="white", command=self.stop)
         self.load_xdl_butt = tk.Button(self.override_frame, text="Load XDL", font=self.fonts["buttons"],
                                        bg=self.colours["other-button"], fg="white", command=self.load_xdl)
-        self.execute_butt = tk.Button(self.override_frame, text="Stop auto execution", font=self.fonts["buttons"],
+        self.execute_butt = tk.Button(self.override_frame, text="Start auto execution", font=self.fonts["buttons"],
                                       bg=self.colours["other-button"], fg="white",
                                       command=lambda: self.send_interrupt({"pause": False, "stop": False,
                                                                            "resume": False, "exit": False,
-                                                                           "execute": False}))
+                                                                           "execute": True}))
         
         self.web_frame = tk.Frame(self.primary, bg=self.colours["form-background"])
         self.url_label = tk.Label(self.web_frame, text="Current server URL: " + self.manager.listener.url,
@@ -95,6 +94,8 @@ class FluidicBackboneUI:
                 self.write_message(item[1])
             elif item[0] == "temp":
                 self.update_temps(item[1][0], item[1][1])
+            elif item[0] == "execution":
+                self.update_execution(item[1])
         except queue.Empty:
             pass
         finally:
@@ -546,8 +547,8 @@ class FluidicBackboneUI:
         self.log.insert("end", message)
         self.log["state"] = "disabled"
 
-    def update_execution(self):
-        if self.execute:
+    def update_execution(self, execute):
+        if execute:
             self.execute_butt.configure(text="Stop auto execution",
                                         command=lambda: self.send_interrupt({"pause": False, "stop": False,
                                                                              "resume": False, "exit": False,
@@ -597,7 +598,6 @@ class FluidicBackboneUI:
         elif execute is not None:
             with self.manager.interrupt_lock:
                 self.manager.execute = execute
-                self.execute = execute
         elif parameters["exit"]:
             with self.manager.interrupt_lock:
                 self.manager.exit_flag = True
