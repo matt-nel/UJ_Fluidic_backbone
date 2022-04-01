@@ -242,9 +242,8 @@ class WebListener:
                 flow_rate = (volume*1000)/float(a_time[0])
         else:
             flow_rate = self.manager.default_fr
-        self.manager.move_fluid(source, target, volume, flow_rate)
-        return True
-    
+        return self.manager.move_fluid(source, target, volume, flow_rate)
+
     def process_xdl_transfer(self, transfer_info):
         source = transfer_info.get("from_vessel")
         target = transfer_info.get("to_vessel")
@@ -275,8 +274,7 @@ class WebListener:
                 flow_rate = (volume * 1000) / float(t_time[0])
         else:
             flow_rate = self.manager.default_fr
-        self.manager.move_fluid(source, target, volume, flow_rate, adjust_dead_vol=False, transfer=True)
-        return True
+        return self.manager.move_fluid(source, target, volume, flow_rate, adjust_dead_vol=False, transfer=True)
 
     def process_xdl_stir(self, stir_info):
         reactor_name = stir_info.get("vessel")

@@ -921,7 +921,7 @@ class Manager(Thread):
         if intake:
             # Command to index valve to required position to remove dead volume in tube
             pipelined_steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
-                                                      {"target": source, "wait": True})
+                                                      {"target": source.name, "wait": True})
             # Command to aspirate syringe to remove dead volume - doesn't update volumes
             pipelined_steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
                                                       {"volume": dead_volume, "flow_rate": self.default_flush_fr,
@@ -929,17 +929,17 @@ class Manager(Thread):
         else:
             # Command to index valve to required position for outlet
             pipelined_steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
-                                                      {"target": source, "wait": True})
+                                                      {"target": source.name, "wait": True})
             # Command to dispense air to blow out dead volume
             pipelined_steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
                                                       {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                       "target": source, "direction": "D", "air": True, "wait": True})
+                                                       "target": source.name, "direction": "D", "air": True,
+                                                       "wait": True})
         return pipelined_steps, dead_volume
 
     @staticmethod
     def calc_tubing_volume(tubing_length):
-        mm3 = math.pow((1.5875 / 2), 2) * math.pi * tubing_length
-        return mm3
+        return math.pow((1.5875 / 2), 2) * math.pi * tubing_length
 
     def generate_moves(self, source, target, valves, volume, flow_rate, adjust_dead_vol, init_move=False):
         """
@@ -987,7 +987,7 @@ class Manager(Thread):
         """
         commands = []
         # Dispense from SP
-        if source.mod_type == "SP":
+        if source.mod_type == "syringe_pump":
             direction = "D"
             name = source.name
             if not target:
@@ -1045,7 +1045,7 @@ class Manager(Thread):
                                                {"target": "empty", "wait": True})
             commands += self.generate_cmd_dict("syringe_pump", source_valve.syringe.name, "move",
                                                {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                "direction": "A", "air": True, "wait": True})
+                                                "target": None, "direction": "A", "air": True, "wait": True})
             volume = volume + dead_volume
         # add commands to index valves to required ports for transfer
         commands += self.generate_cmd_dict("selector_valve", source_valve.name, source_port,
