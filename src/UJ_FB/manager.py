@@ -10,10 +10,10 @@ from networkx.readwrite.json_graph import node_link_graph
 from queue import Queue
 from threading import Thread, Lock
 import commanduino
-import UJ_FB.fluidic_backbone_gui as fluidic_backbone_gui
 import UJ_FB.web_listener as web_listener
 from UJ_FB.modules import syringepump, selectorvalve, reactor, modules, fluidstorage
 import UJ_FB.fbexceptions as fbexceptions
+from UJ_FB.fluidic_backbone_gui import FluidicBackboneUI
 
 
 def json_loader(root, fp, object_hook=None):
@@ -56,7 +56,7 @@ class Manager(Thread):
     Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
     tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules
     """
-    def __init__(self, gui=True, stdout_log=False, simulation=False, web_enabled=False):
+    def __init__(self, gui=None, web_enabled=False, simulation=False, stdout_log=False):
         Thread.__init__(self)
         # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
@@ -69,6 +69,7 @@ class Manager(Thread):
         self.prev_run_config = json_loader(self.script_dir, "configs/running_config.json", object_hook=object_hook_int)
         self.name = "Manager" + self.id
         self.logger = logging.getLogger(self.id)
+        self.simulation = simulation
         self.q = Queue()
         self.pipeline = Queue()
         self.error_queue = Queue()
@@ -92,6 +93,7 @@ class Manager(Thread):
         self.error = False
         self.error_start = None
         self.error_flag = False
+        self.quit_safe = False
         self.valid_nodes = []
         self.modules = {"valves": {}, "syringes": {}, "reactors": {}, "flasks": {}, "cameras": {}, "storage": {}}
         self.valves = self.modules["valves"]
@@ -119,8 +121,8 @@ class Manager(Thread):
             self.listener.test_connection()
         self.start()
         if gui:
-            self.gui_main = fluidic_backbone_gui.FluidicBackboneUI(self)
-            self.gui_main.mainloop()
+            self.gui_main = FluidicBackboneUI(self)
+            self.gui_main.start_gui()
 
     def update_url(self, url):
         self.listener.update_url(url)
@@ -213,7 +215,8 @@ class Manager(Thread):
         """
         for valve in self.valves:
             # home and prepare valve for running
-            self.valves[valve].init_valve()
+            if not self.simulation:
+                self.valves[valve].init_valve()
             syringe = self.valves[valve].syringe
             # check if syringe needs to be homed
             if not syringe.stepper.check_endstop():
@@ -313,7 +316,7 @@ class Manager(Thread):
                     self.ensure_reactors_disabled()
             if self.execute != execute:
                 if self.gui_main is not None:
-                    self.gui_main.update_execution(execute)
+                    self.gui_main.update_execution()
             if not pause_flag:
                 # waiting for task completion
                 if self.waiting:
@@ -606,10 +609,9 @@ class Manager(Thread):
             module object (Module): The target module if found, otherwise None
         """
         for key in self.modules.keys():
-            target = self.modules[key].get(target)
-            if target is not None:
-                break
-        return target
+            found_target = self.modules[key].get(target)
+            if found_target is not None:
+                return found_target
 
     def find_reagent(self, reagent_name):
         """
@@ -624,7 +626,6 @@ class Manager(Thread):
         for flask in self.flasks:
             if reagent_name == self.flasks[flask].contents[0]:
                 return self.flasks[flask].name
-        return ""
 
     def command_reactor(self, name, command, parameters, command_dict):
         """
@@ -806,8 +807,8 @@ class Manager(Thread):
         min_vol = 0
         tdv = 0
         spdv = 0
-        if flow_rate == 0:
-            flow_rate = self.default_fr
+        target = self.find_target(target)
+        source = self.find_target(source)
         # Grab intervening valves between source and target
         valves = path[1:-1]
         # Aspirate enough air to flush all the fluid at the end of the movement
@@ -819,8 +820,6 @@ class Manager(Thread):
         if transfer:
             steps, tdv = self.flush_transfer_dead_volume(valves[0], source, True)
             pipelined_steps += steps
-        target = self.find_target(target)
-        source = self.find_target(source)
         if target.mod_type == "storage":
             pipelined_steps += self.generate_cmd_dict("storage", target.name, "store", {})
         # Find lowest maximum volume amongst syringes
@@ -885,7 +884,7 @@ class Manager(Thread):
 
         Args:
             valve (SelectorValve): The last valve in the chain
-            target (str): The name of the target
+            target (Module): The target object
             intake (bool): Whether we are aspirating the dead volume or dispensing it
         Return:
             pipelined_steps (list): List containing the necessary steps as command dictionaries
@@ -894,7 +893,7 @@ class Manager(Thread):
         pipelined_steps = []
         # The tubes along the path will hold dead volume, assuming all input lines have been primed before operation.
         valve = self.valves[valve]
-        tubing_length = self.graph.adj[valve.name][target][0]["tubing_length"]
+        tubing_length = self.graph.adj[valve.name][target.name][0]["tubing_length"]
         dead_volume = self.calc_tubing_volume(tubing_length)*1.15  # push out a bit extra to ensure tube empty
         if intake:
             if valve.find_open_port() is None:
@@ -916,7 +915,7 @@ class Manager(Thread):
     def flush_transfer_dead_volume(self, valve, source, intake):
         pipelined_steps = []
         valve = self.valves[valve]
-        tubing_length = self.graph.adj[valve.name][source][0]["tubing_length"]
+        tubing_length = self.graph.adj[valve.name][source.name][0]["tubing_length"]
         dead_volume = self.calc_tubing_volume(tubing_length)
 
         if intake:
@@ -959,9 +958,6 @@ class Manager(Thread):
         """
         moves = []
         valve = self.valves[valves[0]]
-        source = self.graph.nodes[source]["object"]
-        if target is not None:
-            target = self.graph.nodes[target]["object"]
         # Move liquid into first syringe pump
         if not init_move:
             moves += self.generate_sp_move(source, valve, valve.syringe, volume, flow_rate)
@@ -1042,7 +1038,7 @@ class Manager(Thread):
             return False
         if account_for_dead_volume:
             # determine dead volume between valves
-            tubing_length = self.graph.adj[source_valve][target_valve][0]["tubing_length"]
+            tubing_length = self.graph.adj[source_valve.name][target_valve.name][0]["tubing_length"]
             dead_volume = self.calc_tubing_volume(tubing_length)*1.15
             # take up air to flush dead volume
             commands += self.generate_cmd_dict("selector_valve", source_valve.name, "target",
@@ -1166,13 +1162,9 @@ class Manager(Thread):
         for valve in self.valves:
             self.prev_run_config["valve_pos"][valve] = self.valves[valve].current_port
         self.write_running_config("configs\\running_config.json")
-        if self.gui_main:
-            while not self.gui_main.safe_quit_flag:
-                time.sleep(0.2)
-            self.gui_main.primary.destroy()
-            self.gui_main.primary.quit()
-        for handler in self.cmd_mng.commandhandlers:
-            handler.stop()
+        for r in self.reactors:
+            self.reactors[r].exit = True
+        self.quit_safe = True
 
 
 class Task:
