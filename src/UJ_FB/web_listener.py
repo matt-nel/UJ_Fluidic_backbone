@@ -173,10 +173,15 @@ class WebListener:
         for reagent in req_reagents:
             reagent_name = reagent.get("id")
             flask = self.manager.find_reagent(reagent_name)
+            if flask is None:
+                self.manager.write_log(f"Could not find {reagent_name} on {self.manager.id}")
+                return
             reagents[reagent_name] = flask
         for module in req_hardware:
             module_id = module.get("id")
             modules[module_id] = self.manager.find_target(module_id).name
+            if modules[module_id] is None:
+                self.manager.write_log(f"Could not find {module_id} on {self.manager.id}")
         parse_success = True
         for step in procedure:
             if step.tag == "Add":
@@ -215,7 +220,8 @@ class WebListener:
         if reagent_info is None:
             reagent_info = add_info.get("mass")
             # additional steps for solid reagents
-            return
+            self.manager.write_log(f"No volume given for addition of {add_info['reagent']} from {source} to {target}")
+            return False
         else:
             reagent_info = reagent_info.split(" ")
             volume = float(reagent_info[0])
@@ -235,7 +241,7 @@ class WebListener:
             else:
                 flow_rate = (volume*1000)/float(a_time[0])
         else:
-            flow_rate = 0
+            flow_rate = self.manager.default_fr
         self.manager.move_fluid(source, target, volume, flow_rate)
         return True
     
@@ -249,7 +255,8 @@ class WebListener:
         reagent_info = transfer_info.get("volume")
         if reagent_info is None:
             reagent_info = transfer_info.get("mass")
-            return
+            self.manager.write_log(f"No volume given for transfer from {source} to {target}")
+            return False
         else:
             reagent_info = reagent_info.split(" ")
             volume = float(reagent_info[0])
@@ -267,8 +274,8 @@ class WebListener:
             else:
                 flow_rate = (volume * 1000) / float(t_time[0])
         else:
-            flow_rate = 0
-        self.manager.move_fluid(source, target, volume, flow_rate, account_for_dead_volume=False, transfer=True)
+            flow_rate = self.manager.default_fr
+        self.manager.move_fluid(source, target, volume, flow_rate, adjust_dead_vol=False, transfer=True)
         return True
 
     def process_xdl_stir(self, stir_info):

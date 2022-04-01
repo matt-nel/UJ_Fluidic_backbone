@@ -1,3 +1,4 @@
+import UJ_FB
 import tkinter as tk
 import os
 import sys
@@ -11,7 +12,7 @@ import networkx as nx
 
 FIELD_NAMES = {"Maximum volume in ml": "max_volume",
                "Current volume in ml": "cur_volume",
-               "Aluminium volume [m3]": "aluminium_volume",
+               "Aluminium volume [m3] (eg. 1e-6)": "aluminium_volume",
                "Name": "name",
                "Fan speed RPM": "fan_speed",
                "Maximum samples": "max_samples",
@@ -60,46 +61,47 @@ class CmdConfig:
 
 class SetupGUI:
     def __init__(self, primary):
-        # todo select connections from graph file
-        # todo add means to change syringe start position
-        self.script_dir = os.path.dirname(__file__)
+        # Setup initialisation
+        self.primary = primary
+        self.primary.title("Fluidic backbone setup")
+        self.primary.configure(background="#FFFFFF")
 
+        script_dir = os.path.abspath(UJ_FB.__file__)
+        script_dir = script_dir.split("\\")
+        self.script_dir = "\\".join(script_dir[:-1])
+        if not os.path.exists(os.path.join(self.script_dir, "configs")):
+            os.chdir(self.script_dir)
+            os.mkdir("configs")
+        self.config_filenames = ["configs/cmd_config.json", "configs/module_connections.json",
+                                 "configs/running_config.json"]
+        for i in range(len(self.config_filenames)):
+            self.config_filenames[i] = os.path.join(self.script_dir, self.config_filenames[i])
+
+        self.frame = np.array([])
         self.fonts = {"buttons": ("Calibri", 12), "labels": ("Calibri", 14), "default": ("Calibri", 16),
                       "heading": ("Calibri", 16), "text": ("Calibri", 14)}
         self.colours = {"accept-button": "#4de60b", "cancel-button": "#e6250b",
                         "heading": "#e65525", "other-button": "#45296e", "other-button-text": "#FFFFFF",
                         "form-bg": "#b5d5ff"}
-        self.primary = primary
-        self.primary.title("Fluidic backbone setup")
-        self.primary.configure(background="#FFFFFF")
+        image_dir = os.path.join(self.script_dir, "valve.png")
+        self.valve_image = ImageTk.PhotoImage(Image.open(image_dir))
+        self.text_temp = ""
+        self.int_temp = 0
+        self.config_cmd_flag = False
+        self.config_cxn_flag = False
+        self.exit_flag = False
+
+        # Robot parameters
         self.key = ""
         self.id = ""
         self.rxn_name = ""
-        self.frame = np.array([])
         self.roi = []
-
-        self.setup_frame = tk.Frame(self.primary, bg=self.colours["form-bg"], borderwidth=5)
-        self.utilities_frame = tk.Frame(self.primary, bg=self.colours["form-bg"], borderwidth=2)
-        self.log_frame = tk.Frame(self.primary)
-        self.log = tk.Text(self.log_frame, state="disable", width=80, height=16, wrap="none", borderwidth=5)
-
-        self.setup_label = tk.Label(self.primary, text="Fluidic backbone setup:", font=self.fonts["heading"],
-                                    fg=self.colours["heading"], bg="#FFFFFF",
-                                    padx=2)
-        self.utilities_label = tk.Label(self.primary, text="Utilities", font=self.fonts["heading"], padx=2,
-                                        bg="#ffffff", fg=self.colours["heading"])
-
-        self.log_frame.grid(row=4, column=2, padx=5, pady=10)
-        self.log.grid(row=0, column=0)
-        self.setup_label.grid(row=2, column=2)
-        self.utilities_label.grid(row=2, column=10)
-        self.setup_frame.grid(row=3, column=2)
-        self.utilities_frame.grid(row=3, column=10)
-
-        self.text_temp = ""
-        self.int_temp = 0
+        self.used_motor_connectors = {}
+        self.used_endstop_connectors = {}
+        self.used_he_pins = []
+        self.used_valves = []
         self.com_ports = []
-        self.cmd_devices = CmdConfig()
+
         self.modules = {}
         self.graph = nx.MultiGraph()
         self.graph_tmp = nx.MultiGraph()
@@ -111,8 +113,17 @@ class SetupGUI:
         self.conf_storage = 0
         self.num_he_sens = 0
         self.valves_buttons = {}
-        self.config_cmd_flag = False
-        self.config_cxn_flag = False
+        self.simulation = False
+        self.cmd_devices = CmdConfig()
+        self.default_running_config = {
+            "url": "http://127.0.0.1:5000/robots_api",
+            "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
+                                                                                               "5": 0, "7": 0, "9": 0},
+                                "check_magnets": 0},
+            "valve_backlash": {"valve1": {"check_backlash": 0, "backlash_steps": 0},
+                               "valve2": {"check_backlash": 0, "backlash_steps": 0}},
+            "valve_pos": {"valve1": None, "valve2": None}}
+
         self.es_options = {"X min": 3, "X max": 2, "Y min": 14, "Y max": 15, "Z min": 18, "Z max": 19}
         self.motor_configs = {"default": {"steps_per_rev": 3200, "enabled_acceleration": False, "speed": 1000,
                                           "max_speed": 10000, "acceleration": 1000},
@@ -131,31 +142,32 @@ class SetupGUI:
                                                    "device_config": {}}},
                               "E1": {"stepperE1": {"cmd_id": "STPE1",
                                                    "device_config": {}}}}
-        self.default_running_config = {
-            "url": "http://127.0.0.1:5000/robots_api",
-            "magnet_readings": {"valve1": {"1": 0, "3": 0, "5": 0, "7": 0, "9": 0}, "valve2": {"1": 0, "3": 0,
-                                                                                               "5": 0, "7": 0, "9": 0},
-                                "check_magnets": 0},
-            "valve_backlash": {"valve1": {"check_backlash": 0, "backlash_steps": 0},
-                               "valve2": {"check_backlash": 0, "backlash_steps": 0}},
-            "valve_pos": {"valve1": None, "valve2": None}}
-        self.used_motor_connectors = {}
-        self.used_endstop_connectors = {}
-        self.used_he_pins = []
-        self.used_valves = []
-        self.config_filenames = ["configs/cmd_config.json", "configs/module_connections.json",
-                                 "configs/running_config.json"]
 
-        image_dir = os.path.join(self.script_dir, "valve.png")
-        self.valve_image = ImageTk.PhotoImage(Image.open(image_dir))
-
-        self.simulation = False
-        self.exit_flag = False
         steppers = [("stepperX", "STPX"), ("stepperY", "STPY"), ("stepperZ", "STPZ"),
                     ("stepperE0", "STPE0"), ("stepperE1", "STPE1")]
         for stepper in steppers:
             self.cmd_devices.devices[stepper[0]] = {"command_id": stepper[1],
                                                     "config": self.motor_configs["default"]}
+
+        # Setup UI
+        self.setup_frame = tk.Frame(self.primary, bg=self.colours["form-bg"], borderwidth=5)
+        self.utilities_frame = tk.Frame(self.primary, bg=self.colours["form-bg"], borderwidth=2)
+        self.log_frame = tk.Frame(self.primary)
+        self.log = tk.Text(self.log_frame, state="disable", width=80, height=16, wrap="none", borderwidth=5)
+
+        self.setup_label = tk.Label(self.primary, text="Fluidic backbone setup:", font=self.fonts["heading"],
+                                    fg=self.colours["heading"], bg="#FFFFFF",
+                                    padx=2)
+        self.utilities_label = tk.Label(self.primary, text="Utilities", font=self.fonts["heading"], padx=2,
+                                        bg="#ffffff", fg=self.colours["heading"])
+
+        self.log_frame.grid(row=4, column=2, padx=5, pady=10)
+        self.log.grid(row=0, column=0)
+        self.setup_label.grid(row=2, column=2)
+        self.utilities_label.grid(row=2, column=10)
+        self.setup_frame.grid(row=3, column=2)
+        self.utilities_frame.grid(row=3, column=10)
+
         self.init_setup_panel()
         self.init_utilities_panel()
 
@@ -357,13 +369,13 @@ class SetupGUI:
                     fields = ["Name", "Current volume in ml", "Maximum volume in ml",
                               "Contents", "Fan speed RPM", "Aluminium volume [m3] (eg. 1e-6)", "Tubing length in mm"]
                     self.reactor_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "syringe":
+                elif variable == "syringe_pump":
                     node_info["mod_type"] = "syringe_pump"
                     node_info["class_type"] = "SyringePump"
                     fields = ["Current volume in ml", "Maximum volume in ml", "Contents"]
                     fields.pop(0)
                     self.syringe_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "valve":
+                elif variable == "selector_valve":
                     fields = ["Tubing length in mm"]
                     self.valve_link(node_info, valve_info, fields, port_options_window, button, found_node)
                 elif variable == "waste":
@@ -420,7 +432,7 @@ class SetupGUI:
             graph_setup = tk.Toplevel(self.primary)
             graph_setup.title("Backbone connections setup")
             graph_setup.configure(bg="#ffffff")
-            module_options = ["filter", "flask", "reactor", "storage", "syringe", "valve", "waste", ]
+            module_options = ["filter", "flask", "reactor", "storage", "syringe_pump", "selector_valve", "waste", ]
             for i in range(0, self.num_valves):
                 valve_frame = tk.Frame(graph_setup)
                 left_ports = tk.Frame(valve_frame)
@@ -1031,13 +1043,8 @@ class SetupGUI:
 
     def generate_config(self):
         config_files = []
-        if not os.path.exists(os.path.join(self.script_dir, "configs")):
-            os.chdir(self.script_dir)
-            os.mkdir("configs")
         for filename in self.config_filenames[:2]:
-            filename = os.path.join(self.script_dir, filename)
             config_files.append(open(filename, "w"))
-        self.config_filenames[2] = os.path.join(self.script_dir, self.config_filenames[2])
         # only write running config if it doesn't already exist.
         if not os.path.exists(self.config_filenames[2]):
             with open(self.config_filenames[2], "w") as running_config:
@@ -1081,9 +1088,11 @@ class SetupGUI:
                 for node in self.graph.nodes.keys():
                     if "valve" in node:
                         self.num_valves += 1
+                        self.conf_valves += 1
                         self.num_he_sens += 1
                     elif "syringe" in node:
                         self.num_syringes += 1
+                        self.conf_syr += 1
                 self.write_message("Successfully loaded connections configuration")
             except FileNotFoundError:
                 self.write_message(f"File {self.config_filenames[1]} not found")

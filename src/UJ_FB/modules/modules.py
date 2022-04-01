@@ -18,6 +18,7 @@ class Module:
         # todo add method for adding modules after initialisation.
         assoc_devices = module_info.get("devices")
         self.name = name
+        self.mod_type = "misc"
         self.steppers = []
         self.endstops = []
         self.he_sensors = []
@@ -76,7 +77,7 @@ class FBFlask(Module):
     """
     def __init__(self, name, module_info, cmd_mng, manager):
         super(FBFlask, self).__init__(name, module_info, cmd_mng, manager)
-        self.type = "FSK"
+        self.mod_type = "flask"
         module_config = module_info["mod_config"]
         self.contents = [module_config.get("contents"), float(module_config.get("cur_volume"))*1000]
         self.cur_vol = float(module_config["cur_volume"])*1000

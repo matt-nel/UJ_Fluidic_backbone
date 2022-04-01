@@ -96,7 +96,7 @@ class Reactor(modules.FBFlask):
             time.sleep(1/self.polling_rate)
             if self.target:
                 self.target = False
-                self.cur_temp = self.temp_sensors[0].read_temp()
+                self.cur_temp = self.read_temp()
                 if self.cur_temp < self.target_temp:
                     self.preheating = True
                     preheat_start = time.time()
@@ -106,7 +106,7 @@ class Reactor(modules.FBFlask):
             if self.preheating:
                 self.preheat(preheat_start)
             elif self.cooling:
-                self.cur_temp = self.temp_sensors[0].read_temp()
+                self.cur_temp = self.read_temp()
                 if self.cur_temp <= self.target_temp:
                     self.cooling = False
                     self.integral_error = 0
@@ -132,7 +132,7 @@ class Reactor(modules.FBFlask):
                     if self.stir_task:
                         self.stir_task.complete = True
             if not self.heating and time.time() - self.heat_last_update_time > self.heat_update_delay:
-                self.cur_temp = self.temp_sensors[0].read_temp()
+                self.cur_temp = self.read_temp()
                 self.heat_last_update_time = time.time()
             with self.stop_lock:
                 if self.stop_cmd:
@@ -199,7 +199,14 @@ class Reactor(modules.FBFlask):
         return voltage
 
     def read_temp(self):
-        temp = self.temp_sensors[0].read_temp()
+        if not self.manager.simulation:
+            temp = self.temp_sensors[0].read_temp()
+        else:
+            temp = -999
+        return temp
+
+    def log_temp(self):
+        temp = self.read_temp()
         self.write_log(f"Current temp is {temp} °C", level=logging.INFO)
 
     def stop(self):

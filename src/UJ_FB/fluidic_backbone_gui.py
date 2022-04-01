@@ -1,12 +1,12 @@
 import os
 import queue
+import time
 import tkinter as tk
 import tkinter.filedialog as fd
-import UJ_FB.manager as manager
 
 
 class FluidicBackboneUI:
-    def __init__(self, robot_manager):
+    def __init__(self, manager):
         """
         :param simulation: Bool to run the software in simulation mode
         """
@@ -15,7 +15,7 @@ class FluidicBackboneUI:
         self.quit_flag = False
         self.safe_quit_flag = False
         self.primary.protocol("WM_DELETE_WINDOW", self.end_program)
-        self.manager = robot_manager
+        self.manager = manager
         self.fonts = {"buttons": ("Calibri", 12), "labels": ("Calibri", 14), "default": ("Calibri", 16),
                       "heading": ("Calibri", 16), "text": ("Calibri", 10)}
         self.colours = {"form-background": "#9ab5d9", "accept-button": "#4de60b", "cancel-button": "#e6250b",
@@ -24,6 +24,7 @@ class FluidicBackboneUI:
         self.primary.title("Fluidic Backbone Prototype")
         self.primary.configure(background=self.colours["form-background"])
         self.volume_tmp, self.flow_rate_tmp = 0.0, 0.0
+        self.execute = True
 
         icon = tk.PhotoImage(file=os.path.join(os.path.dirname(__file__), "Syringe.png"))
         self.primary.iconphoto(True, icon)
@@ -545,11 +546,8 @@ class FluidicBackboneUI:
         self.log.insert("end", message)
         self.log["state"] = "disabled"
 
-    def send_message(self, parameters):
-        pass
-
-    def update_execution(self, execute):
-        if execute:
+    def update_execution(self):
+        if self.execute:
             self.execute_butt.configure(text="Stop auto execution",
                                         command=lambda: self.send_interrupt({"pause": False, "stop": False,
                                                                              "resume": False, "exit": False,
@@ -599,15 +597,23 @@ class FluidicBackboneUI:
         elif execute is not None:
             with self.manager.interrupt_lock:
                 self.manager.execute = execute
+                self.execute = execute
         elif parameters["exit"]:
             with self.manager.interrupt_lock:
                 self.manager.exit_flag = True
                 self.manager.interrupt = True
 
+    def start_gui(self):
+        self.primary.mainloop()
+
     def end_program(self):
         parameters = {"pause": False, "stop": False, "resume": False, "exit": True}
         self.send_interrupt(parameters)
         self.quit_flag = True
+        while not self.manager.quit_safe:
+            time.sleep(0.1)
+        self.read_queue()
+        self.primary.destroy()
 
     def validate_vol(self, new_num):
         if not new_num:  # field is being cleared
@@ -631,11 +637,6 @@ class FluidicBackboneUI:
             self.write_message("Incorrect value for flow rate")
             return False
 
-    def mainloop(self):
-        self.primary.mainloop()
-
 
 if __name__ == "__main__":
-    sim = False
-    man = manager.Manager()
-    fb_gui = FluidicBackboneUI(man)
+    fb_gui = FluidicBackboneUI(simulation=False, web_enabled=False)
