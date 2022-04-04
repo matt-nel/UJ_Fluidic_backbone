@@ -20,5 +20,5 @@ logfile = os.path.join(script_dir, logfile)
 logging.basicConfig(filename=logfile, level=logging.INFO)
 
 # Start the robot with a GUI:
-robot = FluidicBackbone(gui=True, web_enabled=False, simulation=True)
+robot = FluidicBackbone(gui=True, web_enabled=False, simulation=False)
 

@@ -663,15 +663,13 @@ class FluidicBackboneUI:
     def stop(self):
         """Commands the robot to pause all ongoing actions and clear the execution queue. 
         """
-        self.stop_butt.configure(state="disabled")
-        self.pause_butt.configure(text="resume", bg=self.colours["other-button"], command=self.resume)
+        self.pause_butt.configure(text="pause", bg=self.colours["other-button"], command=self.pause)
         self.send_interrupt({"pause": True, "stop": True, "resume": False, "exit": False})
 
     def pause(self):
         """Commands the robot to pause all ongoing actions and changes the pause button.
         Does not clear the queue, so actions can be resumed from their last state by pressing resume.
         """
-        self.stop_butt.configure(state="normal")
         self.pause_butt.configure(text="Resume", bg="lawn green", command=self.resume)
         self.send_interrupt({"pause": True, "stop": False, "resume": False, "exit": False})
 
