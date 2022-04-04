@@ -10,10 +10,13 @@ class SyringePump(modules.Module):
     max length
     """
     def __init__(self, name, module_info, cmduino, manager):
-        """
-        :param name: syringe pump name
-        :param module_info: Dictionary containing IDs of attached devices and their configuration information
-        :param cmduino: commanduino command manager object
+        """Initialise the syringe pump
+
+        Args:
+            name (str): syringe pump name
+            module_info (dict): configuration information
+            cmduino (CommandManager): Commanduino CommandManager for this pump
+            manager (UJ_FB.Manager): Manager for this robot
         """
         super(SyringePump, self).__init__(name, module_info, cmduino, manager)
         self.mod_type = "syringe_pump"

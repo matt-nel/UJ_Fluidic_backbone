@@ -5,9 +5,17 @@ import datetime
 
 class FluidStorage(modules.Module):
     """
-    Fluid storage based on the clusterbot
+    Fluid storage based on the Cronin group's clusterbot
     """
     def __init__(self, name, module_info, cmduino, manager):
+        """Initialise the storage unit
+
+        Args:
+            name (str): name of the storage unit
+            module_info (dict): configuration information
+            cmduino (CommandManager): Commanduino CommandManager for controlling the Arduino
+            manager (UJ_FB.Manager): Manager for this robot
+        """
         super(FluidStorage, self).__init__(name, module_info, cmduino, manager)
         self.mod_type = "storage"
         module_config = module_info["mod_config"]
@@ -21,6 +29,12 @@ class FluidStorage(modules.Module):
         self.stepper = self.steppers[0]
 
     def turn_wheel(self, n_turns, direction):
+        """Turns the wheel n times in the forward (CW) or reverse (CCW) direction
+
+        Args:
+            n_turns (int): the number of turns requried
+            direction (str): "F" for CW, "R" for CCW. 
+        """
         steps = 3200
         if direction.upper() == "R":
             steps *= -1
@@ -36,6 +50,11 @@ class FluidStorage(modules.Module):
             self.stepper.move_steps(steps)
 
     def move_to_position(self, position):
+        """Moves the storage module to a specific position
+
+        Args:
+            position (int): the position number to move to
+        """
         self.write_log(f"{self.name} moving to {position}")
         if position > self.current_position:
             diff_fwd = abs(position - self.current_position)
@@ -52,6 +71,12 @@ class FluidStorage(modules.Module):
         self.turn_wheel(diff, direction)
 
     def add_sample(self, id_override, task):
+        """Adds a sample to the storage, writing a record to the log and the running config.
+
+        Args:
+            id_override (str): if no information is given for the reaction, this string is used instead.
+            task (UJ_FB.manager.Task): the task object for this operation.
+        """
         found_empty = False
         pos = 0
         for i in range(self.current_position, self.max_samples + 1):
@@ -75,6 +100,8 @@ class FluidStorage(modules.Module):
             task.error_flag = True
 
     def remove_sample(self):
+        """Removes a sample from the storage record.
+        """
         self.write_log(f"Removed {self.contents[self.current_position]}")
         self.contents[self.current_position]["sample_id"] = ""
         self.contents[self.current_position]["time_created"] = ""

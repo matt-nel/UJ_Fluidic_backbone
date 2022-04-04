@@ -1,3 +1,13 @@
+"""
+This script contains the classes used to create JSON configuration files for the robot. 
+Using this the SetupGUI, users can configure the robots graphically, without writing
+JSON. This GUI assumes that the robot is run using an Arduino Mega 2560 and a RAMPS 1.4 
+board. Most of the configuration information is temporarily held as a networkx graph. 
+When the user generates the configuration files, the graph is encoded as a JSON file 
+detailed the nodes and links (edges) of the graph. 
+"""
+
+
 import UJ_FB
 import tkinter as tk
 import os
@@ -47,6 +57,8 @@ def populate_ports():
 
 
 class CmdConfig:
+    """Simple class to hold and generate the configuration for the CommandManager.
+    """
     def __init__(self):
         self.ios = []
         self.devices = {}
@@ -60,6 +72,8 @@ class CmdConfig:
 
 
 class SetupGUI:
+    """Class used to run the GUI. 
+    """
     def __init__(self, primary):
         # Setup initialisation
         self.primary = primary
@@ -172,6 +186,9 @@ class SetupGUI:
         self.init_utilities_panel()
 
     def init_setup_panel(self):
+        """Starts the setup frame, which is the main part of the initial window. Using this frame,
+        user can configure the serial port, robot id, robot key, reaction name, and module information.
+        """
         def display_ports(ports, refresh=False):
             if ports:
                 i = 0
@@ -286,6 +303,9 @@ class SetupGUI:
         gen_button.grid(row=4, column=0, columnspan=3)
 
     def init_utilities_panel(self):
+        """Contains the buttons used to load existing configuration files, clear the current configuration,
+        or start the robot as a subprocess.
+        """
         def clear_configs():
             self.graph = nx.MultiGraph()
             self.graph_tmp = nx.MultiGraph()
@@ -309,6 +329,9 @@ class SetupGUI:
         run_fb_button.grid(row=4, column=0, padx=4, pady=10)
 
     def graph_setup(self):
+        """This function is used to set up the graph for the robot. The networkx graph contains all the information 
+        required by the Fluidic Backbone to set up and control the modules. 
+        """
         def accept():
             if self.conf_valves > 0 and self.conf_syr > 0:
                 self.config_cxn_flags = True
@@ -323,6 +346,18 @@ class SetupGUI:
             graph_setup.destroy()
 
         def populate_menus(frame, valve_no, row_count, port, col, pad=2, span=False):
+            """Populates the buttons and option menus that surround each valve. Creates a frame to house
+            each button and menu.
+
+            Args:
+                frame (tk.Frame): the frame that this button is a child of
+                valve_no (int): the number of the valve this module is being configured for.
+                row_count (int): the current row number to align the frame to 
+                port (int): the valve port connected to this module
+                col (int): the column to align the frame to
+                pad (int, optional): the amount of padding around the frame. Defaults to 2.
+                span (bool, optional): whether the frame should span 2. Defaults to False.
+            """
             new_frame = tk.Frame(frame)
             col_span = 1
             if span:
@@ -344,58 +379,72 @@ class SetupGUI:
                 module_type.set(self.graph_tmp.nodes[node]["mod_type"])
 
         def port_menu_start(valve_no, module_type, port_no, button):
-            variable = module_type.get()
-            if variable != "":
+            """Starts the popup window to configure the module attached to that port. Modules can be reconfigured
+            later by clicking on the button again.
+
+            Args:
+                valve_no (int): the number of the valve that this module is connected to.
+                module_type (str): what type of module is connected to this port. 
+                port_no (int): the port number (1-10) that this module is connected to
+                button (tk.Button): the button used to start this menu
+            """
+            this_module_type = module_type.get()
+            if this_module_type != "":
                 port_options_window = tk.Toplevel(self.primary)
                 this_valve_name = f"valve{valve_no + 1}"
+                # Hold the information about this valve
                 valve_info = {"valve_name": this_valve_name, "valve_id": valve_no, "port_no": port_no}
+                # Hold known information about the node, used to configure a node on the graph within the 
+                # popup window.
                 node_info = {"entries": []}
                 title = tk.Label(port_options_window, text=f"Configure port {port_no} on {this_valve_name}",
                                  font=self.fonts["heading"], fg=self.colours["heading"])
                 title.grid(row=0, column=0, columnspan=2)
-                type_label = tk.Label(port_options_window, text=variable.capitalize(), font=self.fonts["heading"],
+                type_label = tk.Label(port_options_window, text=this_module_type.capitalize(), font=self.fonts["heading"],
                                       fg=self.colours["heading"])
                 type_label.grid(row=1, column=0, columnspan=2)
                 found_node = self.get_node(this_valve_name, port_no)
-                if variable == "flask":
+                # Depending on which module type we are configuring, start a different setup window.
+                if this_module_type == "flask":
                     node_info["mod_type"] = "flask"
                     node_info["class_type"] = "FBFlask"
                     fields = ["Name", "Current volume in ml", "Maximum volume in ml", "Contents",
                               "Tubing length in mm"]
                     self.flask_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "reactor":
+                elif this_module_type == "reactor":
                     node_info["mod_type"] = "reactor"
                     node_info["class_type"] = "Reactor"
                     fields = ["Name", "Current volume in ml", "Maximum volume in ml",
                               "Contents", "Fan speed RPM", "Aluminium volume [m3] (eg. 1e-6)", "Tubing length in mm"]
                     self.reactor_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "syringe_pump":
+                elif this_module_type == "syringe_pump":
                     node_info["mod_type"] = "syringe_pump"
                     node_info["class_type"] = "SyringePump"
                     fields = ["Current volume in ml", "Maximum volume in ml", "Contents"]
                     fields.pop(0)
                     self.syringe_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "selector_valve":
+                elif this_module_type == "selector_valve":
                     fields = ["Tubing length in mm"]
                     self.valve_link(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "waste":
+                elif this_module_type == "waste":
                     node_info["mod_type"] = "waste"
                     node_info["class_type"] = "FBFlask"
                     node_info["Contents"] = "Waste"
                     fields = ["Name", "Current volume in ml", "Maximum volume in ml", "Tubing length in mm"]
                     self.flask_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "filter":
+                elif this_module_type == "filter":
                     node_info["mod_type"] = "filter"
                     node_info["class_type"] = "FBFlask"
                     fields = ["Name", "Current volume in ml", "Maximum volume in ml", "Dead volume in ml"]
                     self.flask_setup(node_info, valve_info, fields, port_options_window, button, found_node)
-                elif variable == "storage":
+                elif this_module_type == "storage":
                     node_info["mod_type"] = "storage"
                     node_info["class_type"] = "FluidStorage"
                     fields = ["Maximum volume in ml",
                               "Tubing length in mm", "Maximum samples"]
                     self.storage_setup(node_info, valve_info, fields, port_options_window, button, found_node)
 
+        # Ask the user how many valves and syringes are connected to this particular setup. 
         if self.num_valves == 0 or self.num_syringes == 0:
             if self.num_valves == 0:
                 valves_query = tk.Toplevel(self.primary)
@@ -428,6 +477,7 @@ class SetupGUI:
                 q_entry.grid(row=1, column=1)
                 ok_button.grid(row=2, column=0)
                 cancel_button.grid(row=2, column=2)
+        # Create the popup window, arraying configuration buttons around each valve.
         else:
             graph_setup = tk.Toplevel(self.primary)
             graph_setup.title("Backbone connections setup")
@@ -485,6 +535,12 @@ class SetupGUI:
             cancel_butt.grid(row=3, column=2)
 
     def add_mod(self, mod_type, popup):
+        """Adds new valves and syringe pumps to configure.
+
+        Args:
+            mod_type (str): the module type to be added.
+            popup (tk.TopLevel): the popup window 
+        """
         if mod_type == "syringe_pump":
             self.num_syringes = self.int_temp
         elif mod_type == "selector_valve":
@@ -494,6 +550,17 @@ class SetupGUI:
             self.graph_setup()
 
     def syringe_setup(self, node_info, valve_info, fields, window, button, found_node):
+        """Starts a window for the user to configure the syringe. Syringes are generally connected to the middle port
+        of the selector valve. Sets up the syringe using the information provided by the user 
+
+        Args:
+            node_info (dict): contains the known information about the node, like the module type. Also used to house the entries
+            valve_info (dict): contains information about the valve this module is attached to
+            fields (list): a list of input fields that the user should fill in to configure this module
+            window (tk.TopLevel): the window created to configure the syringe
+            button (tk.Button): the button used to start this window
+            found_node (str): if a node has already been configured, this will be its name. Otherwise this is empty
+        """
         def accept():
             motor_cxn = motor_connector.get()
             endstop = endstop_connector.get()
@@ -573,6 +640,7 @@ class SetupGUI:
                                   command=window.destroy)
         accept_button.grid(row=offset, column=0)
         cancel_button.grid(row=offset, column=1)
+        # if previously configured, get the old configuration for the user to update.
         if found_node:
             this_node = self.graph_tmp.nodes[found_node]
             endstop_connector.set(self.get_key(this_node["endstop"], self.es_options))
@@ -580,6 +648,13 @@ class SetupGUI:
             motor_connector.set(this_node["devices"]["stepper"]["name"][-1])
 
     def valve_setup(self, valve_info, valve_button):
+        """Starts a window for the user to configure the valve. Sets up the valve using the information provided by the user 
+
+        Args:
+            node_info (dict): contains the known information about the node, like the module type. Also used to house the entries
+            valve_info (dict): contains information about the valve
+            valve_button (tk.Button): the button used to start this window
+        """
         def accept(button):
             motor_cxn = motor_connector.get()
             try:
@@ -657,6 +732,7 @@ class SetupGUI:
         cancel_button.grid(row=offset + 1, column=1)
         config_valve = self.graph_tmp.nodes[valve_info["valve_name"]]
         devices = config_valve.get("devices")
+        # if valve has been configured already, get that information so the user can update it.
         if self.config_cxn_flag and devices is not None:
             # set the hall pin
             found_node = self.graph_tmp.nodes[valve_info["valve_name"]]
@@ -667,6 +743,18 @@ class SetupGUI:
             geared_motor.set(found_node["mod_config"]["gear"])
 
     def storage_setup(self, node_info, valve_info, fields, window, button, found_node):
+        """This window allows the user to set up a storage module. Currently, this assumes that the 
+        storage unit is built like the Cronin group's clusterbot, using a single stepper motor to
+        drive a Geneva wheel.
+
+        Args:
+            node_info (dict): information about the node being configured
+            valve_info (dict): information about the valve this storage unit is connected to
+            fields (list): list of fields that the user must fill to configure the storage unit
+            window (tk.TopLevel): the window that the configuration fields are placed within
+            button (tk.Button): the button used to start this window
+            found_node (str): the name of the previously configured node, if found. 
+        """
         def accept():
             motor_cxn = motor_connector.get()
             select_new = False
@@ -720,6 +808,11 @@ class SetupGUI:
             self.update_node_entries(node_info, valve_info, this_node)
 
     def camera_setup(self, camera_button):
+        """Sets up a camera to be used with OpenCV
+
+        Args:
+            camera_button (tk.Button): the button used to start this window.
+        """
         def accept():
             self.graph_tmp.add_node("camera1")
             node = self.graph_tmp.nodes["camera1"]
@@ -775,12 +868,12 @@ class SetupGUI:
         video_stream()
 
     def valve_link(self, node_info, valve_info, fields, window, button, found_node):
-        """Set up a link between two valves
+        """Set up an edge between two valves
 
         Args:
-            node_config (NodeConfig Object): Object that describes the graph node
-            window (tkinter Window Object): Parent window of this menu
-            button (Tkinter Button): The button to colour once this method is run
+            node_config (dict): contains known information about the node
+            window (tk.TopLevel): this window
+            button (tk.Button): The button to colour once this method is run
         """
 
         def accept_valve_link(sel_valve, tube_length, valve_button):
@@ -823,6 +916,16 @@ class SetupGUI:
         cancel_butt.grid(row=offset + 2, column=2)
 
     def motor_setup(self, stepper_name, motor_cn, config_type):
+        """Setups up the dictionary structure required for the robot to set up the stepper motors
+
+        Args:
+            stepper_name (str): the name of the stepper motor, e.g. stepperX
+            motor_cn (str): the stepper driver that the motor is connected to. On RAMPS 1.4 these are marked on the silkscreen
+            config_type (str): the type of configuration to apply for the motor
+
+        Returns:
+            dict: the dictionary describing the motor's configuration.
+        """
         this_motor_config = {"name": stepper_name}
         motor_options = self.motor_options[motor_cn][stepper_name]
         motor_options["device_config"].update(self.motor_configs[config_type])
@@ -830,6 +933,16 @@ class SetupGUI:
         return {"stepper": this_motor_config}
 
     def flask_setup(self, node_info, valve_info, fields, window, button, found_node):
+        """Sets up a flask (any vessel for holding fluid)
+
+        Args:
+            node_info (dict): known information about the node/module
+            valve_info (dict): information about the valve this flask is connected to
+            fields (list): the fields the user should complete to configure this flask
+            window (tk.TopLevel): this window
+            button (tk.Button): the button used to start this window
+            found_node (str): the name of the previously configured node, if found. 
+        """
         def accept_flask(flask_button):
             flask_name = node_info["entries"][0][1].get()
             self.graph_tmp.add_node(flask_name)
@@ -856,6 +969,16 @@ class SetupGUI:
             self.update_node_entries(node_info, valve_info, this_node)
 
     def reactor_setup(self, node_info, valve_info, fields, window, button, found_node):
+        """This window allows the user to set up a reactor (stirrer hotplate)
+
+        Args:
+            node_info (dict): known information about the node/module
+            valve_info (dict): information about the valve this module is connected to
+            fields (list): the fields required to configure this module
+            window (tk.TopLevel): this window
+            button (tk.Button): the button used to start this window.
+            found_node (str): the name of the previously configured node, if found.
+        """
         def accept_reactor(reactor_button):
             try:
                 stirrer = stir_pin.get()
@@ -926,6 +1049,14 @@ class SetupGUI:
             self.update_node_entries(node_info, valve_info, this_node)
 
     def validate_text(self, new_text):
+        """Validates whether the text can be converted to a string
+
+        Args:
+            new_text (str): the input to the field.
+
+        Returns:
+            bool: whether the input could be successfully converted to str.
+        """
         if not new_text:
             self.text_temp = ""
             return True
@@ -936,6 +1067,14 @@ class SetupGUI:
             return False
 
     def validate_int(self, new_int):
+        """Validates whether the text can be converted to an integer
+
+        Args:
+            new_text (str): the input to the field.
+
+        Returns:
+            bool: whether the input could be successfully converted to int.
+        """
         if not new_int:
             self.int_temp = 0
             return True
@@ -947,11 +1086,27 @@ class SetupGUI:
 
     @staticmethod
     def get_key(value, search_dict):
+        """Gets the key corresponding to a dictionary value. 
+
+        Args:
+            value (str): the value of the dictionary item
+            search_dict (dict): the ditionary to search
+
+        Returns:
+            str: the key corresponding to value
+        """
         for k, v in search_dict.items():
             if v == value:
                 return k
 
     def update_node_entries(self, node_info, valve_info, node):
+        """Fills the entry fields using information from the node that has already been configured.
+
+        Args:
+            node_info (dict): contains the entries and other information about the node
+            valve_info (dict): contains information about the valve this module is connected to.
+            node (dict): the dictionary corresponding to this node on the graph
+        """
         for f in node_info["entries"]:
             if f[0] == "Tubing length in mm":
                 edges = self.graph_tmp.adj[node["name"]][valve_info["valve_name"]]
@@ -963,6 +1118,15 @@ class SetupGUI:
 
     @staticmethod
     def find_unselected(possible_options, selected_options):
+        """Finds an unselected option in a menu
+
+        Args:
+            possible_options (list): all possible options
+            selected_options (list): options that have been selected
+
+        Returns:
+            str: an option that has not been selected
+        """
         options = list(possible_options)
         selected = list(selected_options)
         for option in options:
@@ -971,6 +1135,17 @@ class SetupGUI:
 
     @staticmethod
     def generate_fields(node_info, frame, field_list, offset):
+        """Generates input fields for the configuration windows.
+
+        Args:
+            node_info (dict): known information about the node being configured
+            frame (tk.Frame): the frame that the fields are being added to
+            field_list (list): list of the fields that must be added
+            offset (int): the row offset to apply
+
+        Returns:
+            int: the new row offset
+        """
         # todo add validation to volume entries
         index = 0
         for index, field in enumerate(field_list):
@@ -983,6 +1158,16 @@ class SetupGUI:
 
     @staticmethod
     def read_fields(node_info, node, start_field=0):
+        """Reads the fields filled in by the user
+
+        Args:
+            node_info (dict): dictionary containing known information and the entry objects
+            node (dict): dictionary corresponding to this node in the graph
+            start_field (int, optional): the field to start reading from. Defaults to 0.
+
+        Returns:
+            float: the length of the tubing (if applicable)
+        """
         entries = node_info["entries"]
         tubing_length = 0
         for i in range(start_field, len(entries)):
@@ -1006,6 +1191,15 @@ class SetupGUI:
         return tubing_length
 
     def get_node(self, valve_name, port):
+        """Determines whether a node has already configured for this port
+
+        Args:
+            valve_name (str): the name of the valve this node is connected to
+            port (int): the port number for this node
+
+        Returns:
+            str: the name of the node, if found
+        """
         adj_nodes = self.graph_tmp.adj[valve_name]
         for node in adj_nodes:
             for edge in adj_nodes[node]:
@@ -1019,6 +1213,11 @@ class SetupGUI:
             widget.destroy()
 
     def add_edge(self, dual, *args, **kwargs):
+        """Adds edges betweeen configured nodes
+
+        Args:
+            dual (bool): whether the edge is multidirectional or not
+        """
         if args[2]:
             self.graph_tmp.adj[args[0]][args[1]][0]["tubing_length"] = kwargs["tubing_length"]
         else:
@@ -1027,6 +1226,8 @@ class SetupGUI:
                 self.graph_tmp.add_edge(args[1], args[0], **kwargs)
 
     def run_fb_menu(self):
+        """Starts the fluidic backbone GUI as a subprocess
+        """
         run_popup = tk.Toplevel(self.primary)
         run_popup.title("Run Fluidic Backbone")
         warning_label = tk.Label(run_popup,
@@ -1042,6 +1243,8 @@ class SetupGUI:
         no_button.grid(row=1, column=2)
 
     def generate_config(self):
+        """Generates the JSON configuration files. Saved to the package installation location.
+        """
         config_files = []
         for filename in self.config_filenames[:2]:
             config_files.append(open(filename, "w"))
@@ -1063,6 +1266,8 @@ class SetupGUI:
         self.write_message(f"Config files written to {self.script_dir}/configs")
 
     def load_configs(self):
+        """Loads a previously configured JSON file.
+        """
         if self.config_cmd_flag:
             self.write_message("The command configuration has already been loaded")
         else:
@@ -1098,6 +1303,11 @@ class SetupGUI:
                 self.write_message(f"File {self.config_filenames[1]} not found")
 
     def write_message(self, message):
+        """Writes a message to the log window
+
+        Args:
+            message (str): the message to be output
+        """
         numlines = int(self.log.index("end - 1 line").split(".")[0])
         self.log["state"] = "normal"
         if numlines == 16:

@@ -11,7 +11,16 @@ DEFAULT_URL = "http://127.0.0.1:5000/robots_api"
 
 
 class WebListener:
+    """This class is used for all the web related tasks for the robot, and also to parse XDL for
+    execution on the robots.
+    """
     def __init__(self, robot_manager, robot_id,  robot_key):
+        """
+        Args:
+            robot_manager (UJ_FB.Manager): the manager for this robot
+            robot_id (str): the robot's ID
+            robot_key (str): the robot's key (password)
+        """
         self.manager = robot_manager
         self.id = robot_id
         self.key = robot_key
@@ -35,6 +44,8 @@ class WebListener:
         self.test_connection()
 
     def test_connection(self):
+        """Tests whether a connection can be successfully established with a server. 
+        """
         retry = False
         with self.url_lock:
             try:
@@ -63,6 +74,13 @@ class WebListener:
             self.test_connection()
 
     def update_status(self, ready, error=False, reaction_complete=False):
+        """Updates the robot's status on the server
+
+        Args:
+            ready (bool): True if ready to run a reaction, False otherwise
+            error (bool, optional): True if robot has encountered an error. Defaults to False.
+            reaction_complete (bool, optional): True if reaction is complete. Defaults to False.
+        """
         time_elapsed = time.time() - self.last_error_update
         with self.url_lock:
             if self.valid_connection:
@@ -90,6 +108,11 @@ class WebListener:
                         self.manager.resume()
 
     def update_execution(self):
+        """Queries whether the robot should continue to execute the queue
+
+        Returns:
+            bool/None: Returns True/False if response received from server. Otherwise returns None.
+        """
         time_elapsed = time.time() - self.last_execution_update
         with self.url_lock:
             if self.valid_connection and time_elapsed > self.polling_time:
@@ -106,6 +129,16 @@ class WebListener:
             return None
 
     def send_image(self, image_metadata, img_data):
+        """Sends an image to the server. Images are sent in two post requests. The first request holds the images 
+        metadata, and the second holds the image encoded as bytes
+
+        Args:
+            image_metadata (dict): the metadata for the image, like the date, name etc
+            img_data (bytes): the image encoded in bytes
+
+        Returns:
+            requests.Response/bool: returns the response if one received, otherwise returns False
+        """
         if not self.valid_connection:
             self.test_connection()
         with self.url_lock:
@@ -124,6 +157,11 @@ class WebListener:
                 return r
 
     def request_reaction(self):
+        """Requests a reaction from the server
+
+        Returns:
+            bool: True if reaction received, False if nothing received or no valid connection
+        """
         time_elapsed = time.time() - self.last_reaction_update
         with self.url_lock:
             if self.valid_connection and time_elapsed > self.polling_time:
@@ -145,6 +183,16 @@ class WebListener:
             return False
 
     def load_xdl(self, xdl, is_file=True, clean_step=False):
+        """Loads an XDL file or string
+
+        Args:
+            xdl (str, file-like object): the XDL data
+            is_file (bool, optional): Whether the XDL data is a file or a string. Defaults to True.
+            clean_step (bool, optional): True if a cleaning step is required at the end of the reaction. Defaults to False.
+
+        Returns:
+            bool: True if XDL loaded and parsed correctly. Otherwise False.
+        """
         if is_file:
             try:
                 tree = et.parse(xdl)
@@ -158,9 +206,18 @@ class WebListener:
             except et.ParseError as e:
                 self.manager.write_log(f"The XDL provided is not formatted correctly, {str(e)}", level=logging.ERROR)
                 return False
-        self.parse_xdl(tree, clean_step=clean_step)
+        return self.parse_xdl(tree, clean_step=clean_step)
 
     def parse_xdl(self, tree, clean_step=False):
+        """Parse the XDL and determine what steps need to be carried out. Put the steps into the Manager's queue.
+
+        Args:
+            tree (Element): an Element object representing the XML tree
+            clean_step (bool, optional): True if cleaning step required after reaction. Defaults to False.
+
+        Returns:
+            bool: True if XDL parsed successfully. False otherwise.
+        """
         reagents = {}
         modules = {}
         if tree.find("Synthesis"):
@@ -175,7 +232,7 @@ class WebListener:
             flask = self.manager.find_reagent(reagent_name)
             if flask is None:
                 self.manager.write_log(f"Could not find {reagent_name} on {self.manager.id}")
-                return
+                return False
             reagents[reagent_name] = flask
         for module in req_hardware:
             module_id = module.get("id")
@@ -185,7 +242,7 @@ class WebListener:
         parse_success = True
         for step in procedure:
             if step.tag == "Add":
-                if not self.process_xdl_add(modules, reagents, step):
+                if not self.process_xdl_add(reagents, step):
                     parse_success = False
             elif step.tag == "Transfer":
                 if not self.process_xdl_transfer(step):
@@ -203,13 +260,24 @@ class WebListener:
             self.manager.wait(0, {"wait_user": True, "wait_reason": "cleaning"})
         if not parse_success:
             self.manager.pipeline.queue.clear()
+            return False
         else:
             with self.manager.interrupt_lock:
                 self.manager.reaction_ready = True
                 if not self.manager.reaction_name:
                     self.manager.reaction_name = reaction_name
+                return True
 
-    def process_xdl_add(self, modules, reagents, add_info):
+    def process_xdl_add(self, reagents, add_info):
+        """Process reagent addition step
+
+        Args:
+            reagents (dict): dictionary of reagents and their corresponding flask
+            add_info (dict): additional information for the addition
+
+        Returns:
+            bool: True if successful processed and queued. False otherwise
+        """
         vessel = add_info.get("vessel")
         target = self.manager.find_target(vessel.lower())
         if target is None:
@@ -245,6 +313,14 @@ class WebListener:
         return self.manager.move_fluid(source, target, volume, flow_rate)
 
     def process_xdl_transfer(self, transfer_info):
+        """Process a fluid transfer between modules
+
+        Args:
+            transfer_info (dict): information about the transfer
+
+        Returns:
+            bool: True if successfully processed and queued, False otherwise.
+        """
         source = transfer_info.get("from_vessel")
         target = transfer_info.get("to_vessel")
         source = self.manager.find_target(source).name
@@ -277,6 +353,14 @@ class WebListener:
         return self.manager.move_fluid(source, target, volume, flow_rate, adjust_dead_vol=False, transfer=True)
 
     def process_xdl_stir(self, stir_info):
+        """Process a stir step
+
+        Args:
+            stir_info (dict): information about the stir step
+
+        Returns:
+            bool: True if successfully parsed and queued. False otherwise.
+        """
         reactor_name = stir_info.get("vessel")
         reactor = self.manager.find_target(reactor_name.lower())
         if reactor is None:
@@ -305,6 +389,14 @@ class WebListener:
             return True
     
     def process_xdl_heatchill(self, heatchill_info):
+        """Process a heating/chilling step
+
+        Args:
+            heatchill_info (dict): information about the heating/chilling step
+
+        Returns:
+            bool: True if successfully processed and queued. False otherwise.
+        """
         reactor_name = heatchill_info.get("vessel")
         reactor = self.manager.find_target(reactor_name.lower())
         if reactor is None:
@@ -336,6 +428,15 @@ class WebListener:
         return True
 
     def process_xdl_wait(self, wait_info, metadata):
+        """Process a wait step. Used to either allow reaction to complete or to settle solids
+
+        Args:
+            wait_info (dict): information about the wait step
+            metadata (dict): metadata for this XDL reaction
+
+        Returns:
+            bool: True if successfully processed and queued. False otherwise. 
+        """
         wait_time = wait_info.get("time")
         img_processing = metadata.get("img_processing")
         if wait_time is None:

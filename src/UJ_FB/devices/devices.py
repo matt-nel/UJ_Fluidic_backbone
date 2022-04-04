@@ -3,8 +3,15 @@ from commanduino.exceptions import CMDeviceReplyTimeout
 
 
 class Device:
+    """Class to represent a generic device, in this case a digital/analog pin.
+    """
     def __init__(self, cmd_mng, serial_lock):
-        # todo add error handling
+        """Initialise the device object
+
+        Args:
+            cmd_mng (CommandManager): the Commanduino commandmanager for this robot
+            serial_lock (Lock): Lock used to maintain thread safety for the serial connection
+        """
         self.cmd_device = cmd_mng
         self.digital_state = None
         self.analog_level = None
@@ -37,12 +44,26 @@ class Device:
 
 
 class TempSensor(Device):
+    """Class to represent a thermistor
+    """
     def __init__(self, ts_obj, device_config, s_lock):
+        """Initialise the temperature sensor
+
+        Args:
+            ts_obj (CommandHandler): the Commanduino CommandHandler for this sensor
+            device_config (dict): dictionary containing the device configuration
+            serial_lock (Lock): Lock used to maintain thread safety for the serial connection
+        """
         super(TempSensor, self).__init__(ts_obj, s_lock)
         self.coefficients = device_config["SH_C"]
         self.last_temp = 0.0
 
     def read_temp(self):
+        """Reads the temperature from the thermistor, derived from the voltage and the Steinhart-Hart coefficients for the thermistor
+
+        Returns:
+            float: the temperature in °C
+        """
         v = []
         num_readings = 0
         for i in range(5):
@@ -65,7 +86,15 @@ class TempSensor(Device):
 
 
 class Heater(Device):
+    """Class to represent a heating element
+    """
     def __init__(self, heater_obj, s_lock):
+        """Initialise the heater
+
+       Args:
+            heater_obj (CommandHandler): the Commanduino CommandHandler for this heater
+            s_lock (Lock): Lock used to maintain thread safety for the serial connection
+        """
         super(Heater, self).__init__(heater_obj, s_lock)
         self.voltage = 0.0
 
@@ -85,6 +114,13 @@ class MagStirrer(Device):
     """
 
     def __init__(self, stirrer_obj, device_config, s_lock):
+        """Initialise the stirrer
+
+        Args:
+            stirrer_obj (CommandHandler): the Commanduino CommandHandler for this stirrer
+            device_config (dict): dictionary containing the device configuration
+            s_lock (Lock): Lock used to maintain thread safety for the serial connection
+        """
         super(MagStirrer, self).__init__(stirrer_obj, s_lock)
         self.max_speed = device_config["fan_speed"]
         self.speed = 0.0

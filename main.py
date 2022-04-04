@@ -1,3 +1,10 @@
+"""
+ This script can be used to start the robot with or without a GUI.
+ By default the program will create logs in the directory where this script is found
+ in a folder called "logs". To change the destination folder, simply change the 
+ script_dir variable. 
+"""
+
 import datetime
 import logging
 import os

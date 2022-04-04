@@ -1,3 +1,10 @@
+"""
+This class is used to set up a GUI for the fluidic backbone robot. Using the GUI,
+users can control the syringe pumps, valves, and reactors (stirrer hotplates). 
+The GUI can also start and stop the robots, and load reactions in the form of XDL documents.  
+"""
+
+
 import os
 import queue
 import time
@@ -6,9 +13,17 @@ import tkinter.filedialog as fd
 
 
 class FluidicBackboneUI:
+    """
+    Class used to control the GUI. The GUI communicates with the Manager via a Queue. The manager
+    places messages, control signals, and other information into the queue, which the GUI will 
+    retrieve every 0.3 s. Tkinter is not thread safe, so any information has to be passed to
+    the GUI via this queue.     
+    """
     def __init__(self, manager):
-        """
-        :param simulation: Bool to run the software in simulation mode
+        """Initialise the GUI
+
+        Args:
+            manager (UJ_FB.Manager): the Manager object for this robot
         """
         self.primary = tk.Tk()
         self.queue = queue.Queue()
@@ -88,6 +103,10 @@ class FluidicBackboneUI:
         self.primary.after(0, self.read_queue)
 
     def read_queue(self):
+        """
+        Reads the queue and sets up another event to read the queue again in 0.3 s, unless the user has exited the 
+        program. 
+        """
         try:
             item = self.queue.get_nowait()
             if item[0] == "log":
@@ -106,7 +125,7 @@ class FluidicBackboneUI:
 
     def populate_syringes(self, syringe_name):
         """
-        Populates the buttons for syringe
+        Populates the buttons for syringes
         :param syringe_name: name of syringe from config file
         :return:
         """
@@ -176,6 +195,11 @@ class FluidicBackboneUI:
         self.valves_buttons[valve_name] = ports
 
     def populate_reactors(self, reactor_name):
+        """ Populates the buttons for the reactors.
+
+        Args:
+            reactor_name (str): The name of the reactor 
+        """
         reactor_no = int(reactor_name[-1])
         reactor_print_name = "Reactor " + str(reactor_no)
         row = reactor_no
@@ -198,6 +222,12 @@ class FluidicBackboneUI:
         stir_button.grid(row=row, column=2)
 
     def v_button_colour(self, command_dict):
+        """Changes the colour of valve position buttons on the UI to indicate which port 
+        is currently being used
+
+        Args:
+            command_dict (dict): The dictionary containing the command parameters
+        """
         command = command_dict["command"]
         if command == "home":
             port_no = 0
@@ -209,6 +239,8 @@ class FluidicBackboneUI:
         self.valves_buttons[valve][port_no].configure(bg=self.colours["heading"])
     
     def update_url(self):
+        """Updates the server URL for the robot to connect to.
+        """
         def accept_url():
             new_url = url_entry.get()
             self.manager.update_url(new_url)
@@ -232,12 +264,12 @@ class FluidicBackboneUI:
         url_button_c.grid(row=1, column=1)
 
     def move_syringe(self, syringe_name, syringe_print_name, direction):
-        """
-        Menu to control syringe pumps
-        :param syringe_print_name: name to print in messages and logs
-        :param syringe_name: syringe to be addressed
-        :param direction: boolean, True if aspirating syringe, False if dispensing syringe
-        :return: None
+        """Allows the user to move the syringe to aspirate (take up) or dispense fluid.
+
+        Args:
+            syringe_name (str): The name of the syringe to be moved.
+            syringe_print_name (str): The name of the syringe, formatted for display
+            direction (str): "A" for aspirate, "D" for dispense.
         """
 
         def dispense(syr_name):
@@ -280,6 +312,12 @@ class FluidicBackboneUI:
         cancel_button.grid(row=5, column=6)
 
     def home_syringe(self, syringe_name, syringe_print_name):
+        """Commands the robot to home the syringe; moving it until the limit switch is triggered. 
+
+        Args:
+            syringe_name (str): The name of the syringe to be homed
+            syringe_print_name (str): the name of the syringe, formatted for display
+        """
         command_dict = {"mod_type": "syringe_pump", "module_name": syringe_name, "command": "home",
                         "parameters": {"volume": 0.0, "flow_rate": 9999, "wait": False}}
 
@@ -299,6 +337,12 @@ class FluidicBackboneUI:
         no_button.grid(row=2, column=5)
 
     def jog_syringe(self, syringe_name, syringe_print_name):
+        """This window allows the user to jog the syringe in either direction. 
+
+        Args:
+            syringe_name (str): the name of the syringe
+            syringe_print_name (str): the name of the syringe, formatted for display.
+        """
         command_dict = {"mod_type": "syringe_pump", "module_name": syringe_name, "command": "jog",
                         "parameters": {"volume": 0.0, "flow_rate": 9999, "steps": 0, "direction": "D", "wait": False}}
 
@@ -351,12 +395,27 @@ class FluidicBackboneUI:
         close_button.grid(row=7, column=2)
 
     def move_valve(self, valve_name, port_no):
+        """This function is called when one of the port buttons on the main GUI window is clicked.
+        Sends a command
+
+        Args:
+            valve_name (str): the name of the valve
+            port_no (int): the number of the target port. Ranges from 1-10.
+        """
         command_dict = {"mod_type": "selector_valve", "module_name": valve_name, "command": port_no,
                         "parameters": {"wait": False}}
         self.send_command(command_dict)
         self.v_button_colour(command_dict)
 
     def jog_valve(self, valve_name, valve_print_name):
+        """This window allows the user to jog the valve by a number of steps or a number of ports.
+        The child functions allow the user to change the movement direction, zero the valve position,
+        read the Hall-effect sensor, and move the valve.
+
+        Args:
+            valve_name (str): the name of the valve to be moved
+            valve_print_name (str): the name of the valve, formatted for display.
+        """
         def change_direction(invert_direction):
             if invert_direction:
                 self.invert_valve = True
@@ -417,6 +476,13 @@ class FluidicBackboneUI:
         close_button.grid(row=6, column=1)
 
     def heat_reactor(self, reactor_name, reactor_print_name):
+        """This window allows the user to start and stop the reactor's heating element. The user
+        can set the target temperature in °C using a text field. 
+
+        Args:
+            reactor_name (str): the name of the reactor 
+            reactor_print_name (str): the name of the reactor, formatted for display
+        """
         def start_heat():
             temp = float(reactor_entry.get())
             command_dict = {"mod_type": "reactor", "module_name": reactor_name, "command": "start_heat", 
@@ -452,6 +518,12 @@ class FluidicBackboneUI:
         cancel_butt.grid(row=3, columnspan=2, pady=5)
 
     def stir_reactor(self, reactor_name, reactor_print_name):
+        """This window allows the user to start and stop the stirring 
+
+        Args:
+            reactor_name (str): the name of the reactor
+            reactor_print_name (str): the name of the reactor, formatted for display
+        """
         def start_stir():
             speed = int(reactor_entry.get())
             command_dict = {"mod_type": "reactor", "module_name": reactor_name, "command": "start_stir", 
@@ -487,6 +559,12 @@ class FluidicBackboneUI:
         cancel_butt.grid(row=3, columnspan=2, pady=5)
 
     def update_temps(self, reactor_name, reactor_temp):
+        """Updates the temperature display, using data retrieved from the queue.
+
+        Args:
+            reactor_name (str): the name of the reactor
+            reactor_temp (float): the current temperature of the reactor in °C, updated every 5 s.
+        """
         self.reactor_labels[reactor_name].configure(text=f"{reactor_temp} °")
 
     def wait_user(self):
@@ -502,6 +580,13 @@ class FluidicBackboneUI:
         done_butt.grid()
 
     def send_command(self, command_dict):
+        """Sends commands to the robot in the form of dictionaries. These dictionaries are placed into the 
+        Manager's queue to be retrieved and performed. Should a command fail to execute, the Manager will
+        display error messages within the log window.
+
+        Args:
+            command_dict (dict): dictionary containing the command information: module name, module type, and parameters for the command.
+        """
         if self.manager.error:
             self.manager.error_queue.put(command_dict)
         else:
@@ -538,6 +623,11 @@ class FluidicBackboneUI:
                 self.write_message(f"Started stirring {name} at {params['speed']}")
 
     def write_message(self, message):
+        """Writes a message to the log window. Messages will wrap when they exceed the width of the window.
+
+        Args:
+            message (str): the message to be output
+        """
         numlines = int(self.log.index("end - 1 line").split(".")[0])
         self.log["state"] = "normal"
         if numlines == 24:
@@ -548,6 +638,11 @@ class FluidicBackboneUI:
         self.log["state"] = "disabled"
 
     def update_execution(self, execute):
+        """Updates the start/stop execution button
+
+        Args:
+            execute (bool): True if currently configured to execute queue, False otherwise.
+        """
         if execute:
             self.execute_butt.configure(text="Stop auto execution",
                                         command=lambda: self.send_interrupt({"pause": False, "stop": False,
@@ -560,24 +655,40 @@ class FluidicBackboneUI:
                                                                              "execute": True}))
 
     def load_xdl(self):
+        """Loads an XDL file to be parsed for execution. The XDL file is parsed by the WebListener class.
+        """
         filename = fd.askopenfilename(title="Open XDL file", initialdir="/", filetypes=(("All files", "*.*"), ))
         self.manager.listener.load_xdl(filename, is_file=True)
 
     def stop(self):
+        """Commands the robot to pause all ongoing actions and clear the execution queue. 
+        """
         self.stop_butt.configure(state="disabled")
-        self.pause_butt.configure(text="pause", bg=self.colours["other-button"], command=self.pause)
+        self.pause_butt.configure(text="resume", bg=self.colours["other-button"], command=self.resume)
         self.send_interrupt({"pause": True, "stop": True, "resume": False, "exit": False})
 
     def pause(self):
+        """Commands the robot to pause all ongoing actions and changes the pause button.
+        Does not clear the queue, so actions can be resumed from their last state by pressing resume.
+        """
         self.stop_butt.configure(state="normal")
         self.pause_butt.configure(text="Resume", bg="lawn green", command=self.resume)
         self.send_interrupt({"pause": True, "stop": False, "resume": False, "exit": False})
 
     def resume(self):
+        """Commands the robot to resume execution of the queue, starting from the last known state of the 
+        last executed action. 
+        """
         self.pause_butt.configure(text="Pause", bg=self.colours["other-button"], command=self.pause)
         self.send_interrupt({"pause": False, "stop": False, "resume": True, "exit": False})
 
     def send_interrupt(self, parameters):
+        """Used to send start, stop, pause, resume, execute, and exit commands to the robot. The Manager thread runs continously,
+        so Lock objects are used to ensure thread safety. 
+
+        Args:
+            parameters (dict): the parameters for the interrupt (whether to pause, stop, exit, or resume) 
+        """
         execute = parameters.get("execute")
         if parameters["stop"]:
             with self.manager.interrupt_lock:
@@ -607,6 +718,8 @@ class FluidicBackboneUI:
         self.primary.mainloop()
 
     def end_program(self):
+        """Waits for the manager to exit, then reads queue to remove the "after" event.
+        """
         parameters = {"pause": False, "stop": False, "resume": False, "exit": True}
         self.send_interrupt(parameters)
         self.quit_flag = True
@@ -616,6 +729,14 @@ class FluidicBackboneUI:
         self.primary.destroy()
 
     def validate_vol(self, new_num):
+        """validates whether the typed value can be converted into a float for a volume.
+
+        Args:
+            new_num (str): input to the text field
+
+        Returns:
+            bool: True if value can be converted to float or field is being cleared. False otherwise.
+        """
         if not new_num:  # field is being cleared
             self.volume_tmp = 0.0
             return True
@@ -627,6 +748,14 @@ class FluidicBackboneUI:
             return False
 
     def validate_flow(self, new_num):
+        """validates whether the typed value can be converted into a float for a flow rate.
+
+        Args:
+            new_num (str): input to the text field
+
+        Returns:
+            bool: True if value can be converted to float or field is being cleared. False otherwise.
+        """
         if not new_num:
             self.flow_rate_tmp = 0.0
             return True

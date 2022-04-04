@@ -17,12 +17,14 @@ class SelectorValve(modules.Module):
     """
 
     def __init__(self, name, module_info, cmduino, manager):
-        """
-        :param name: String: name of the valve
-        :param module_info: Dictionary: contains the configuration information
-        :param cmduino: Commanduino Object: object for communicating with steppermotor and hall-effect sensor over the
-        serial connection
-        :param manager: Manager Object: coordinates modules
+        """Initialise the selector valve
+
+        Args:
+            name (str): name of the valve
+            module_info (dict): contains the configuration information
+            cmduino (CommandManager): object for communicating with steppermotor and hall-effect sensor over the
+                              serial connection
+            manager (UJ_FB.Manager): Manager object for this robot
         """
         super(SelectorValve, self).__init__(name, module_info, cmduino, manager)
         self.mod_type = "selector_valve"
@@ -384,6 +386,8 @@ class SelectorValve(modules.Module):
             iterations += 1
 
     def check_backlash(self):
+        """Checks whether backlash is present in the valve
+        """
         i = 0
         start_pos = self.stepper.get_current_position()
         # we start at zero.

@@ -1,3 +1,13 @@
+"""This script contains the Manager class and Task Class. 
+Manager is used to control fluidic backbone robots consisting of a number of modules
+attached to a Arduino Mega and RAMPS board. Currently, the supported modules are syringe pumps, selector valves,
+reactors (stirrer hotplates), flasks (vessels for holding fluids), and cameras. Modules are comprised of a number
+of devices, which represent the components used to construct the module. These devices are controlled using
+commanduino. For example, a selector valve is comprised of a stepper motor device and a Hall-effect sensor device.
+Task objects are used to represent currently running tasks and to resume operations from the last known state.
+"""
+
+
 import sys
 import os
 import logging
@@ -17,6 +27,19 @@ from UJ_FB.fluidic_backbone_gui import FluidicBackboneUI
 
 
 def json_loader(root, fp, object_hook=None):
+    """Loads JSON files for robot configuration
+
+    Args:
+        root (str): the root file path
+        fp (str): the file path relative to root
+        object_hook (func, optional): the object hook function to run. Defaults to None.
+
+    Raises:
+        fbexceptions.FBConfigurationError: indicates that JSON file is not present or is incorrect
+
+    Returns:
+        dict: dictionary generated from the JSON file
+    """
     fp = os.path.join(root, fp)
     try:
         with open(fp) as file:
@@ -31,9 +54,13 @@ def load_graph(graph_config):
 
 
 def object_hook_int(obj):
-    """
-    :param obj: dictionary converted from JSON
-    :return: dictionary of JSON data with integers formatted
+    """Replaces strings corresponding to integers with integers
+
+    Args:
+        obj (dict): dictionary representing the JSON configuration file
+
+    Returns:
+        dict: dictionary representing the JSON configuration file
     """
     output = {}
     for k, v in obj.items():
@@ -47,33 +74,42 @@ def object_hook_int(obj):
     return output
 
 
-def get_log_location():
-    pass
-
-
 class Manager(Thread):
     """
     Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
-    tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules
+    tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules.
+    Manager runs in a separate thread that continually monitors for incoming reaction data, commands from the GUI, and 
+    retrieves commands from the queue to execute using the attached modules.
     """
     def __init__(self, gui=None, web_enabled=False, simulation=False, stdout_log=False):
+        """
+        Args:
+            gui (bool, optional): True if GUI should be created. Defaults to None.
+            web_enabled (bool, optional): True if robot is connecting to a server. Defaults to False.
+            simulation (bool, optional): True if robot should be run in simulation mode. Defaults to False.
+            stdout_log (bool, optional): True if logs should print to stdout. Defaults to False.
+        """
         Thread.__init__(self)
-        # get absolute directory of script
         self.script_dir = os.path.dirname(__file__)
         cm_config = os.path.join(self.script_dir, "configs/cmd_config.json")
         self.cmd_mng = commanduino.CommandManager.from_configfile(cm_config, simulation)
         graph_config = json_loader(self.script_dir, "configs/module_connections.json")
         self.graph = load_graph(graph_config)
+        self.prev_run_config = json_loader(self.script_dir, "configs/running_config.json", object_hook=object_hook_int)
+
         self.key = self.graph.nodes["meta"]["key"]
         self.id = self.graph.nodes["meta"]["robot_id"]
-        self.prev_run_config = json_loader(self.script_dir, "configs/running_config.json", object_hook=object_hook_int)
         self.name = "Manager" + self.id
         self.logger = logging.getLogger(self.id)
         self.simulation = simulation
+
+        self.listener = web_listener.WebListener(self, self.id, self.key)
+        self.web_enabled = web_enabled
+
         self.q = Queue()
         self.pipeline = Queue()
         self.error_queue = Queue()
-        # list to hold current Task objects.
+
         self.tasks = []
         self.serial_lock = Lock()
         self.interrupt_lock = Lock()
@@ -94,10 +130,15 @@ class Manager(Thread):
         self.error_start = None
         self.error_flag = False
         self.quit_safe = False
+        self.default_fr = 10000
+        self.default_flush_fr = 20000
+        self.rc_changes = False
+        self.xdl = ""
+
         self.valid_nodes = []
+        self.num_valves = 0
         self.modules = {"valves": {}, "syringes": {}, "reactors": {}, "flasks": {}, "cameras": {}, "storage": {}}
         self.valves = self.modules["valves"]
-        self.num_valves = 0
         self.syringes = self.modules["syringes"]
         self.reactors = self.modules["reactors"]
         self.flasks = self.modules["flasks"]
@@ -105,14 +146,9 @@ class Manager(Thread):
         self.storage = self.modules["storage"]
         self.gui_main = None
         self.setup_modules()
-        self.default_fr = 10000
-        self.default_flush_fr = 20000
         self.init_syringes()
-        self.listener = web_listener.WebListener(self, self.id, self.key)
-        self.web_enabled = web_enabled
-        self.rc_changes = False
         self.write_running_config("configs/running_config.json")
-        self.xdl = ""
+        
         if stdout_log:
             handler = logging.StreamHandler(sys.stdout)
             handler.setLevel(logging.INFO)
@@ -128,6 +164,12 @@ class Manager(Thread):
         self.listener.update_url(url)
 
     def write_log(self, message, level=logging.INFO):
+        """Writes a log to the log file and to the GUI if present
+
+        Args:
+            message (str): the message to output
+            level (int, optional): The logging level for this message. Defaults to logging.INFO.
+        """
         if self.gui_main is not None:
             if level > 9:
                 self.gui_main.queue.put(("log", message))
@@ -144,6 +186,12 @@ class Manager(Thread):
             self.logger.info(message)
 
     def write_running_config(self, fp):
+        """Updates the running config, which contains information about the valve positions, whether
+        the valves require a homing check, and the current URL.
+
+        Args:
+            fp (str): the file path to the running config JSON file
+        """
         fp = os.path.join(self.script_dir, fp)
         with open(fp, "w+") as rc_file:
             running_config = json.dumps(self.prev_run_config, indent=4)
@@ -152,7 +200,7 @@ class Manager(Thread):
 
     def setup_modules(self):
         """
-        Reads the graph, appending node data to the required objects.
+        Reads the graph information, instantiating the required module object for each node.
         """
         syringes = 0
         g = self.graph
@@ -247,7 +295,7 @@ class Manager(Thread):
     def run(self):
         """
         This is the primary loop of the program. This loop monitors for errors or interrupts, dispatches tasks,
-         updates the server and has logic to handle pauses.
+        updates the server and has logic to handle pauses, stops, or to exit the loop.
         """
         rxn_last_check = time.time()
         heat_update_time = time.time()
@@ -354,6 +402,11 @@ class Manager(Thread):
             queue.put(command)
 
     def echo_queue(self):
+        """Copies the queue to the pipeline, allowing the queue to be printed out for debugging 
+
+        Returns:
+            list: contains the commands from the queue
+        """
         pipeline = []
         while not self.pipeline.empty():
             command_dict = self.pipeline.get(block=False)
@@ -362,6 +415,8 @@ class Manager(Thread):
         return pipeline
 
     def export_queue(self):
+        """Saves the pipeline to a JSON file.
+        """
         output = {"pipeline": list(self.pipeline.queue)}
         export_queue = json.dumps(output, indent=4)
         pipeline_path = os.path.join(self.script_dir, "configs/Pipeline.json")
@@ -1109,6 +1164,12 @@ class Manager(Thread):
         cam.send_image(self.listener, image_metadata, task)
     
     def wait(self, wait_time, actions):
+        """Adds a wait command to the queue.
+
+        Args:
+            wait_time (int): the time to wait in seconds
+            actions (dict): any additional actions to be performed, such as taking a picture or waiting for user input.
+        """
         pic_info = actions.get("picture")
         wait_info = actions.get("wait_user")
         wait_reason = actions.get("wait_reason")

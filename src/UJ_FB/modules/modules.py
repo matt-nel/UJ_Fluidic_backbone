@@ -1,3 +1,6 @@
+"""This script defines the Module base class and the FBFlask derived class
+"""
+
 import logging
 from UJ_FB.devices import devices, steppermotor
 from threading import Lock
@@ -9,13 +12,14 @@ class Module:
     those names.
     """
     def __init__(self, name, module_info, cmduino, manager):
+        """Initialise the module and associate its devices to it
+
+        Args:
+            name (str): the module's name
+            module_info (dict): configuration for the module
+            cmduino (CommandManager): the Commanduino CommandManager used to control the Arduino
+            manager (UJ_FB.Manager): the Manager object for this robot.
         """
-        :param name: String: the name of the module. E.g: "selectorvalve1", "syringepump2"
-        :param manager: Manager object that is overseeing the robot functions
-        :param module_info: dictionary containing device info for module and configuration info for module.
-        :param cmduino: commanduino object that deals with low-level commands to Arduino.
-        """
-        # todo add method for adding modules after initialisation.
         assoc_devices = module_info.get("devices")
         self.name = name
         self.mod_type = "misc"
@@ -34,7 +38,6 @@ class Module:
         if mod_type != "flask" and mod_type != "camera":
             for item in assoc_devices.keys():
                 if "stepper" in item:
-                    # stepper dict: {..."stepper" : [ "cmd_stepper", "cmd_enabler"]...}
                     stepper = getattr(cmduino, assoc_devices[item]["name"])
                     if module_info["mod_config"]["linear_stepper"]:
                         self.steppers.append(steppermotor.LinearStepperMotor(stepper,
@@ -76,6 +79,14 @@ class FBFlask(Module):
     Class to represent flasks in the fluidic backbone.
     """
     def __init__(self, name, module_info, cmd_mng, manager):
+        """Initialise the flask object
+
+        Args:
+            name (str): the name of the flask
+            module_info (dict): configuration information for the flask
+            cmd_mng (CommandManager): Commanduino CommandManager for this robot
+            manager (UJ_FB.Manager): Manager object for this robot
+        """
         super(FBFlask, self).__init__(name, module_info, cmd_mng, manager)
         self.mod_type = "flask"
         module_config = module_info["mod_config"]
@@ -84,6 +95,15 @@ class FBFlask(Module):
         self.max_volume = float(module_config["max_volume"])*1000
 
     def change_volume(self, new_contents, vol):
+        """Changes the record of the volume within the flask
+
+        Args:
+            new_contents (str): the name of the new contents
+            vol (float): the volume being added or removed.
+
+        Returns:
+            bool: True if volume changed correctly
+        """
         self.cur_vol += vol
         # neg vol means syringe aspirated from this vessel (volume decreased)
         if vol < 0:
@@ -103,6 +123,14 @@ class FBFlask(Module):
         return True
 
     def check_volume(self, vol):
+        """Checks whether the volume change is possible
+
+        Args:
+            vol (float): the change in volume in uL
+
+        Returns:
+            bool: True if volume can be successfully changed.
+        """
         # if syringe withdrawing from this vessel
         if vol < 0:
             if self.cur_vol + vol < 0:

@@ -8,10 +8,12 @@ class StepperMotor:
     connection. Target library uses the Accelstepper stepper library.
     """
     def __init__(self, stepper_obj, device_config, serial_lock):
-        """
-        :param stepper_obj: commanduino object for controlling the stepper motor
-        :param device_config: Dictionary containing the configuration information for the motor.
-        :param: serial_lock: threading.Lock() object for controlling access to serial connection
+        """Initialise the stepper motor
+
+        Args:
+            stepper_obj (CommandHandler): Commanduino CommandHandler for this motor
+            device_config (dict): configuration information for the motor
+            serial_lock (Lock): Lock used to maintain thread safety for the serial connection
         """
         self.serial_lock = serial_lock
         self.cmd_stepper = stepper_obj
@@ -30,10 +32,10 @@ class StepperMotor:
         self.magnets_passed = 0
 
     def enable_acceleration(self, enable=True):
-        """
-        Enables or disables acceleration for the motor. Uses the serial connection
-        :param enable: Boolean. Toggles enabling or disabling acceleration
-        :return:
+        """Enables or disables acceleration for the motor. Uses the serial connection
+
+        Args:
+            enable (bool, optional): Toggles enabling or disabling acceleration. Defaults to True.
         """
         with self.serial_lock:
             if enable:
@@ -44,10 +46,13 @@ class StepperMotor:
                 self.enabled_acceleration = False
 
     def set_acceleration(self, acceleration):
-        """
-        Sets the acceleration of the motor via the serial connection
-        :param acceleration: Integer value for the motor acceleration
-        :return: Boolean. True if successful, False otherwise.
+        """Sets the acceleration of the motor via the serial connection
+
+        Args:
+            acceleration (int): Integer value for the motor acceleration
+
+        Returns:
+            bool: True if successful, False otherwise.
         """
         if type(acceleration) is int and acceleration > 0:
             with self.serial_lock:
@@ -61,8 +66,12 @@ class StepperMotor:
     def set_running_speed(self, speed):
         """
         Sets the running speed of the motor via the serial connection
-        :param speed: Integer: the desired speed
-        :return: Boolean: True if successful, False otherwise.
+
+        Args:
+            speed (int): the desired speed
+
+        Returns:
+            bool: True if successful, False otherwise.
         """
         if type(speed) is int and speed > 0:
             with self.serial_lock:
@@ -74,10 +83,13 @@ class StepperMotor:
             return False
 
     def set_max_speed(self, speed):
-        """
-        Sets the maximum speed of the stepper motor via the serial connection
-        :param speed:
-        :return:
+        """Sets the maximum speed of the stepper motor via the serial connection
+
+        Args:
+            speed (int): the speed of the motor in steps/sec
+
+        Returns:
+            bool: True if successful, False otherwise.
         """
         if type(speed) is int and speed > 0:
             with self.serial_lock:
@@ -89,9 +101,10 @@ class StepperMotor:
             return False
 
     def reverse_direction(self, reverse):
-        """
-        :param reverse: True - clockwise, False, anticlockwise
-        :return:
+        """Configures the motor to run in the reverse direction.
+
+        Args:
+            reverse (bool): True - clockwise, False, anticlockwise
         """
         if reverse != self.reversed_direction:
             with self.serial_lock:
@@ -99,19 +112,21 @@ class StepperMotor:
             self.reversed_direction = reverse
 
     def get_current_position(self):
-        """
-        Queries the motor for its current position.
-        :return: Position of the motor in steps. Positive is clockwise from zeroed position. Negative is anti-clockwise.
+        """Queries the motor for its current position.
+
+        Returns:
+            int: Position of the motor in steps. Positive is clockwise from zeroed position. Negative is anti-clockwise.
         """
         with self.serial_lock:
             self.position = self.cmd_stepper.get_current_position()
         return self.position
 
     def set_current_position(self, position):
-        """
-        Sets the current position of the motor as referenced by the Accelstepper library.
-        :param position: The desired position of the motor. Sets the current step position to be the desired step
-        position.
+        """Sets the current position of the motor in steps from the zero, as referenced by the Accelstepper library.
+
+        Args:
+            position (int): The desired position of the motor. Sets the current step position to be the desired step
+                            position.
         """
         if self.reversed_direction:
             position = -position
@@ -120,10 +135,13 @@ class StepperMotor:
         self.position = position
 
     def move_steps(self, steps):
-        """
-        Moves the motor by a number of steps. :param steps: Integer: the number of steps for the motor to move.
-        :param steps: Integer number of steps to move
-        :return: True
+        """Moves the motor by a number of steps. :param steps: Integer: the number of steps for the motor to move.
+
+        Args:
+            steps (int): Integer number of steps to move
+
+        Returns:
+            bool: True if movement successful
         """
         with self.serial_lock:
             self.cmd_stepper.move(steps, False)
@@ -132,10 +150,13 @@ class StepperMotor:
         return True
 
     def move_to(self, position):
-        """
-        Moves the motor to a specific step position.
-        :param position: Integer: the desired step position
-        :return: True
+        """Moves the motor to a specific step position.
+
+        Args:
+            position (_type_): the desired step position
+
+        Returns:
+            bool: True if movement successful
         """
         with self.serial_lock:
             self.cmd_stepper.move_to(position, False)
@@ -168,10 +189,6 @@ class StepperMotor:
 
     @property
     def is_moving(self):
-        """
-        Queries whether step pulses are still being sent to the motor.
-        :return: Boolean: False - no pulses.
-        """
         return not self.cmd_stepper.get_move_complete()
 
 
@@ -180,10 +197,12 @@ class LinearStepperMotor(StepperMotor):
     Class for managing stepper motors with a finite linear travel.
     """
     def __init__(self, stepper_obj, device_config, serial_lock):
-        """
-        :param stepper_obj: commanduino object for controlling the stepper motor
-        :param device_config: Dictionary containing the configuration information for the motor.
-        :param: serial_lock: threading.Lock() object for controlling access to serial connection
+        """Initialise the linear stepper motor, consisting of a stepper motor with a limit switch
+
+        Args:
+            stepper_obj (CommandLinearAccelStepper): Commanduino object to send commands to the stepper motor
+            device_config (dict): dictionary containing the configuration information
+            serial_lock (Lock): Lock to maintain thread safety for serial connection.
         """
         super(LinearStepperMotor, self).__init__(stepper_obj, device_config, serial_lock)
         self.switch_state = 0
@@ -191,8 +210,10 @@ class LinearStepperMotor(StepperMotor):
 
     def check_endstop(self):
         """
-        Queries the attached end-switch state.
-        :return: 1 - switch triggered. 0 - switch open
+        Queries the attached limit switch state.
+
+        Returns:
+            int: 1 - switch triggered. 0 - switch open
         """
         with self.serial_lock:
             self.switch_state = self.cmd_stepper.get_switch_state()

@@ -1,5 +1,5 @@
 from UJ_FB.modules import modules
-from threading import Thread
+from threading import Thread, Lock
 from commanduino import exceptions
 import math
 import time
@@ -11,6 +11,14 @@ class Reactor(modules.FBFlask):
     Class for managing reactors
     """
     def __init__(self, name, module_info, cmduino, manager):
+        """Initialise the reactor object
+
+        Args:
+            name (str): the name of the reactor
+            module_info (dict): configuration infomration for the reactor
+            cmduino (CommandManager): the Commanduino CommandManager used to control the Arduino
+            manager (UJ_FB.Manager): the Manager object for this robot
+        """
         super(Reactor, self).__init__(name, module_info, cmduino, manager)
         self.mod_type = "reactor"
         # specific heat capacity, volume, density
@@ -51,89 +59,113 @@ class Reactor(modules.FBFlask):
         self.stir_start_time = 0.0
         self.stir_rem_time = 0.0
         self.exit = False
+        self.stir_lock = Lock()
+        self.heat_lock = Lock()
         self.thread = Thread(target=self.run, name=self.name, daemon=True)
         self.thread.start()
 
     def start_heat(self, temp, heat_secs, target, task):
-        self.target_temp = temp
-        self.prev_time = time.time()
-        cart_voltage = self.calc_voltage(temp)
-        if cart_voltage == -273.15:
-            self.write_log("Temperature sensor is not connected", level=logging.ERROR)
-            task.error = True
-        else:
-            self.last_voltage = cart_voltage
-        self.heating = True
-        self.cooling = False
-        self.ready = False
-        if target:
-            self.target = True
-        self.write_log(f"{self.name} started heating", level=logging.INFO)
-        for heater in self.heaters:
-            heater.start_heat(cart_voltage)
-        self.heat_time = heat_secs
+        """Starts temperature regulation
+
+        Args:
+            temp (float): the temperature to maintain
+            heat_secs (int): seconds to heat for. Does not count preheating
+            target (bool): whether to heat to a defined target temperature
+            task (UJ_FB.manager.Task): the task for this heating operation
+        """
+        with self.heat_lock:
+            self.target_temp = temp
+            self.prev_time = time.time()
+            cart_voltage = self.calc_voltage(temp)
+            if cart_voltage == -273.15:
+                self.write_log("Temperature sensor is not connected", level=logging.ERROR)
+                task.error = True
+            else:
+                self.last_voltage = cart_voltage
+            self.heating = True
+            self.cooling = False
+            self.ready = False
+            if target:
+                self.target = True
+            self.write_log(f"{self.name} started heating", level=logging.INFO)
+            for heater in self.heaters:
+                heater.start_heat(cart_voltage)
+            self.heat_time = heat_secs
 
     def start_stir(self, speed, stir_secs):
-        self.stirring = True
-        max_speed = self.mag_stirrers[0].max_speed
-        if speed < (0.5 * max_speed):
-            self.mag_stirrers[0].start_stir(max_speed)
-            time.sleep(1.5)
-            self.mag_stirrers[0].start_stir(0.5 * max_speed)
-            time.sleep(1.5)
-            if speed > (0.2 * max_speed):
-                self.mag_stirrers[0].start_stir(speed)
+        """Starts stirring using the magnetic stirrer bar
+
+        Args:
+            speed (int): the speed in RPM to stir at
+            stir_secs (int): the number of seconds to stir the reactor for.
+        """
+        with self.stir_lock:
+            self.stirring = True
+            max_speed = self.mag_stirrers[0].max_speed
+            if speed < (0.5 * max_speed):
+                self.mag_stirrers[0].start_stir(max_speed)
+                time.sleep(1.5)
+                self.mag_stirrers[0].start_stir(0.5 * max_speed)
+                time.sleep(1.5)
+                if speed > (0.2 * max_speed):
+                    self.mag_stirrers[0].start_stir(speed)
+                else:
+                    self.mag_stirrers[0].start_stir(0.2 * max_speed)
             else:
-                self.mag_stirrers[0].start_stir(0.2 * max_speed)
-        else:
-            self.mag_stirrers[0].start_stir(speed)
-        self.stir_start_time = time.time()
-        self.stir_time = stir_secs
-        self.write_log(f"{self.name} started stirring at {speed}", level=logging.INFO)
+                self.mag_stirrers[0].start_stir(speed)
+            self.stir_start_time = time.time()
+            self.stir_time = stir_secs
+            self.write_log(f"{self.name} started stirring at {speed}", level=logging.INFO)
 
     def run(self):
+        """This method is run continuously to maintain heating, stirring, and updates to the sensor readings 
+        """
         while not self.exit:
             time.sleep(1/self.polling_rate)
-            if self.target:
-                self.target = False
-                self.cur_temp = self.read_temp()
-                if self.cur_temp < self.target_temp:
-                    self.preheating = True
-                    preheat_start = time.time()
-                else:
-                    self.cooling = True
-                    cooling_start = time.time()
-            if self.preheating:
-                self.preheat(preheat_start)
-            elif self.cooling:
-                self.cur_temp = self.read_temp()
-                if self.cur_temp <= self.target_temp:
-                    self.cooling = False
-                    self.integral_error = 0
-                    self.heat_time = time.time() - cooling_start
-                    self.heat_start_time = time.time()
-            elif self.heating:
-                if self.heat_time > 0:
-                    if time.time() - self.heat_start_time > self.heat_time:
-                        self.stop_heat()
-                else:
-                    if self.heat_task:
-                        self.heat_task.complete = True
-                new_voltage = self.calc_voltage(self.target_temp)
-                if new_voltage != self.last_voltage:
-                    for heater in self.heaters:
-                        heater.start_heat(new_voltage)
-                    self.last_voltage = new_voltage
-            if self.stirring:
-                if self.stir_time > 0:
-                    if time.time() - self.stir_start_time > self.stir_time:
-                        self.stirring = False
-                else:
-                    if self.stir_task:
-                        self.stir_task.complete = True
-            if not self.heating and time.time() - self.heat_last_update_time > self.heat_update_delay:
-                self.cur_temp = self.read_temp()
-                self.heat_last_update_time = time.time()
+            with self.heat_lock:
+                if self.target:
+                    self.target = False
+                    self.cur_temp = self.read_temp()
+                    if self.cur_temp < self.target_temp:
+                        self.preheating = True
+                        preheat_start = time.time()
+                    else:
+                        self.cooling = True
+                        cooling_start = time.time()
+            with self.heat_lock:
+                if self.preheating:
+                    self.preheat(preheat_start)
+                elif self.cooling:
+                    self.cur_temp = self.read_temp()
+                    if self.cur_temp <= self.target_temp:
+                        self.cooling = False
+                        self.integral_error = 0
+                        self.heat_time = time.time() - cooling_start
+                        self.heat_start_time = time.time()
+                elif self.heating:
+                    if self.heat_time > 0:
+                        if time.time() - self.heat_start_time > self.heat_time:
+                            self.stop_heat()
+                    else:
+                        if self.heat_task:
+                            self.heat_task.complete = True
+                    new_voltage = self.calc_voltage(self.target_temp)
+                    if new_voltage != self.last_voltage:
+                        for heater in self.heaters:
+                            heater.start_heat(new_voltage)
+                        self.last_voltage = new_voltage
+            with self.stir_lock:
+                if self.stirring:
+                    if self.stir_time > 0:
+                        if time.time() - self.stir_start_time > self.stir_time:
+                            self.stirring = False
+                    else:
+                        if self.stir_task:
+                            self.stir_task.complete = True
+            with self.heat_lock:
+                if not self.heating and time.time() - self.heat_last_update_time > self.heat_update_delay:
+                    self.cur_temp = self.read_temp()
+                    self.heat_last_update_time = time.time()
             with self.stop_lock:
                 if self.stop_cmd:
                     self.stop_cmd = False
@@ -152,6 +184,11 @@ class Reactor(modules.FBFlask):
                     self.ready = True                 
 
     def preheat(self, preheat_start):
+        """Preheats the reactor to the desired temperature
+
+        Args:
+            preheat_start (float): the time that the preheat was started.
+        """
         self.cur_temp = self.temp_sensors[0].read_temp()
         if self.cur_temp < self.target_temp:
             cart_voltage = self.calc_voltage(self.target_temp)
@@ -167,10 +204,13 @@ class Reactor(modules.FBFlask):
             self.heat_start_time = time.time()
 
     def calc_voltage(self, temp):
-        """
-        Calculates the voltage for the heater element using a PID controller.
-        :param temp: the target temperature
-        :return: voltage: the new required voltage for the heater element.
+        """Calculates the voltage for the heating element to maintain a desired temperature using a PID controller
+
+        Args:
+            temp (float): the target temperature
+
+        Returns:
+            float: voltage for the heating element
         """
         kd, ki, kp,  = self.pid_constants
         try:
