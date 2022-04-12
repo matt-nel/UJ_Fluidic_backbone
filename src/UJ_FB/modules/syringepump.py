@@ -1,7 +1,6 @@
 import logging
 import time
 from UJ_FB.modules import modules
-from UJ_FB.modules import fluidstorage
 
 
 class SyringePump(modules.Module):
@@ -21,8 +20,6 @@ class SyringePump(modules.Module):
         super(SyringePump, self).__init__(name, module_info, cmduino, manager)
         self.mod_type = "syringe_pump"
         module_config = module_info["mod_config"]
-        # todo update this in Manager.check_connections
-        self.cor_fact = 0.993  # correction factor for dispensed volume
         # {volume: length in mm}
         self.syringe_lengths = {1000.0: 58, 2000.0: 2, 4000.0: 42, 5000.0: 58, 10000.0: 58, 20000.0: 20, 60000.0: 90}
         self.max_volume = 0.0
@@ -209,7 +206,7 @@ class SyringePump(modules.Module):
             # we are aspirating
             if volume_change > 0:
                 if target.mod_type == "storage":
-                    target.remove_sample()
+                    target.change_volume("", volume_change)
                 else:
                     message += f"aspirate {round(abs(volume_change),2)} ul of "
                     if not air:
@@ -228,7 +225,7 @@ class SyringePump(modules.Module):
             # we are dispensing
             else:
                 if target.mod_type == "storage":
-                    target.add_sample()
+                    target.change_volume(self.contents[1][0], -volume_change)
                 else:
                     message += f"dispense {int(abs(volume_change))} ul of "
                     if not air:
@@ -257,6 +254,11 @@ class SyringePump(modules.Module):
         self.contents[1][1] = vol
         self.position = self.syringe_length - ((self.max_volume - vol)/self.max_volume)*self.syringe_length
         self.stepper.set_current_position((self.position/8)*3200)
+
+    @property
+    def switch_state(self):
+        self.stepper.refresh_switch_state()
+        return self.stepper.switch_state
 
     def correct_error(self, steps):
         self.write_log(f"{self.name} can't move. Moving back:")

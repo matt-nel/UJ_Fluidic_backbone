@@ -1,27 +1,32 @@
 import math
+import time
 from commanduino.exceptions import CMDeviceReplyTimeout
 
 
 class Device:
     """Class to represent a generic device, in this case a digital/analog pin.
     """
-    def __init__(self, cmd_mng, serial_lock):
+    def __init__(self, cmd_mng, manager):
         """Initialise the device object
 
         Args:
             cmd_mng (CommandManager): the Commanduino commandmanager for this robot
-            serial_lock (Lock): Lock used to maintain thread safety for the serial connection
+            manager (UJ_FB.Manager): Manager object for this robot
         """
+        self.manager = manager
         self.cmd_device = cmd_mng
         self.digital_state = None
         self.analog_level = None
-        self.serial_lock = serial_lock
+        self.serial_lock = manager.serial_lock
         self.start_time = 0.0
         self.elapsed_time = 0.0
 
-    def digital_read(self):
-        with self.serial_lock:
-            self.digital_state = self.cmd_device.get_state()
+    def digital_read(self, retries=0):
+        try:
+            with self.serial_lock:
+                self.digital_state = self.cmd_device.get_state()
+        except CMDeviceReplyTimeout as e:
+            self.digital_state = self.retry_query(self.digital_read, e, retries)
         return self.digital_state
 
     def digital_write(self, state):
@@ -33,14 +38,26 @@ class Device:
                 self.cmd_device.low()
                 self.digital_state = 0
 
-    def analog_read(self):
-        with self.serial_lock:
-            self.analog_level = self.cmd_device.get_level()
+    def analog_read(self, retries=0):
+        try:
+            with self.serial_lock:
+                self.analog_level = self.cmd_device.get_level()
+        except CMDeviceReplyTimeout as e:
+            self.retry_query(self.analog_read, e, retries)
         return self.analog_level
 
     def analog_write(self, value):
         with self.serial_lock:
             self.cmd_device.set_pwm_value(value)
+
+    @staticmethod
+    def retry_query(func, error, retries=0):
+        if retries < 3:
+            retries += 1
+            time.sleep(0.1)
+            return func(retries)
+        else:
+            raise error
 
 
 class TempSensor(Device):

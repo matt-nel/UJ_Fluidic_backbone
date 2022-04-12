@@ -83,7 +83,7 @@ class SelectorValve(modules.Module):
         # if near negative magnet
         elif self.reading < NEG_THRESHOLD:
             self.find_opt(NEG_THRESHOLD - 150)
-            self.check_all_positions()
+            self.find_zero()
         # ended up between magnets
         self.reading = self.he_sensor.analog_read()
         if self.reading < POS_THRESHOLD or self.reading < self.magnet_readings[1]:
@@ -99,12 +99,13 @@ class SelectorValve(modules.Module):
         self.current_port = 1
         self.stepper.set_current_position(0)
 
-    def move_to_pos(self, position, check=True, target=""):
+    def move_to_pos(self, position, target="", check=True):
         """Moves the valve to a specific port
 
         Args:
             position (int): The number of the destination port
-            task (Task object): Task associated with this function call
+            target (str): the specified target, if applicable
+            check (bool): whether to call check_pos after the movement for verification
         """
         if self.current_port != position:
             self.write_log(f"{self.name} is moving to position {position} ({target})")
@@ -137,6 +138,7 @@ class SelectorValve(modules.Module):
         string: name of module
         Args:
             target (string): name of the target module
+            task (Task): the Task object for this operation
         """
         for i, port in enumerate(self.ports.items()):
             if port[1] is None:
@@ -171,7 +173,7 @@ class SelectorValve(modules.Module):
 
         Args:
             steps (int): number of steps to move
-            direction (string): cc if counterclockwise
+            invert_direction (bool): whether to invert the direction of the movement
         """
         self.ready = False
         if invert_direction:
@@ -183,11 +185,11 @@ class SelectorValve(modules.Module):
         """
         Homes the valve using the hall-effect sensor
         """
+        self.ready = False
         self.write_log(f"{self.name} is homing")
         # Counter goes up each time robot started or homes. When counter at 5, check the magnet positions
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
         self.manager.rc_changes = True
-        self.ready = False
         with self.stop_lock:
             self.stop_cmd = False
         prev_speed = self.stepper.running_speed
@@ -208,7 +210,7 @@ class SelectorValve(modules.Module):
             elif self.reading < NEG_THRESHOLD:
                 if self.find_opt(NEG_THRESHOLD - 150):
                     # Move between magnets until close to home position
-                    self.reading = self.check_all_positions()
+                    self.reading = self.find_zero()
             else:
                 # We must be between magnets. Move 1/4 magnet distance looking for magnet positions.
                 # Testing shows magnet detection at ~1/4 spr to either side
@@ -228,7 +230,7 @@ class SelectorValve(modules.Module):
             if 500 < value < 550 or value == 0:
                 check_value = True
         if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 or check_value:
-            self.check_magnets()
+            self.update_stored_readings()
             self.find_opt(self.magnet_readings[1] + 40)
         self.stepper.set_running_speed(prev_speed)
         self.ready = True
@@ -295,11 +297,9 @@ class SelectorValve(modules.Module):
         self.stepper.set_running_speed(prev_speed)
         return True
 
-    def check_all_positions(self):
-        """Looks for the magnet at the home position (0), which has a reading above 600
-
-        Args:
-            max_reading (int): Current maximum reading
+    def find_zero(self):
+        """Checks each magnet position for the magnet at the home (0), which has a reading above 600.
+        Assumes that the valve was at a magnet position before calling this function
 
         Returns:
             int: Returns the max reading parameter if no new maximum found, or returns the new maximum reading
@@ -319,7 +319,7 @@ class SelectorValve(modules.Module):
         self.find_opt(self.magnet_readings[1] + 40)
         return max_reading
 
-    def check_magnets(self):
+    def update_stored_readings(self):
         """Checks all the magnet positions and updates the configuration
         """
         if self.reading < POS_THRESHOLD:

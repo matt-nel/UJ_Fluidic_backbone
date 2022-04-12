@@ -42,27 +42,27 @@ class Module:
                     if module_info["mod_config"]["linear_stepper"]:
                         self.steppers.append(steppermotor.LinearStepperMotor(stepper,
                                                                              assoc_devices[item]["device_config"],
-                                                                             manager.serial_lock))
+                                                                             manager))
                     else:
                         self.steppers.append(steppermotor.StepperMotor(stepper, assoc_devices[item]["device_config"],
-                                                                       manager.serial_lock))
+                                                                       manager))
                 elif "endstop" in item:
                     endstop = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                    self.endstops.append(devices.Device(endstop, manager.serial_lock))
+                    self.endstops.append(devices.Device(endstop, manager))
                 elif "he_sens" in item:
                     he_sens = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                    self.he_sensors.append(devices.Device(he_sens, manager.serial_lock))
+                    self.he_sensors.append(devices.Device(he_sens, manager))
                 elif "mag_stirrer" in item:
                     stirrer = getattr(cmduino, assoc_devices[item]["cmd_id"])
                     self.mag_stirrers.append(devices.MagStirrer(stirrer, assoc_devices[item]["device_config"],
-                                                                manager.serial_lock))
+                                                                manager))
                 elif "heater" in item:
                     heater = getattr(cmduino, assoc_devices[item]["cmd_id"])
-                    self.heaters.append(devices.Heater(heater, manager.serial_lock))
+                    self.heaters.append(devices.Heater(heater, manager))
                 elif "temp_sensor" in item:
                     temp_sensor = getattr(cmduino, assoc_devices[item]["cmd_id"])
                     self.temp_sensors.append(devices.TempSensor(temp_sensor, assoc_devices[item]["device_config"],
-                                                                manager.serial_lock))
+                                                                manager))
 
     def write_log(self, message, level=logging.INFO):
         self.manager.write_log(message, level)
@@ -112,13 +112,13 @@ class FBFlask(Module):
                 self.contents[1] = 0
                 self.cur_vol = 0
             else:
-                self.contents[1] += self.cur_vol
+                self.contents[1] = self.cur_vol
         # dispensed to this vessel
         elif self.contents[0] == "empty":
             self.contents[0] = new_contents
             self.contents[1] = self.cur_vol
         else:
-            self.contents[0] += f", {new_contents}"
+            self.contents[0] = f"{new_contents}"
             self.contents[1] += self.cur_vol
         return True
 

@@ -1,5 +1,6 @@
 from threading import Lock
 import time
+from commanduino import exceptions
 
 
 class StepperMotor:
@@ -7,15 +8,16 @@ class StepperMotor:
     Class for managing stepper motors. Motors are communicated with using the Commandduino library with a Serial
     connection. Target library uses the Accelstepper stepper library.
     """
-    def __init__(self, stepper_obj, device_config, serial_lock):
+    def __init__(self, stepper_obj, device_config, manager):
         """Initialise the stepper motor
 
         Args:
             stepper_obj (CommandHandler): Commanduino CommandHandler for this motor
             device_config (dict): configuration information for the motor
-            serial_lock (Lock): Lock used to maintain thread safety for the serial connection
+            manager (UJ_FB.Manager): Manager object for this robot
         """
-        self.serial_lock = serial_lock
+        self.manager = manager
+        self.serial_lock = manager.serial_lock
         self.cmd_stepper = stepper_obj
         self.stop_lock = Lock()
         self.stop_cmd = False
@@ -111,14 +113,17 @@ class StepperMotor:
                 self.cmd_stepper.revert_direction(reverse)
             self.reversed_direction = reverse
 
-    def get_current_position(self):
+    def get_current_position(self, retries=0):
         """Queries the motor for its current position.
 
         Returns:
             int: Position of the motor in steps. Positive is clockwise from zeroed position. Negative is anti-clockwise.
         """
-        with self.serial_lock:
-            self.position = self.cmd_stepper.get_current_position()
+        try:
+            with self.serial_lock:
+                self.position = self.cmd_stepper.get_current_position()
+        except exceptions.CMDeviceReplyTimeout as e:
+            self.position = self.retry_query(self.get_current_position, e, retries)
         return self.position
 
     def set_current_position(self, position):
@@ -191,6 +196,15 @@ class StepperMotor:
     def is_moving(self):
         return not self.cmd_stepper.get_move_complete()
 
+    @staticmethod
+    def retry_query(func, error, retries=0):
+        if retries < 3:
+            retries += 1
+            time.sleep(0.1)
+            return func(retries)
+        else:
+            raise error
+
 
 class LinearStepperMotor(StepperMotor):
     """
@@ -208,16 +222,24 @@ class LinearStepperMotor(StepperMotor):
         self.switch_state = 0
         self.encoder_error = False
 
-    def check_endstop(self):
+    def check_endstop(self, retries=0):
         """
         Queries the attached limit switch state.
 
         Returns:
             int: 1 - switch triggered. 0 - switch open
         """
-        with self.serial_lock:
-            self.switch_state = self.cmd_stepper.get_switch_state()
+        try:
+            with self.serial_lock:
+                self.switch_state = self.cmd_stepper.get_switch_state()
+        except exceptions.CMDeviceReplyTimeout as e:
+            self.switch_state = self.retry_query(self.check_endstop, e, retries)
         return self.switch_state
+
+    def refresh_switch_state(self):
+        """Update the state of the limit switch from the CommandLinearAccelstepper object
+        """
+        self.switch_state = self.cmd_stepper.switch_state
 
     def home(self):
         """

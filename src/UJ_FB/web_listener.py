@@ -198,7 +198,8 @@ class WebListener:
                 tree = et.parse(xdl)
                 tree = tree.getroot()
             except (FileNotFoundError, et.ParseError):
-                self.manager.write_log(f"{xdl} not found",  level=logging.WARNING)
+                if xdl != "":
+                    self.manager.write_log(f"{xdl} not found",  level=logging.WARNING)
                 return False
         else:
             try:
@@ -218,6 +219,7 @@ class WebListener:
         Returns:
             bool: True if XDL parsed successfully. False otherwise.
         """
+        self.manager.pipeline.queue.clear()
         reagents = {}
         modules = {}
         if tree.find("Synthesis"):
@@ -266,6 +268,7 @@ class WebListener:
                 self.manager.reaction_ready = True
                 if not self.manager.reaction_name:
                     self.manager.reaction_name = reaction_name
+                self.manager.write_log("XDL loaded successfully")
                 return True
 
     def process_xdl_add(self, reagents, add_info):
@@ -309,7 +312,7 @@ class WebListener:
             else:
                 flow_rate = (volume*1000)/float(a_time[0])
         else:
-            flow_rate = self.manager.default_fr
+            flow_rate = 0
         return self.manager.move_fluid(source, target, volume, flow_rate)
 
     def process_xdl_transfer(self, transfer_info):
@@ -349,8 +352,8 @@ class WebListener:
             else:
                 flow_rate = (volume * 1000) / float(t_time[0])
         else:
-            flow_rate = self.manager.default_fr
-        return self.manager.move_fluid(source, target, volume, flow_rate, adjust_dead_vol=False, transfer=True)
+            flow_rate = 0
+        return self.manager.move_fluid(source, target, volume, flow_rate, adjust_dead_vol=True, transfer=True)
 
     def process_xdl_stir(self, stir_info):
         """Process a stir step

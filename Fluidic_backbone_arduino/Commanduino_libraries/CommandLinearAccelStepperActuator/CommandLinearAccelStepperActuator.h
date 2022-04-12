@@ -42,6 +42,7 @@
 #define COMMANDLINEARACCELSTEPPER_REQUEST_POSITION "RP"
 
 #define COMMANDLINEARACCELSTEPPER_MOVE_COMPLETE "MC"
+#define COMMANDLINEARACCELSTEPPER_SWITCH_TRIGGER "ST"
 
 #define COMMANDLINEARACCELSTEPPER_REQUEST_SPEED "RIS"
 #define COMMANDLINEARACCELSTEPPER_REQUEST_MAXSPEED "RIMS"
@@ -86,6 +87,8 @@ class CommandLinearAccelStepperActuator {
 
   private:
     bool moveCompleteSent = true;
+    bool switchStateSent = true;
+    unsigned long lastSwitchCheckTime;
 
     static void wrapper_bonjour();
     void bonjour();
@@ -154,6 +157,7 @@ class CommandLinearAccelStepperActuator {
     void currentPosition();
 
     void moveCompleteUpdate();
+    void switchStateUpdate();
 };
 
 #endif

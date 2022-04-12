@@ -111,6 +111,8 @@ class FluidicBackboneUI:
             item = self.queue.get_nowait()
             if item[0] == "log":
                 self.write_message(item[1])
+            elif item[0] == "logclear":
+                self.clear_messages()
             elif item[0] == "temp":
                 self.update_temps(item[1][0], item[1][1])
             elif item[0] == "execution":
@@ -635,6 +637,11 @@ class FluidicBackboneUI:
         if self.log.index("end-1c") != "1.0":
             self.log.insert("end", "\n")
         self.log.insert("end", message)
+        self.log["state"] = "disabled"
+
+    def clear_messages(self):
+        self.log["state"] = "normal"
+        self.log.delete("1.0", tk.END)
         self.log["state"] = "disabled"
 
     def update_execution(self, execute):

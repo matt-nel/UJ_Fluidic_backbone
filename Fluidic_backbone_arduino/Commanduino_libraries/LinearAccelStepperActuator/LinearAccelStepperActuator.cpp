@@ -121,6 +121,7 @@ void LinearAccelStepperActuator::stop() {
   // we also stop homing
   // if in acceleration mode, the motor will slow down to complete stop, default behavior of AccelStepper
   homing = false;
+  moving = false;
   stepper->stop();
   if (!accelerationEnabled || homing) {
     stepper->move(0);

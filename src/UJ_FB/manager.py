@@ -130,10 +130,12 @@ class Manager(Thread):
         self.error_start = None
         self.error_flag = False
         self.quit_safe = False
+        self.default_transfer_fr = 5000
         self.default_fr = 10000
         self.default_flush_fr = 20000
         self.rc_changes = False
         self.xdl = ""
+        self.syringes_ready = False
 
         self.valid_nodes = []
         self.num_valves = 0
@@ -146,7 +148,6 @@ class Manager(Thread):
         self.storage = self.modules["storage"]
         self.gui_main = None
         self.setup_modules()
-        self.init_syringes()
         self.write_running_config("configs/running_config.json")
         
         if stdout_log:
@@ -261,10 +262,13 @@ class Manager(Thread):
             Initialises the syringes by moving them to their endstop, dispensing contents into the nearest
             waste container. If no waste container is found,  prints a message warning the user.
         """
+        remaining_valves = {}
         for valve in self.valves:
             # home and prepare valve for running
             if not self.simulation:
                 self.valves[valve].init_valve()
+            while not self.valves[valve].ready:
+                time.sleep(0.1)
             syringe = self.valves[valve].syringe
             # check if syringe needs to be homed
             if not syringe.stepper.check_endstop():
@@ -280,13 +284,35 @@ class Manager(Thread):
                     path_list = [p for p in path_gen]
                     if len(path_list[0]) < len(shortest_waste_path) or not shortest_waste_path:
                         shortest_waste_path = path_list[0]
-                # Align valves without dispensing much liquid
-                self.move_fluid(source=syringe.name, target=shortest_waste_path[-1], volume=0.1, flow_rate=10000,
-                                init_move=True)
-                # with valves at waste can move to 0
-                self.add_to_queue(Manager.generate_cmd_dict("syringe", syringe.name, "home", {"wait": True}))
-            self.start_queue()
-    
+                if len(shortest_waste_path) > 3:
+                    remaining_valves[valve] = shortest_waste_path
+                else:
+                    # Align valves without dispensing much liquid
+                    self.move_fluid(source=syringe.name, target=shortest_waste_path[-1], volume=0.1, flow_rate=10000,
+                                    init_move=True)
+                    # with valves at waste can move to 0
+                    self.add_to_queue(self.generate_cmd_dict("syringe_pump", syringe.name, "home", {"wait": True}))
+                    self.start_queue()
+        for v in remaining_valves:
+            # soft home the syringe
+            path = remaining_valves[v][1:-1]
+            for n in range(0, len(path)-1):
+                self.add_to_queue(self.generate_cmd_dict("selector_valve", path[n], "target",
+                                                         {"target": path[n+1], "wait": True}))
+                self.add_to_queue(self.generate_cmd_dict("selector_valve", path[n+1], "target",
+                                                         {"target": path[n], "wait": True}))
+                syringe = self.valves[path[n]].syringe.name
+                self.start_queue()
+                while not self.q.empty() or len(self.tasks) > 0:
+                    time.sleep(0.1)
+                self.soft_home_syringe(source=syringe, next_valve=path[n+1])
+            # align last syringe to the waste container
+            syringe = self.valves[remaining_valves[v][-2]].syringe
+            self.move_fluid(source=syringe.name, target=remaining_valves[v][-1], volume=0.1,
+                            flow_rate=10000, init_move=True, pipeline=False)
+            self.add_to_queue(self.generate_cmd_dict("syringe_pump", syringe.name, "home", {"wait": True}),
+                              queue=self.q)
+
     def reload_graph(self):
         graph_config = json_loader(self.script_dir, "configs/module_connections.json")
         self.graph = load_graph(graph_config)
@@ -300,6 +326,9 @@ class Manager(Thread):
         rxn_last_check = time.time()
         heat_update_time = time.time()
         while not self.exit_flag:
+            if not self.syringes_ready:
+                Thread(target=self.init_syringes, name="syr_init").start()
+                self.syringes_ready = True
             self.check_task_completion()
             # interrupt lock used to synchronise access to pause, stop, and exit flags
             with self.interrupt_lock:
@@ -450,6 +479,9 @@ class Manager(Thread):
         """
         Begins execution of the queued actions
         """
+        if self.gui_main is not None:
+            self.gui_main.queue.put(("logclear", None))
+        self.write_log("Starting queue")
         with self.interrupt_lock:
             self.pause_flag = True
             self.interrupt = True
@@ -556,6 +588,8 @@ class Manager(Thread):
             return self.command_reactor(name, command, parameters, command_dict)
         elif mod_type == "camera":
             return self.command_camera(name, command, parameters, command_dict)
+        elif mod_type == "storage":
+            return self.command_storage(name, command, parameters, command_dict)
         elif mod_type == "wait":
             return self.command_wait(name, command, parameters, command_dict)
         else:
@@ -588,8 +622,13 @@ class Manager(Thread):
                 try:
                     valve = adj[0]
                     valve = self.graph.nodes[valve]["object"]
-                    parameters["target"] = valve.ports[valve.current_port]
-                    target = parameters["target"]
+                    cur_target = valve.ports[valve.current_port]
+                    if cur_target is None:
+                        parameters["target"] = None
+                        target = None
+                    elif cur_target.mod_type != "selector_valve":
+                        parameters["target"] = valve.ports[valve.current_port]
+                        target = parameters["target"]
                 except KeyError:
                     target = None
             elif isinstance(target, str):
@@ -835,7 +874,8 @@ class Manager(Thread):
         while time.time() - start_time < wait_time:
             time.sleep(1)
         
-    def move_fluid(self, source, target, volume, flow_rate, init_move=False, adjust_dead_vol=True, transfer=False):
+    def move_fluid(self, source, target, volume, flow_rate, init_move=False, adjust_dead_vol=True, transfer=False,
+                   pipeline=True):
         """
         Adds the necessary command dicts to the pipeline to enact a fluid movement from source to target
 
@@ -847,6 +887,7 @@ class Manager(Thread):
             init_move (bool): whether this is an initialisation move (clearing lines from prev run) not
             adjust_dead_vol (bool): Whether to account for dead volume in tubing
             transfer (bool): Whether the fluid involves transfer from a source other than a reagent bottle
+            pipeline (bool): True - add the commands to the pipeline. False - add to main queue.
         Returns:
             True if successfully queued or False otherwise
         """
@@ -860,51 +901,48 @@ class Manager(Thread):
         prev_max_vol = 999999.00
         max_vol = self.valves[path[1]].syringe.max_volume
         min_vol = 0
-        tdv = 0
-        spdv = 0
+        transfer_dv = 0
+        max_valves_dv = 0
+        dead_volume = 0
         target = self.find_target(target)
         source = self.find_target(source)
         # Grab intervening valves between source and target
         valves = path[1:-1]
-        # Aspirate enough air to flush all the fluid at the end of the movement
-        if adjust_dead_vol and not init_move:
-            steps, spdv = self.flush_sp_dead_volume(valves[-1], target, True)
-            pipelined_steps += steps
-        # If we are transferring fluid (i.e not from reagent lines), we need to account for dead volume between
-        # the source and the valve as well.
-        if transfer:
-            steps, tdv = self.flush_transfer_dead_volume(valves[0], source, True)
-            pipelined_steps += steps
-        if target.mod_type == "storage":
-            pipelined_steps += self.generate_cmd_dict("storage", target.name, "store", {})
         # Find lowest maximum volume amongst syringes
-        dead_volume = tdv + spdv
         for valve in valves:
             cur_max_vol = self.valves[valve].syringe.max_volume
             if cur_max_vol < prev_max_vol:
                 max_vol = cur_max_vol
                 min_vol = self.valves[valve].syringe.min_volume
+        # If we are transferring fluid (i.e not from reagent lines), we need to account for dead volume between
+        # the source and the valve first
+        if transfer:
+            transfer_dv = self.calc_tubing_volume(source.name, valves[0])
+        if adjust_dead_vol and not init_move:
+            # With each transfer we only need to push last DV + deficit
+            for i in range(len(valves)-1):
+                valves_dv = self.calc_tubing_volume(valves[i], valves[i+1])
+                max_valves_dv = max(valves_dv, max_valves_dv)
+            req_last_dv = self.calc_tubing_volume(valves[-1], target.name)
+            dead_volume = max(transfer_dv, req_last_dv, max_valves_dv)
         max_volume = max_vol - min_vol - dead_volume
+        if max_volume < 0:
+            return False
         nr_full_moves = int(volume / max_volume)
         remaining_volume = volume % max_volume
         if nr_full_moves >= 1:
-            full_move = self.generate_moves(source, target, valves, max_volume, flow_rate,
-                                            adjust_dead_vol, init_move)
+            full_move = self.generate_moves(source, target, valves, max_volume, dead_volume, flow_rate, transfer,
+                                            init_move)
             for i in range(0, nr_full_moves):
                 pipelined_steps += full_move
         if remaining_volume > 0.0:
-            partial_move = self.generate_moves(source, target, valves, remaining_volume, flow_rate,
-                                               adjust_dead_vol, init_move)
+            partial_move = self.generate_moves(source, target, valves, volume, dead_volume, flow_rate, transfer,
+                                               init_move)
             pipelined_steps += partial_move
-        # Flush the tubing between last valve and destination using air from earlier.
-        if adjust_dead_vol and not init_move:
-            steps, spdv = self.flush_sp_dead_volume(valves[-1], target, intake=False)
-            pipelined_steps += steps
-        # If conducting a transfer, flush remaining air.
-        if transfer and source not in self.flasks:
-            steps, tdv = self.flush_transfer_dead_volume(valves[0], source, intake=False)
-            pipelined_steps += steps
-        self.add_to_queue(pipelined_steps, self.pipeline)
+        if not pipeline:
+            self.add_to_queue(pipelined_steps, self.q)
+        else:
+            self.add_to_queue(pipelined_steps, self.pipeline)
         return True
 
     def find_path(self, source, target):
@@ -932,103 +970,101 @@ class Manager(Thread):
             self.write_log(f"{target} not present", level=logging.ERROR)
         return []
 
-    def flush_sp_dead_volume(self, valve, target, intake):
-        """Remove the dead volume in the tubing using air. Called twice to add necessary steps, first call intake=True
-        lets syringe take in necessary volume of air to empty tubing, second call intake=False dispense the air into
-        the target, clearing the tubing.
+    def flush_flask_transfer_dv(self, valve, source, dead_volume, intake):
+        steps = []
+        if dead_volume > 0:
+            if intake:
+                # Command to index valve to required position to remove dead volume in tube
+                steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
+                                                {"target": source.name, "wait": True})
+                # Command to aspirate syringe to remove dead volume - doesn't update volumes
+                steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
+                                                {"volume": dead_volume, "flow_rate": self.default_flush_fr,
+                                                 "target": None, "direction": "A", "air": True, "wait": True})
+            else:
+                steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
+                                                {"target": "empty", "wait": True})
+                steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
+                                                {"volume": dead_volume, "flow_rate": self.default_flush_fr,
+                                                    "target": None, "direction": "A", "air": True, "wait": True})
+                # Command to index valve to required position for outlet
+                steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
+                                                {"target": source.name, "wait": True})
+                # Command to dispense air to blow out dead volume
+                steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
+                                                {"volume": dead_volume, "flow_rate": self.default_flush_fr,
+                                                 "target": source.name, "direction": "D", "air": True,
+                                                 "wait": True})
+        return steps
 
-        Args:
-            valve (SelectorValve): The last valve in the chain
-            target (Module): The target object
-            intake (bool): Whether we are aspirating the dead volume or dispensing it
-        Return:
-            pipelined_steps (list): List containing the necessary steps as command dictionaries
-            dead_volume (float): The amount of dead volume (uL) between the valve and the target
+    def calc_tubing_volume(self, source, target, adjust=0.0):
         """
-        pipelined_steps = []
-        # The tubes along the path will hold dead volume, assuming all input lines have been primed before operation.
-        valve = self.valves[valve]
-        tubing_length = self.graph.adj[valve.name][target.name][0]["tubing_length"]
-        dead_volume = self.calc_tubing_volume(tubing_length)*1.15  # push out a bit extra to ensure tube empty
-        if intake:
-            if valve.find_open_port() is None:
-                return
-            # Command to index valve to required position for air
-            pipelined_steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
-                                                      {"target": "empty", "wait": True})
-            # Command to aspirate air to fill dead volume
-            pipelined_steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
-                                                      {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                       "target": None, "direction": "A", "air": True, "wait": True})
-        else:
-            # dispense dead volume of air into target, emptying the dead volume in the tube
-            pipelined_steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
-                                                      {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                       "target": None, "direction": "D", "air": True, "wait": True})
-        return pipelined_steps, dead_volume
+        Args:
+            source (Module): source node
+            target (Module): target node
+            adjust (float): whether to account for an additional 20% loss
+        """
+        tubing_length = self.graph.adj[source][target][0]["tubing_length"]
+        # factor of safety is 20%
+        factor = 1 + (0.2 * adjust)
+        return math.pow((1.5875 / 2), 2) * math.pi * tubing_length * factor
 
-    def flush_transfer_dead_volume(self, valve, source, intake):
-        pipelined_steps = []
-        valve = self.valves[valve]
-        tubing_length = self.graph.adj[valve.name][source.name][0]["tubing_length"]
-        dead_volume = self.calc_tubing_volume(tubing_length)
-
-        if intake:
-            # Command to index valve to required position to remove dead volume in tube
-            pipelined_steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
-                                                      {"target": source.name, "wait": True})
-            # Command to aspirate syringe to remove dead volume - doesn't update volumes
-            pipelined_steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
-                                                      {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                       "target": None, "direction": "A", "air": True, "wait": True})
-        else:
-            # Command to index valve to required position for outlet
-            pipelined_steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
-                                                      {"target": source.name, "wait": True})
-            # Command to dispense air to blow out dead volume
-            pipelined_steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
-                                                      {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                       "target": source.name, "direction": "D", "air": True,
-                                                       "wait": True})
-        return pipelined_steps, dead_volume
-
-    @staticmethod
-    def calc_tubing_volume(tubing_length):
-        return math.pow((1.5875 / 2), 2) * math.pi * tubing_length
-
-    def generate_moves(self, source, target, valves, volume, flow_rate, adjust_dead_vol, init_move=False):
+    def generate_moves(self, source, target, valves, volume, dead_volume, flow_rate, transfer, init_move=False):
         """
         Generates the moves required to transfer liquid from source to target
 
         Args:
-            source (str): name of the source
-            target (str): name of the target
+            source (Module): name of the source
+            target (Module): name of the target
             valves (list): Intervening valves between source and target
             volume (float): Volume to be moved
+            dead_volume (float): the maximum dead volume that will be removed using air. As the air is "reused" by
+                                 transferring along the backbone this doesn't need to be replenished.
             flow_rate (int): Flow rate in ul/min
-            adjust_dead_vol (bool): whether to correct for dead volumes in tubing
+            transfer (bool): whether this movement is a transfer from a non-reagent vessel
+
             init_move (bool): whether this is an initialisation move or not
         Returns:
             moves (list): the moves to queue
         """
         moves = []
-        valve = self.valves[valves[0]]
+        # flush out non-reagent line
+        if transfer:
+            transfer_dv = self.calc_tubing_volume(source.name, valves[0], 0.75)
+            moves += self.flush_flask_transfer_dv(self.valves[valves[0]], source, transfer_dv, True)
+        # Take up the air required to push through all dead volume
+        if dead_volume > 0:
+            if self.valves[valves[0]].find_open_port() is None:
+                return
+            if transfer:
+                add_dead_volume = max((dead_volume - transfer_dv), 0)
+            else:
+                add_dead_volume = dead_volume
+            # Command to index valve to required position for air
+            moves += self.generate_cmd_dict("selector_valve", valves[0], "target",
+                                            {"target": "empty", "wait": True})
+            # Command to aspirate air to fill dead volume
+            moves += self.generate_cmd_dict("syringe_pump", self.valves[valves[0]].syringe.name, "move",
+                                            {"volume": add_dead_volume, "flow_rate": self.default_flush_fr,
+                                             "target": None, "direction": "A", "air": True, "wait": True})
         # Move liquid into first syringe pump
         if not init_move:
-            moves += self.generate_sp_move(source, valve, valve.syringe, volume, flow_rate)
+            moves += self.generate_sp_move(source, self.valves[valves[0]], self.valves[valves[0]].syringe, volume,
+                                           dead_volume, flow_rate)
         # transfer liquid along backbone
         if len(valves) > 1:
             for i in range(len(valves) - 1):
-                valve = self.valves[valves[i]]
-                next_valve = self.valves[valves[i + 1]]
-                moves += self.generate_sp_transfer(valve, next_valve, volume, flow_rate, adjust_dead_vol)
+                moves += self.generate_sp_transfer(self.valves[valves[i]], self.valves[valves[i+1]], volume,
+                                                   dead_volume, flow_rate)
         # Move liquid from last syringe pump into target
         valve = self.valves[valves[-1]]
-        moves += self.generate_sp_move(valve.syringe, valve, target, volume, flow_rate)
+        moves += self.generate_sp_move(valve.syringe, valve, target, volume, dead_volume, flow_rate)
+        # If transferring from a non-reagent line, flush the dead volume back into the source
+        if transfer:
+            moves += self.flush_flask_transfer_dv(self.valves[valves[0]], source, transfer_dv, False)
         return moves
 
-    @staticmethod
-    def generate_sp_move(source, valve, target, volume, flow_rate):
+    def generate_sp_move(self, source, valve, target, volume, dead_volume, flow_rate):
         """
         Generates the commands to dispense or aspirate a syringe
         Args:
@@ -1036,6 +1072,7 @@ class Manager(Thread):
             valve (Module): SelectorValve
             target (Module): Module object for the target
             volume (float): volume to move in uL
+            dead_volume (float): the dead volume of air to move in uL
             flow_rate (int): flow rate in uL/min
         Returns:
             commands (list): List containing the command dictionaries for the move
@@ -1057,17 +1094,23 @@ class Manager(Thread):
                 target_name = "empty"
             else:
                 target_name = source.name
+        if flow_rate == 0:
+            flow_rate = self.default_fr
 
         # Command to index valve to required position
-        commands += Manager.generate_cmd_dict("selector_valve", valve.name, "target",
-                                              {"target": target_name, "wait": True})
+        commands += self.generate_cmd_dict("selector_valve", valve.name, "target",
+                                           {"target": target_name, "wait": True})
         # Command to dispense/withdraw syringe
-        commands += Manager.generate_cmd_dict("syringe_pump", name, "move",
-                                              {"volume": volume, "flow_rate": flow_rate, "target": target_name,
+        commands += self.generate_cmd_dict("syringe_pump", name, "move",
+                                           {"volume": volume, "flow_rate": flow_rate, "target": target_name,
                                                "direction": direction, "wait": True})
+        if dead_volume > 0 and direction == "D":
+            commands += self.generate_cmd_dict("syringe_pump", name, "move",
+                                               {"volume": dead_volume, "flow_rate": flow_rate, "target": None,
+                                                "direction": direction, "wait": True})
         return commands
 
-    def generate_sp_transfer(self, source_valve, target_valve, volume, flow_rate, account_for_dead_volume):
+    def generate_sp_transfer(self, source_valve, target_valve, volume, dead_volume, flow_rate):
         """
         Generates the commands necessary to transfer liquid between two adjacent valves
 
@@ -1091,17 +1134,8 @@ class Manager(Thread):
                 target_port = adj_valve[1]
         if source_port is None or target_port is None:
             return False
-        if account_for_dead_volume:
-            # determine dead volume between valves
-            tubing_length = self.graph.adj[source_valve.name][target_valve.name][0]["tubing_length"]
-            dead_volume = self.calc_tubing_volume(tubing_length)*1.15
-            # take up air to flush dead volume
-            commands += self.generate_cmd_dict("selector_valve", source_valve.name, "target",
-                                               {"target": "empty", "wait": True})
-            commands += self.generate_cmd_dict("syringe_pump", source_valve.syringe.name, "move",
-                                               {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                "target": None, "direction": "A", "air": True, "wait": True})
-            volume = volume + dead_volume
+        if flow_rate == 0 or flow_rate > self.default_transfer_fr:
+            flow_rate = self.default_transfer_fr
         # add commands to index valves to required ports for transfer
         commands += self.generate_cmd_dict("selector_valve", source_valve.name, source_port,
                                            {"wait": True})
@@ -1118,7 +1152,46 @@ class Manager(Thread):
                                            {"volume": volume, "flow_rate": flow_rate,
                                             "target": source_valve.syringe.name,
                                             "direction": "A", "wait": True})
+        # Now repeat the transfer but with the dead volume
+        if dead_volume > 0:
+            commands += self.generate_cmd_dict("syringe_pump", source_valve.syringe.name, "move",
+                                               {"volume": dead_volume, "flow_rate": flow_rate,
+                                                "target": None,
+                                                "direction": "D", "wait": False})
+            commands += self.generate_cmd_dict("syringe_pump", target_valve.syringe.name, "move",
+                                               {"volume": dead_volume, "flow_rate": flow_rate,
+                                                "target": None,
+                                                "direction": "A", "wait": True})
         return commands
+
+    def soft_home_syringe(self, source, next_valve):
+        """Used to empty a syringe that isn't connected to a waste container.Slowly move the syringe to home,
+         transferring to the next closest syringe to the waste container.
+        Args:
+            source (str): the name of the source syringe.
+            next_valve (str): the path from this syringe to the waste container.
+        """
+        dispense = {"mod_type": "syringe_pump", "module_name": source, "command": "move",
+                    "parameters": {"target": self.valves[next_valve].syringe.name, "volume": 2000, "direction": "D",
+                                   "flow_rate": self.default_transfer_fr, "wait": False}}
+        aspirate = {"mod_type": "syringe_pump", "module_name": self.valves[next_valve].syringe.name, "command": "move",
+                    "parameters": {"target": source, "volume": 2000, "direction": "A",
+                                   "flow_rate": self.default_transfer_fr, "wait": True}}
+        stop_flag = False
+        for i in range(5):
+            if stop_flag:
+                break
+            self.syringes[source].position = -self.syringes[source].syringe_length / 2
+            self.add_to_queue([dispense, aspirate], self.q)
+            while not self.q.empty() or len(self.tasks) > 0 or self.waiting:
+                time.sleep(0.1)
+                if self.syringes[source].switch_state == 1:
+                    stop_flag = True
+                    break
+        with self.interrupt_lock:
+            self.pause_all()
+            self.stop_all()
+            self.pause_flag = False
 
     def correct_position_error(self, syringe):
         valve = syringe.valve

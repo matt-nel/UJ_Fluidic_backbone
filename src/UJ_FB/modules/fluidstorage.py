@@ -24,8 +24,9 @@ class FluidStorage(modules.Module):
         self.current_sample = 0
         self.contents = {}
         for i in range(1, self.max_samples + 1):
-            self.contents[i] = {"sample_id": "", "time_created": ""}
-        self.max_volume = module_config["max_volume"]
+            self.contents[i] = {"sample_id": "", "volume": 0.0, "time_created": ""}
+        # convert to uL
+        self.max_volume = module_config["max_volume"] * 1000
         self.stepper = self.steppers[0]
 
     def turn_wheel(self, n_turns, direction):
@@ -55,6 +56,8 @@ class FluidStorage(modules.Module):
         Args:
             position (int): the position number to move to
         """
+        if position == self.current_position:
+            return
         self.write_log(f"{self.name} moving to {position}")
         if position > self.current_position:
             diff_fwd = abs(position - self.current_position)
@@ -70,34 +73,41 @@ class FluidStorage(modules.Module):
             diff = diff_rev
         self.turn_wheel(diff, direction)
 
-    def add_sample(self, id_override, task):
+    def add_sample(self, id_override, volume):
         """Adds a sample to the storage, writing a record to the log and the running config.
 
         Args:
             id_override (str): if no information is given for the reaction, this string is used instead.
-            task (UJ_FB.manager.Task): the task object for this operation.
+            volume (float): the volume to be added
         """
-        found_empty = False
-        pos = 0
-        for i in range(self.current_position, self.max_samples + 1):
-            if not self.contents[i]["sample_id"]:
-                found_empty = True
-        if not found_empty:
-            for i in range(1, self.current_position):
-                if not self.contents[i]["sample_id"]:
-                    found_empty = True
-        if found_empty:
+        pos = self.find_empty()
+        if pos is not None:
             self.move_to_position(pos)
             if self.manager.reaction_id is None:
                 sample_name = f"sample{self.current_sample} {id_override}"
             else:
                 sample_name = f"Reaction id: {self.manager.reaction_id}"
             self.contents[self.current_position]["sample_id"] = sample_name
+            self.contents[self.current_position]["volume"] += volume
             self.contents[self.current_position]["time_created"] = datetime.datetime.today().strftime("%Y-%m-%dT%H:%M")
             self.write_log(f"Stored {sample_name} in vessel {self.current_position}")
+
+    def find_empty(self):
+        found_empty = False
+        i = None
+        for i in range(self.current_position, self.max_samples + 1):
+            if not self.contents[i]["sample_id"]:
+                found_empty = True
+                break
+        if not found_empty:
+            for i in range(1, self.current_position):
+                if not self.contents[i]["sample_id"]:
+                    found_empty = True
+                    break
+        if found_empty:
+            return i
         else:
-            self.write_log(f"No more empty slots on {self.name}")
-            task.error_flag = True
+            return None
 
     def remove_sample(self):
         """Removes a sample from the storage record.
@@ -105,12 +115,37 @@ class FluidStorage(modules.Module):
         self.write_log(f"Removed {self.contents[self.current_position]}")
         self.contents[self.current_position]["sample_id"] = ""
         self.contents[self.current_position]["time_created"] = ""
+        self.contents[self.current_position]["volume"] = 0.0
 
     def print_contents(self):
         self.write_log(f"Samples currently stored in {self.name}:")
         for item in self.contents.keys():
             if self.contents[item]["sample_id"]:
                 self.write_log(f"{self.contents[item]['sample_id']} in vessel {item}")
+
+    def change_volume(self, new_contents, vol):
+        if vol < 0:
+            pos = self.current_position
+            if self.contents[pos]["volume"] <= 0:
+                self.remove_sample()
+            else:
+                self.contents[pos]["volume"] += vol
+        else:
+            self.add_sample(new_contents, vol)
+
+    def check_volume(self, vol):
+        if vol < 0:
+            pos = self.current_position
+            if self.contents[pos]["volume"] + vol < 0:
+                self.manager.write_log(f"Insufficient {self.contents[pos]['sample_id']} in {self.name}",
+                                       level=logging.WARNING)
+        else:
+            pos = self.find_empty()
+            if self.contents[pos]["volume"] + vol > self.max_volume:
+                self.write_log(f"Max volume of vessel at position {pos} on {self.name} would be exceeded",
+                               level=logging.WARNING)
+                return False
+        return True
 
 
 class FluidStorageExt:
