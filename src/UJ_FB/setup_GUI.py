@@ -384,7 +384,7 @@ class SetupGUI:
 
             Args:
                 valve_no (int): the number of the valve that this module is connected to.
-                module_type (str): what type of module is connected to this port. 
+                module_type (tk.StringVar): what type of module is connected to this port.
                 port_no (int): the port number (1-10) that this module is connected to
                 button (tk.Button): the button used to start this menu
             """
@@ -896,7 +896,7 @@ class SetupGUI:
         tubing_length = 0
         possible_valves = [m for m in self.graph_tmp.nodes.keys() if "valve" in m]
         selected_valve = tk.StringVar(window)
-        selector_label = tk.Label(window, text="Select a valve:")
+        selector_label = tk.Label(window, text=f"Which valve is {valve_info['valve_name']} connected to:")
         valve_selector = tk.OptionMenu(window, selected_valve,
                                        *possible_valves)
         selected_valve.set(self.find_unselected(possible_valves, self.used_valves))
@@ -1213,13 +1213,16 @@ class SetupGUI:
             widget.destroy()
 
     def add_edge(self, dual, *args, **kwargs):
-        """Adds edges betweeen configured nodes
+        """Adds edges between configured nodes
 
         Args:
             dual (bool): whether the edge is multidirectional or not
         """
         if args[2]:
-            self.graph_tmp.adj[args[0]][args[1]][0]["tubing_length"] = kwargs["tubing_length"]
+            try:
+                self.graph_tmp.adj[args[0]][args[1]][0]["tubing_length"] = kwargs["tubing_length"]
+            except KeyError:
+                self.write_message(f"{args[2]} not found in graph")
         else:
             self.graph_tmp.add_edge(args[0], args[1], **kwargs)
             if dual:

@@ -59,7 +59,7 @@ class Camera(modules.Module):
         Args:
             listener (UJ_FB.web_listener.WebListener): the WebListener for this robot
             metadata (dict): the image metadata, such as the filename.
-            task (UJ_FB.manager.Task): the task object for this image send
+            task (UJ_FB.fluidicbackbone.Task): the task object for this image send
         """
         num_retries = 0
         while num_retries < 5:

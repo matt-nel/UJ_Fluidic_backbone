@@ -74,7 +74,7 @@ def object_hook_int(obj):
     return output
 
 
-class Manager(Thread):
+class FluidicBackbone(Thread):
     """
     Class for managing the fluidic backbone robot. Keeps track of all modules and implements high-level methods for
     tasks involving multiple modules. Uses a queue to hold command dictionaries and interprets these to control modules.
@@ -90,7 +90,7 @@ class Manager(Thread):
             stdout_log (bool, optional): True if logs should print to stdout. Defaults to False.
         """
         Thread.__init__(self)
-        self.script_dir = os.path.dirname(__file__)
+        self.script_dir = os.path.abspath(fbexceptions.__file__)
         cm_config = os.path.join(self.script_dir, "configs/cmd_config.json")
         self.cmd_mng = commanduino.CommandManager.from_configfile(cm_config, simulation)
         graph_config = json_loader(self.script_dir, "configs/module_connections.json")
@@ -704,6 +704,8 @@ class Manager(Thread):
         """
         for key in self.modules.keys():
             found_target = self.modules[key].get(target)
+            if found_target is None:
+                found_target = self.modules[key].get(target.lower())
             if found_target is not None:
                 return found_target
 
@@ -718,7 +720,7 @@ class Manager(Thread):
         """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if reagent_name == self.flasks[flask].contents[0]:
+            if reagent_name == self.flasks[flask].contents[0].lower():
                 return self.flasks[flask].name
 
     def command_reactor(self, name, command, parameters, command_dict):
@@ -1202,7 +1204,7 @@ class Manager(Thread):
 
     def start_stirring(self, reactor_name, command, speed, stir_secs, wait):
         params = {"speed": speed, "stir_secs": stir_secs, "wait": wait}
-        command_dict = Manager.generate_cmd_dict("reactor", reactor_name, command, params)
+        command_dict = FluidicBackbone.generate_cmd_dict("reactor", reactor_name, command, params)
         self.add_to_queue(command_dict)
 
     def start_heating(self, reactor_name, command, temp, heat_secs, wait,  target=False):
@@ -1218,15 +1220,15 @@ class Manager(Thread):
             target (bool, optional): [description]. Defaults to False.
         """
         params = {"temp": temp, "heat_secs": heat_secs, "wait": wait, "target": target}
-        command_dict = Manager.generate_cmd_dict("reactor", reactor_name, command, params)
+        command_dict = FluidicBackbone.generate_cmd_dict("reactor", reactor_name, command, params)
         self.add_to_queue(command_dict)
 
     def stop_reactor(self, reactor_name, command):
         if command == "stop_stir":
-            command_dict = Manager.generate_cmd_dict("reactor", reactor_name, command, {})
+            command_dict = FluidicBackbone.generate_cmd_dict("reactor", reactor_name, command, {})
             self.add_to_queue(command_dict)
         elif command == "stop_heat":
-            command_dict = Manager.generate_cmd_dict("reactor", reactor_name, command, {})
+            command_dict = FluidicBackbone.generate_cmd_dict("reactor", reactor_name, command, {})
             self.add_to_queue(command_dict)
     
     def send_image(self, img_num, img_processing, task):
@@ -1253,20 +1255,20 @@ class Manager(Thread):
             manager_wait = True
             if wait_reason == "cleaning":
                 manager_wait = False
-            command_dict = Manager.generate_cmd_dict(mod_type="wait", mod_name="wait",
-                                                     command="wait_user",
-                                                     parameters={"wait": manager_wait, "wait_reason": wait_reason})
+            command_dict = FluidicBackbone.generate_cmd_dict(mod_type="wait", mod_name="wait",
+                                                             command="wait_user",
+                                                             parameters={"wait": manager_wait, "wait_reason": wait_reason})
             self.add_to_queue(command_dict)
         else:
-            command_dict = Manager.generate_cmd_dict(mod_type="wait", mod_name="wait",
-                                                     command="wait",
-                                                     parameters={"time": wait_time, "wait": True,
+            command_dict = FluidicBackbone.generate_cmd_dict(mod_type="wait", mod_name="wait",
+                                                             command="wait",
+                                                             parameters={"time": wait_time, "wait": True,
                                                                  "wait_reason": wait_reason})
             self.add_to_queue(command_dict)
         if pic_info is not None:
-            command_dict = Manager.generate_cmd_dict(mod_type="camera", mod_name="camera1",
-                                                     command="send_img",
-                                                     parameters={"img_num": pic_info,
+            command_dict = FluidicBackbone.generate_cmd_dict(mod_type="camera", mod_name="camera1",
+                                                             command="send_img",
+                                                             parameters={"img_num": pic_info,
                                                                  "img_processing": img_processing, "wait": True})
             self.add_to_queue(command_dict)
 

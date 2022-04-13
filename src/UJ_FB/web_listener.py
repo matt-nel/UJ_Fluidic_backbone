@@ -238,9 +238,11 @@ class WebListener:
             reagents[reagent_name] = flask
         for module in req_hardware:
             module_id = module.get("id")
-            modules[module_id] = self.manager.find_target(module_id).name
+            reagent = self.manager.find_target(module_id)
             if modules[module_id] is None:
                 self.manager.write_log(f"Could not find {module_id} on {self.manager.id}")
+                return False
+            modules[module_id] = reagent.name
         parse_success = True
         for step in procedure:
             if step.tag == "Add":

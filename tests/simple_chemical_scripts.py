@@ -1,5 +1,5 @@
 import context
-import UJ_FB.manager as manager
+import UJ_FB.fluidicbackbone as manager
 from threading import Thread
 
 
@@ -85,7 +85,7 @@ class QueueTest(Thread):
         
 
 if __name__ == "__main__":
-    test = QueueTest(manager.Manager(web_enabled=False))
+    test = QueueTest(manager.FluidicBackbone(web_enabled=False))
     test.start()
     test.manager.mainloop()
 

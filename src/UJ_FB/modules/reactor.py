@@ -71,7 +71,7 @@ class Reactor(modules.FBFlask):
             temp (float): the temperature to maintain
             heat_secs (int): seconds to heat for. Does not count preheating
             target (bool): whether to heat to a defined target temperature
-            task (UJ_FB.manager.Task): the task for this heating operation
+            task (UJ_FB.fluidicbackbone.Task): the task for this heating operation
         """
         with self.heat_lock:
             self.target_temp = temp
@@ -101,6 +101,7 @@ class Reactor(modules.FBFlask):
         """
         with self.stir_lock:
             self.stirring = True
+            self.ready = False
             max_speed = self.mag_stirrers[0].max_speed
             if speed < (0.5 * max_speed):
                 self.mag_stirrers[0].start_stir(max_speed)
@@ -254,7 +255,7 @@ class Reactor(modules.FBFlask):
         Stops all reactor operations when stop override received. Stores time remaining to resume.
         """
         with self.stop_lock:
-            self.stop_cmd = True 
+            self.stop_cmd = True
     
     def stop_stir(self):
         self.stirring = False
