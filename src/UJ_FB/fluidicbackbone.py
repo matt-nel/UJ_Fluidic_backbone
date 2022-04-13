@@ -90,7 +90,9 @@ class FluidicBackbone(Thread):
             stdout_log (bool, optional): True if logs should print to stdout. Defaults to False.
         """
         Thread.__init__(self)
-        self.script_dir = os.path.abspath(fbexceptions.__file__)
+        script_dir = os.path.abspath(fbexceptions.__file__)
+        script_dir = script_dir.split("\\")
+        self.script_dir = "\\".join(script_dir[:-1])
         cm_config = os.path.join(self.script_dir, "configs/cmd_config.json")
         self.cmd_mng = commanduino.CommandManager.from_configfile(cm_config, simulation)
         graph_config = json_loader(self.script_dir, "configs/module_connections.json")
