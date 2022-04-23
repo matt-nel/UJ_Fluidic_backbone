@@ -12,29 +12,22 @@ The robot can be run in conjuction with the MC_Labserver (https://github.com/Paj
 
 To use the robot, we need to set up software set up on computer and an Arduino. I'll run through all of that here.
 
-First, get the robot's software. On the Github page, click on the green button on the top right and select "Download Zip" from the menu. Extract the contents of that zip file to somewhere on your computer. 
+First, get the robot's software. On the Github page, click on the green button on the top right and select "Download Zip" from the menu. Extract the contents of that zip file to somewhere on your computer. Click in the address bar and copy the path to where you extracted the files.
 
 ### **Python**
 
-The robot has been tested extensively with Python 3.8.5 you can install Python 3.8.5 using the link that follows. It is recommended that you add Python to your Path variables (Keep an eye on the options in the installer). 
+The robot has been tested extensively with Python 3.8.5. You can install Python 3.8.5 using the link that follows. It is recommended that you add Python to your Path variables (Keep an eye on the options in the installer). 
 
 https://www.python.org/downloads/release/python-385/
 
-### **Python packages**
+### **Robot software installation**
 
-The following packages should be installed. The easiest way is to use the `pip` tool in the command prompt (Windows) or terminal (Unix):
+The easiest way to install the software is to use the `pip` tool in the command prompt (Windows) or terminal (Unix). Use the path we copied earlier for [PATH]. 
 
-**networkx**
-
-**pillow**
-
-**opencv-python**
-
-To use pip, open a terminal and type:
-
-```pip install pillow```
-
-The same can be used for the other packages.
+```
+cd [PATH]
+pip install .
+```
 
 ### **Commanduino**
 
@@ -42,13 +35,13 @@ The same can be used for the other packages.
 
 https://github.com/Pajables/commanduino
 
-To install, download the zip and extract the files to a folder on your computer, I would recommend C:/Users/your_user_name/your_folder for Windows users. Open a terminal window, you'll notice that the text to the left of the cursor shows the directory you're currently working within. We need to get the directory that contains commanduino. 
+To install, download the zip and extract the files to a folder on your computer, I would recommend C:/Users/your_user_name/your_folder for Windows users. Like before, copy the address where you extracted the folder. Open a terminal window, you'll notice that the text to the left of the cursor shows the directory you're currently working within. We need to get the directory that contains commanduino. 
 
-`cd your_folder/commanduino-main/commanduino-main `
+`cd [PATH] `
 
-Now you can use Python to run the setup.py file in that directory:
+Now install using pip
 
-`python setup.py install`
+`pip install .`
 
 Commanduino is set up!
 
@@ -64,7 +57,7 @@ Linux:
 
 Open a terminal and use your favourite package manager to install OpenCV:
 
-`sudo apt install pytho3-opencv`
+`sudo apt install python3-opencv`
 
 ### **Arduino IDE and libraries**
 

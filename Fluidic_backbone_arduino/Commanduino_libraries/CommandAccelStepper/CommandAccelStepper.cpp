@@ -344,6 +344,7 @@ void CommandAccelStepper::setAcceleration()
     if(cmdHdl.argOk)
     {
         stepper->setAcceleration(stepsPerSecPerSec);
+        currentAcceleration = stepsPerSecPerSec;
     }
 }
 
@@ -359,7 +360,7 @@ float CommandAccelStepper::acceleration()
     cmdHdl.initCmd();
     cmdHdl.addCmdString(COMMANDACCELSTEPPER_ACCELERATION);
     cmdHdl.addCmdDelim();
-    cmdHdl.addCmdFloat(stepper->acceleration());
+    cmdHdl.addCmdFloat(currentAcceleration);
     cmdHdl.addCmdTerm();
     cmdHdl.sendCmdSerial();
 }

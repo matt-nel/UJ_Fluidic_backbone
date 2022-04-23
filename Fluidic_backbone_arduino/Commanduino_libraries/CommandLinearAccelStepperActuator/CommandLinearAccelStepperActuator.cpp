@@ -127,9 +127,18 @@ void CommandLinearAccelStepperActuator::update() {
   // do whatever you need to do here, non-blocking things!!
   // update should be fast
   linearactuator.update();
+
   if ((!moveCompleteSent) && (!linearactuator.isMoving())){
     moveCompleteSent = true;
     moveCompleteUpdate();
+  }
+  if ((!switchStateSent) && (linearactuator.isMoving())){
+    if (millis() - lastSwitchCheckTime > 1000){
+      if (linearactuator.homeSwitchState() == HIGH){
+        switchStateSent = true;
+        switchStateUpdate();
+      }
+    }
   }
 }
 
@@ -338,6 +347,7 @@ void CommandLinearAccelStepperActuator::wrapper_home() {
 
 void CommandLinearAccelStepperActuator::home() {
     moveCompleteSent = false;
+    switchStateSent = false;
     linearactuator.home();
 }
 
@@ -352,6 +362,8 @@ void CommandLinearAccelStepperActuator::moveTo() {
   long steps = cmdHdl.readLongArg();
   if (cmdHdl.argOk) {
     moveCompleteSent = false;
+    switchStateSent = (linearactuator.homeSwitchState()) ? true : false;
+    lastSwitchCheckTime = millis();
     linearactuator.moveTo(steps);
   }
 }
@@ -367,6 +379,8 @@ void CommandLinearAccelStepperActuator::move() {
   long steps = cmdHdl.readLongArg();
   if (cmdHdl.argOk) {
     moveCompleteSent = false;
+    switchStateSent = (linearactuator.homeSwitchState()) ? true : false;
+    lastSwitchCheckTime = millis();
     linearactuator.move(steps);
   }
 }
@@ -469,6 +483,15 @@ void CommandLinearAccelStepperActuator::moveCompleteUpdate(){
   cmdHdl.addCmdInt(*linearactuator.encoderCount);
   cmdHdl.addCmdDelim();
   cmdHdl.addCmdInt(linearactuator.reqEncoderCount);
+  cmdHdl.addCmdTerm();
+  cmdHdl.sendCmdSerial();
+}
+
+void CommandLinearAccelStepperActuator::switchStateUpdate(){
+  cmdHdl.initCmd();
+  cmdHdl.addCmdString(COMMANDLINEARACCELSTEPPER_SWITCH_TRIGGER);
+  cmdHdl.addCmdDelim();
+  cmdHdl.addCmdInt(1);
   cmdHdl.addCmdTerm();
   cmdHdl.sendCmdSerial();
 }

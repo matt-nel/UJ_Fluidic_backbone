@@ -18,7 +18,6 @@ LinearAccelStepperActuator::LinearAccelStepperActuator(AccelStepper &mystepper, 
   setMaxSpeed(speed);
   setAcceleration(2000);
   disableAcceleration();
-  calculateInterval(speed);
 
   homeSwitchPin = myHomeSwitchPin;
   stepper->setEnablePin(myEnablePin);
@@ -41,7 +40,6 @@ void LinearAccelStepperActuator::home() {
 }
 
 void LinearAccelStepperActuator::update() {
-  chkTime = millis();
   if (homing){
     if (homeSwitchState() == HIGH) {
       stop();
@@ -81,43 +79,22 @@ bool LinearAccelStepperActuator::isMoving() {
 }
 
 bool LinearAccelStepperActuator::checkEncoder(){
-  if (chkTime - lastTime > timeInterval){
-    lastTime = chkTime;
+  curPos = stepper->currentPosition();
+  if (abs(curPos - startPos)>(stepsPerRev/numGaps)){
+    startPos = curPos;
     reqEncoderCount ++;
     if (*encoderCount - reqEncoderCount < -3){
         stop();
     }
   }
-  if (accelerationEnabled && accelerating){
-    unsigned long timePassed = chkTime - motionStart;
-    //recalculate interval from speed every 0.25s until accInterval has passed
-    if (timePassed > 250){
-      if (timePassed < accInterval){
-      float newSpeed = (timePassed/accInterval) * lastSetSpeed;
-      calculateInterval(newSpeed);
-      } else {
-      accelerating = false;
-      calculateInterval(lastSetSpeed);
-      } 
-    }
-  } 
-}
-
-void LinearAccelStepperActuator::calculateInterval(int newSpeed){
-  //calculate time interval in milliseconds based off 1/16 microstepping resolution. 
-  float gapPerSec;
-  gapPerSec = (((float)newSpeed/stepsPerRev) * numGaps);
-  timeInterval = ((1/gapPerSec)*1000);
-  //add 200ms error margin
-  timeInterval += 200;
 }
 
 void LinearAccelStepperActuator::move(long relativeSteps) {
-  startMove();
+  *encoderCount = 0;
+  reqEncoderCount = 0;
+  startPos = stepper->currentPosition();
   stepper->enableOutputs();
   stepper->move(relativeSteps);
-  lastTime = millis();
-  motionStart = lastTime;
   moving = true;
   // we must set the speed here, because by default accel stepper compute speed from acceleration, here we force it to go to speed, so we have to set back the speed after a move
   if (!accelerationEnabled) {
@@ -126,28 +103,15 @@ void LinearAccelStepperActuator::move(long relativeSteps) {
 }
 
 void LinearAccelStepperActuator::moveTo(long absoluteSteps) {
-  startMove();
+  *encoderCount = 0;
+  reqEncoderCount = 0;
+  startPos = stepper->currentPosition();
   stepper->enableOutputs();
   stepper->moveTo(absoluteSteps);
-  lastTime = millis();
-  motionStart = lastTime;
   moving = true;
   // we must set the speed here, because by default accel stepper compute speed from acceleration, here we force it to go to speed, so we have to set back the speed after a moveTo
   if (!accelerationEnabled) {
     setSpeed(lastSetSpeed);
-  }
-}
-
-void LinearAccelStepperActuator::startMove(){
-  *encoderCount = 0;
-  reqEncoderCount = 0;
-  if (accelerationEnabled && !homing){
-    //ms to reach top speed
-    accInterval = (lastSetSpeed / lastSetAcceleration)*1000;
-    // assume motor moves at 50% of acceleration speed on average
-    float newSpeed = 0.5 *  lastSetAcceleration;
-    calculateInterval(newSpeed);
-    accelerating = true;
   }
 }
 
@@ -157,6 +121,7 @@ void LinearAccelStepperActuator::stop() {
   // we also stop homing
   // if in acceleration mode, the motor will slow down to complete stop, default behavior of AccelStepper
   homing = false;
+  moving = false;
   stepper->stop();
   if (!accelerationEnabled || homing) {
     stepper->move(0);
@@ -181,7 +146,6 @@ void LinearAccelStepperActuator::setCurrentPosition(long position) {
 
 void LinearAccelStepperActuator::setSpeed(float stepsPerSecond) {
   lastSetSpeed = stepsPerSecond;
-  calculateInterval(lastSetSpeed);
   stepper->setSpeed(lastSetSpeed);
 }
 
@@ -203,7 +167,7 @@ float LinearAccelStepperActuator::maxSpeed(){
 }
 
 float LinearAccelStepperActuator::acceleration(){
-  return stepper->acceleration();
+  return lastSetAcceleration;
 }
 
 

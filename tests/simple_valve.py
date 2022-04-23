@@ -4,8 +4,8 @@ from dummy_manager import DummyManager
 from commanduino import CommandManager
 from threading import Lock
 import context
-from UJ_FB.Devices import devices, steppermotor
-from UJ_FB.Modules import modules, syringepump
+from UJ_FB.devices import devices, steppermotor
+from UJ_FB.modules import modules, syringepump
 import time
 
 class Task:

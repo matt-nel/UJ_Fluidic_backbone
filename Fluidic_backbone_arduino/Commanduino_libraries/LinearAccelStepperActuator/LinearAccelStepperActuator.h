@@ -20,7 +20,6 @@ class LinearAccelStepperActuator {
     LinearAccelStepperActuator(AccelStepper &mystepper, int myHomeSwitchPin, int myEnablePin, int* myEncoderCount);
 
     bool checkEncoder();
-    void calculateInterval(int newSpeed);
     void startMove();
 
     AccelStepper *stepper;
@@ -70,9 +69,8 @@ class LinearAccelStepperActuator {
     float lastSetAcceleration;
     bool accelerating;
 
-    unsigned long chkTime, lastTime, motionStart;
+    long curPos, startPos;
 
-    int timeInterval, accInterval;
     int stepsPerRev = 3200;
     int numGaps = 8;
   

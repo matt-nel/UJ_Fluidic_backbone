@@ -1,5 +1,5 @@
 import context
-import UJ_FB.manager as manager
+import UJ_FB.fluidicbackbone as manager
 from threading import Thread
 
 
@@ -34,7 +34,7 @@ class QueueTest(Thread):
         elif response == "5":
             self.manager.pipeline.queue.clear()
         elif response == "6":
-            self.manager.import_queue("Configs/Pipeline.json")
+            self.manager.import_queue("configs/Pipeline.json")
         elif response == "7":
             self.manager.export_queue()
         elif response == "8":
@@ -85,7 +85,7 @@ class QueueTest(Thread):
         
 
 if __name__ == "__main__":
-    test = QueueTest(manager.Manager(web_enabled=False))
+    test = QueueTest(manager.FluidicBackbone(web_enabled=False))
     test.start()
     test.manager.mainloop()
 

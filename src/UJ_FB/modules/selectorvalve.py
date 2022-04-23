@@ -1,4 +1,4 @@
-from UJ_FB.Modules import modules
+from UJ_FB.modules import modules
 import time
 import logging
 
@@ -17,15 +17,17 @@ class SelectorValve(modules.Module):
     """
 
     def __init__(self, name, module_info, cmduino, manager):
-        """
-        :param name: String: name of the valve
-        :param module_info: Dictionary: contains the configuration information
-        :param cmduino: Commanduino Object: object for communicating with steppermotor and hall-effect sensor over the
-        serial connection
-        :param manager: Manager Object: coordinates modules
+        """Initialise the selector valve
+
+        Args:
+            name (str): name of the valve
+            module_info (dict): contains the configuration information
+            cmduino (CommandManager): object for communicating with steppermotor and hall-effect sensor over the
+                              serial connection
+            manager (UJ_FB.Manager): Manager object for this robot
         """
         super(SelectorValve, self).__init__(name, module_info, cmduino, manager)
-        self.type = "SV"
+        self.mod_type = "selector_valve"
         self.syringe = None
         module_config = module_info["mod_config"]
         self.num_ports = module_config["ports"]
@@ -81,7 +83,7 @@ class SelectorValve(modules.Module):
         # if near negative magnet
         elif self.reading < NEG_THRESHOLD:
             self.find_opt(NEG_THRESHOLD - 150)
-            self.check_all_positions()
+            self.find_zero()
         # ended up between magnets
         self.reading = self.he_sensor.analog_read()
         if self.reading < POS_THRESHOLD or self.reading < self.magnet_readings[1]:
@@ -89,19 +91,21 @@ class SelectorValve(modules.Module):
             self.home_valve()
         # check magnet positions against config
         if self.geared:
-            if self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] % 10 == 0 or self.backlash == 0:
+            if self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] % 10 == 0\
+                    or self.backlash == 0:
                 self.check_backlash()
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
         self.manager.prev_run_config['valve_backlash'][self.name]['check_backlash'] += 1
         self.current_port = 1
         self.stepper.set_current_position(0)
 
-    def move_to_pos(self, position, check=True, target=""):
+    def move_to_pos(self, position, target="", check=True):
         """Moves the valve to a specific port
 
         Args:
             position (int): The number of the destination port
-            task (Task object): Task associated with this function call
+            target (str): the specified target, if applicable
+            check (bool): whether to call check_pos after the movement for verification
         """
         if self.current_port != position:
             self.write_log(f"{self.name} is moving to position {position} ({target})")
@@ -134,6 +138,7 @@ class SelectorValve(modules.Module):
         string: name of module
         Args:
             target (string): name of the target module
+            task (Task): the Task object for this operation
         """
         for i, port in enumerate(self.ports.items()):
             if port[1] is None:
@@ -157,12 +162,18 @@ class SelectorValve(modules.Module):
                 target_found = True
         return target_found
 
+    def find_open_port(self):
+        for i in range(1, 11):
+            if self.ports[i] is None:
+                return i
+        return None
+
     def jog(self, steps, invert_direction):
         """Jogs the pump a number of steps
 
         Args:
             steps (int): number of steps to move
-            direction (string): cc if counterclockwise
+            invert_direction (bool): whether to invert the direction of the movement
         """
         self.ready = False
         if invert_direction:
@@ -174,11 +185,11 @@ class SelectorValve(modules.Module):
         """
         Homes the valve using the hall-effect sensor
         """
+        self.ready = False
         self.write_log(f"{self.name} is homing")
         # Counter goes up each time robot started or homes. When counter at 5, check the magnet positions
         self.manager.prev_run_config['magnet_readings']['check_magnets'] += 1
         self.manager.rc_changes = True
-        self.ready = False
         with self.stop_lock:
             self.stop_cmd = False
         prev_speed = self.stepper.running_speed
@@ -188,7 +199,8 @@ class SelectorValve(modules.Module):
         self.stepper.set_current_position(0)
         self.reading = self.he_sensor.analog_read()
         # Keep looking for home pos (reading >= max saved reading)
-        while (self.reading < self.magnet_readings[1] - MIN_DIFF_THRESHOLD) or (self.reading > 1000) or self.reading < POS_THRESHOLD :
+        while (self.reading < self.magnet_readings[1] - MIN_DIFF_THRESHOLD) or (self.reading > 1000)\
+                or self.reading < POS_THRESHOLD:
             self.reading = self.he_sensor.analog_read()
             # if close to home pos
             if self.reading > POS_THRESHOLD:
@@ -198,9 +210,10 @@ class SelectorValve(modules.Module):
             elif self.reading < NEG_THRESHOLD:
                 if self.find_opt(NEG_THRESHOLD - 150):
                     # Move between magnets until close to home position
-                    self.reading = self.check_all_positions()
+                    self.reading = self.find_zero()
             else:
-                # We must be between magnets. Move 1/4 magnet distance looking for magnet positions. Testing shows magnet detection at ~1/4 spr to either side
+                # We must be between magnets. Move 1/4 magnet distance looking for magnet positions.
+                # Testing shows magnet detection at ~1/4 spr to either side
                 self.find_next_magnet()
             if self.check_stop:
                 break
@@ -217,7 +230,7 @@ class SelectorValve(modules.Module):
             if 500 < value < 550 or value == 0:
                 check_value = True
         if self.manager.prev_run_config['magnet_readings']['check_magnets'] % 10 == 0 or check_value:
-            self.check_magnets()
+            self.update_stored_readings()
             self.find_opt(self.magnet_readings[1] + 40)
         self.stepper.set_running_speed(prev_speed)
         self.ready = True
@@ -284,11 +297,9 @@ class SelectorValve(modules.Module):
         self.stepper.set_running_speed(prev_speed)
         return True
 
-    def check_all_positions(self):
-        """Looks for the magnet at the home position (0), which has a reading above 600
-
-        Args:
-            max_reading (int): Current maximum reading
+    def find_zero(self):
+        """Checks each magnet position for the magnet at the home (0), which has a reading above 600.
+        Assumes that the valve was at a magnet position before calling this function
 
         Returns:
             int: Returns the max reading parameter if no new maximum found, or returns the new maximum reading
@@ -308,7 +319,7 @@ class SelectorValve(modules.Module):
         self.find_opt(self.magnet_readings[1] + 40)
         return max_reading
 
-    def check_magnets(self):
+    def update_stored_readings(self):
         """Checks all the magnet positions and updates the configuration
         """
         if self.reading < POS_THRESHOLD:
@@ -330,12 +341,7 @@ class SelectorValve(modules.Module):
             position (int): The port number to check
         """
         magnets_passed = self.stepper.magnets_passed
-        positions_moved = 0
         pos_diff = abs(self.current_port - position)
-        invert_direction = False
-        # moving CCW
-        if self.current_port > position:
-            invert_direction = True
         req_magnets = pos_diff//2
         # if we start on an even position, will pass an additional magnet (magnets on starting position aren't counted)
         if self.current_port % 2 == 0 and position % 2 == 1:
@@ -380,6 +386,8 @@ class SelectorValve(modules.Module):
             iterations += 1
 
     def check_backlash(self):
+        """Checks whether backlash is present in the valve
+        """
         i = 0
         start_pos = self.stepper.get_current_position()
         # we start at zero.
@@ -415,7 +423,7 @@ class SelectorValve(modules.Module):
         Reads the hall effect sensor
         """
         reading = self.he_sensor.analog_read()
-        self.write_log( f'{self.name} he sensor reading is {reading}', level=logging.INFO)
+        self.write_log(f'{self.name} he sensor reading is {reading}', level=logging.INFO)
 
     @staticmethod
     def reverse_steps(steps, fwd):

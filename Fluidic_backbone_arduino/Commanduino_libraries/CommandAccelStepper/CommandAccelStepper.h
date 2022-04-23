@@ -99,6 +99,8 @@ private:
     int numPositions;
     bool subsMoves;
 
+    float currentAcceleration = 0;
+
     long distanceLeft;
 
     void checkHeSensor();
