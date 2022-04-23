@@ -233,6 +233,7 @@ class SelectorValve(modules.Module):
             self.update_stored_readings()
             self.find_opt(self.magnet_readings[1] + 40)
         self.stepper.set_running_speed(prev_speed)
+        self.write_log(f"{self.name} finished homing")
         self.ready = True
 
     def find_opt(self, target):

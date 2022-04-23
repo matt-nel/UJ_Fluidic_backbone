@@ -567,7 +567,7 @@ class FluidicBackboneUI:
             reactor_name (str): the name of the reactor
             reactor_temp (float): the current temperature of the reactor in °C, updated every 5 s.
         """
-        self.reactor_labels[reactor_name].configure(text=f"{reactor_temp} °")
+        self.reactor_labels[reactor_name].configure(text=f"{reactor_temp} °C")
 
     def wait_user(self):
         def done():

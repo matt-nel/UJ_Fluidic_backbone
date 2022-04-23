@@ -310,6 +310,8 @@ class SetupGUI:
             self.graph = nx.MultiGraph()
             self.graph_tmp = nx.MultiGraph()
             self.cmd_devices = CmdConfig()
+            self.used_motor_connectors = {}
+            self.used_endstop_connectors = {}
             self.num_valves = 0
             self.num_syringes = 0
             self.config_cmd_flag = False
@@ -645,7 +647,11 @@ class SetupGUI:
             this_node = self.graph_tmp.nodes[found_node]
             endstop_connector.set(self.get_key(this_node["endstop"], self.es_options))
             self.update_node_entries(node_info, valve_info, this_node)
-            motor_connector.set(this_node["devices"]["stepper"]["name"][-1])
+            mtr_cxn = this_node["devices"]["stepper"]["name"][-1]
+            if mtr_cxn in ["0", "1"]:
+                mtr_cxn = this_node["devices"]["stepper"]["name"][-2:]
+            motor_connector.set(mtr_cxn)
+            self.used_motor_connectors[mtr_cxn] = this_node["name"]
 
     def valve_setup(self, valve_info, valve_button):
         """Starts a window for the user to configure the valve. Sets up the valve using the information provided by the user 
@@ -668,6 +674,9 @@ class SetupGUI:
                     if motor_cxn in self.used_motor_connectors.keys() and not self.config_cxn_flag:
                         self.write_message(
                             f"That motor connector is already used by {self.used_motor_connectors[motor_cxn]}")
+                    elif pin in self.used_he_pins and not self.config_cxn_flag:
+                        self.write_message(
+                            f"{pin} is already in use. Please select another pin")
                     else:
                         if not self.config_cxn_flag or not devices:
                             self.num_he_sens += 1
@@ -736,9 +745,15 @@ class SetupGUI:
         if self.config_cxn_flag and devices is not None:
             # set the hall pin
             found_node = self.graph_tmp.nodes[valve_info["valve_name"]]
-            hall_connector.set(self.get_key(found_node["devices"]["he_sens"]["cmd_id"], pins))
+            he_cxn = self.get_key(found_node["devices"]["he_sens"]["cmd_id"], pins)
+            hall_connector.set(he_cxn)
+            self.used_he_pins.append(he_cxn)
             # set the motor using the stepper letter (X, Y, Z...)
-            motor_connector.set(found_node["devices"]["stepper"]["name"][-1])
+            mtr_cxn = found_node["devices"]["stepper"]["name"][-1]
+            if mtr_cxn in ["0", "1"]:
+                mtr_cxn = found_node["devices"]["stepper"]["name"][-2:]
+            motor_connector.set(mtr_cxn)
+            self.used_motor_connectors[mtr_cxn] = valve_info["valve_name"]
             # set the gear
             geared_motor.set(found_node["mod_config"]["gear"])
 
@@ -804,7 +819,11 @@ class SetupGUI:
         if found_node:
             this_node = self.graph_tmp.nodes[found_node]
             # get the stepper letter (X, Y, Z...)
-            motor_connector.set(self.graph_tmp.nodes[found_node]["devices"]["stepper"]["name"][-2:])
+            mtr_cxn = self.graph_tmp.nodes[found_node]["devices"]["stepper"]["name"][-1]
+            if mtr_cxn in ["0", "1"]:
+                mtr_cxn = this_node["devices"]["stepper"]["name"][-2:]
+            motor_connector.set(mtr_cxn)
+            self.used_motor_connectors[mtr_cxn] = this_node["name"]
             self.update_node_entries(node_info, valve_info, this_node)
 
     def camera_setup(self, camera_button):
@@ -1287,6 +1306,8 @@ class SetupGUI:
             self.write_message("The connections configuration has already been loaded")
         else:
             self.num_he_sens, self.num_syringes, self.num_valves = 0, 0, 0
+            self.used_motor_connectors = {}
+            self.used_endstop_connectors = {}
             self.config_cxn_flag = True
             try:
                 with open(self.config_filenames[1]) as file:
