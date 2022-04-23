@@ -722,7 +722,7 @@ class FluidicBackbone(Thread):
         """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if reagent_name == self.flasks[flask].contents[0].lower():
+            if reagent_name in self.flasks[flask].contents[0].lower():
                 return self.flasks[flask].name
 
     def command_reactor(self, name, command, parameters, command_dict):
