@@ -96,7 +96,7 @@ class SetupGUI:
                       "heading": ("Calibri", 16), "text": ("Calibri", 14)}
         self.colours = {"accept-button": "#4de60b", "cancel-button": "#e6250b",
                         "heading": "#e65525", "other-button": "#45296e", "other-button-text": "#FFFFFF",
-                        "form-bg": "#b5d5ff"}
+                        "form-bg": "#b5d5ff", "form-bg2": "#377bd4"}
         image_dir = os.path.join(self.script_dir, "valve.png")
         self.valve_image = ImageTk.PhotoImage(Image.open(image_dir))
         self.text_temp = ""
@@ -190,12 +190,11 @@ class SetupGUI:
         user can configure the serial port, robot id, robot key, reaction name, and module information.
         """
         def display_ports(ports, refresh=False):
+            i = 0
             if ports:
-                i = 0
                 label = tk.Label(com_frame, text="Available ports:", font=self.fonts["heading"],
                                  bg=self.colours["form-bg"], fg=self.colours["heading"])
                 label.grid(row=2, columnspan=2)
-
                 for name in ports:
                     c_port_button = tk.Button(com_frame, text="Arduino on " + name, font=button_font,
                                               bg=self.colours["other-button"],
@@ -207,6 +206,10 @@ class SetupGUI:
                 ports = populate_ports()
                 if ports and refresh:
                     display_ports(ports)
+                else:
+                    no_ports = tk.Label(com_frame, text="No ports available, click refresh or use the text box",
+                                        font=self.fonts["labels"], bg="gray", fg=self.colours["other-button-text"])
+                    no_ports.grid(row=3, column=i)
 
         def add_com_port(port_name=""):
             port = ""
@@ -237,28 +240,31 @@ class SetupGUI:
             self.write_message(f"Reaction name {self.rxn_name} added")
 
         button_font = self.fonts["buttons"]
-        com_frame = tk.Frame(self.setup_frame, bg=self.colours["form-bg"], pady=4)
+        com_frame = tk.Frame(self.setup_frame, bg=self.colours["form-bg2"], pady=4)
         com_frame.grid(row=2)
 
-        com_port_label = tk.Label(self.setup_frame, text="Choose an arduino to connect to, or write the name of the "
-                                                         "com port:",
+        com_port_label = tk.Label(self.setup_frame, text="Choose an arduino to connect to by clicking the button,\n"
+                                                         "or write the name of the "
+                                                         "com port in the text box and click accept:",
                                   font=self.fonts["labels"], fg=self.colours["heading"], bg=self.colours["form-bg"])
         com_port_label.grid(row=1, column=0)
         avail_ports = populate_ports()
         refresh_button = tk.Button(com_frame, text="Refresh", font=button_font, bg="LemonChiffon2",
                                    fg="black", command=lambda: display_ports(avail_ports, refresh=True))
-        refresh_button.grid(row=4, column=2)
+        refresh_button.grid(row=3, column=2)
         display_ports(avail_ports)
 
         val_text = self.primary.register(self.validate_text)
-
+        cp_entry_label = tk.Label(com_frame, text="Please enter the COM port", bg=self.colours["form-bg"],
+                                  font=self.fonts["labels"], fg=self.colours["heading"])
         com_port_entry = tk.Entry(com_frame, validate="key", validatecommand=(val_text, "%P"),
                                   bg="#FFFFFF", fg="black", width=25)
         com_port_button = tk.Button(com_frame, text="Accept port", font=self.fonts["buttons"], bg="lawn green",
                                     fg="black", command=add_com_port)
 
-        com_port_entry.grid(row=4, column=0, padx=4)
-        com_port_button.grid(row=4, column=1, padx=4)
+        cp_entry_label.grid(row=4, column=0, padx=4)
+        com_port_entry.grid(row=4, column=1, padx=4)
+        com_port_button.grid(row=4, column=2, padx=4)
 
         robot_id_label = tk.Label(com_frame, text="Please enter the robot ID", bg=self.colours["form-bg"],
                                   font=self.fonts["labels"], fg=self.colours["heading"])
@@ -291,7 +297,7 @@ class SetupGUI:
         reaction_name_entry = tk.Entry(mod_frame, width=20)
         reaction_name_butt = tk.Button(mod_frame, text="Accept name", font=self.fonts["buttons"],
                                        bg=self.colours["accept-button"], command=add_rxn_name)
-        gen_button = tk.Button(mod_frame, text="Create config", font=button_font, bg="lawn green",
+        gen_button = tk.Button(mod_frame, text="Save configuration", font=button_font, bg="lawn green",
                                fg="black", command=self.generate_config)
 
         mod_frame.grid(row=3)

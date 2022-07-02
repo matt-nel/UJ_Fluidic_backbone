@@ -85,8 +85,9 @@ class FluidicBackboneUI:
 
         self.reactor_labels = {}
         self.reactor_frame = tk.Frame(self.primary, bg=self.colours["form-background"])
+        num_reactors = 0
         for reactor in self.manager.reactors.keys():
-            self.populate_reactors(reactor)
+            self.populate_reactors(reactor, num_reactors)
 
         self.valve_pump_frame.grid(row=0, column=0, padx=5, pady=10)
         self.reactor_frame.grid(row=1, column=0, padx=5, pady=5)
@@ -196,13 +197,13 @@ class FluidicBackboneUI:
         # Append list of ports corresponding to valve_no to valves_buttons
         self.valves_buttons[valve_name] = ports
 
-    def populate_reactors(self, reactor_name):
+    def populate_reactors(self, reactor_name, reactor_num):
         """ Populates the buttons for the reactors.
 
         Args:
             reactor_name (str): The name of the reactor 
         """
-        reactor_no = int(reactor_name[-1])
+        reactor_no = reactor_num
         reactor_print_name = "Reactor " + str(reactor_no)
         row = reactor_no
         reactor_label = tk.Label(self.reactor_frame, text=reactor_print_name, font=self.fonts["labels"],
