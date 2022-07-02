@@ -183,7 +183,7 @@ class StepperMotor:
         moving = True
         prev_time = time.time()
         while moving:
-            if time.time() > prev_time + 0.2:
+            if time.time() > prev_time:
                 if not self.is_moving:
                     moving = False
                     self.magnets_passed = self.cmd_stepper.magnets_passed

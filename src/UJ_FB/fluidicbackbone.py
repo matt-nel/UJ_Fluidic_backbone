@@ -722,8 +722,13 @@ class FluidicBackbone(Thread):
         """
         reagent_name = reagent_name.lower()
         for flask in self.flasks:
-            if reagent_name in self.flasks[flask].contents[0].lower():
-                return self.flasks[flask].name
+            try:
+                contents_name = self.flasks[flask].contents[0].lower()
+            except AttributeError:
+                continue
+            else:
+                if reagent_name in contents_name:
+                    return self.flasks[flask].name
 
     def command_reactor(self, name, command, parameters, command_dict):
         """
@@ -940,7 +945,7 @@ class FluidicBackbone(Thread):
             for i in range(0, nr_full_moves):
                 pipelined_steps += full_move
         if remaining_volume > 0.0:
-            partial_move = self.generate_moves(source, target, valves, volume, dead_volume, flow_rate, transfer,
+            partial_move = self.generate_moves(source, target, valves, remaining_volume, dead_volume, flow_rate, transfer,
                                                init_move)
             pipelined_steps += partial_move
         if not pipeline:
