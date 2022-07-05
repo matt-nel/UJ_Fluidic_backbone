@@ -101,6 +101,8 @@ class FluidicBackbone(Thread):
 
         self.key = self.graph.nodes["meta"]["key"]
         self.id = self.graph.nodes["meta"]["robot_id"]
+        if not self.id:
+            self.id = "UJ_FB1"
         self.name = "Manager" + self.id
         self.logger = logging.getLogger(self.id)
         self.simulation = simulation
@@ -273,7 +275,7 @@ class FluidicBackbone(Thread):
                 time.sleep(0.1)
             syringe = self.valves[valve].syringe
             # check if syringe needs to be homed
-            if not syringe.stepper.check_endstop():
+            if not syringe.stepper.check_endstop() and not self.simulation:
                 # search for waste containers looking for shortest path
                 waste_containers = [item for item in list(self.graph.nodes) if "waste" in item.lower()]
                 if not waste_containers:
@@ -708,7 +710,7 @@ class FluidicBackbone(Thread):
             found_target = self.modules[key].get(target)
             if found_target is None:
                 found_target = self.modules[key].get(target.lower())
-            if found_target is not None:
+            else:
                 return found_target
 
     def find_reagent(self, reagent_name):

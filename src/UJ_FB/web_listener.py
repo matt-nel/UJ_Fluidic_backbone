@@ -238,11 +238,11 @@ class WebListener:
                 return False
         for module in req_hardware:
             module_id = module.get("id")
-            reagent = self.manager.find_target(module_id)
-            modules[module_id] = reagent.name
-            if modules[module_id] is None:
+            mod = self.manager.find_target(module_id)
+            if mod is None:
                 self.manager.write_log(f"Could not find {module_id} on {self.manager.id}")
                 return False
+            modules[module_id] = mod.name
         parse_success = True
         for step in procedure:
             if step.tag == "Add":
@@ -286,6 +286,7 @@ class WebListener:
         vessel = add_info.get("vessel")
         target = self.manager.find_target(vessel.lower())
         if target is None:
+            self.manager.write_log(f"Could not find {vessel} on {self.manager.id}")
             return False
         target = target.name
         source = reagents[add_info.get("reagent")]
@@ -328,10 +329,16 @@ class WebListener:
         """
         source = transfer_info.get("from_vessel")
         target = transfer_info.get("to_vessel")
-        source = self.manager.find_target(source).name
-        target = self.manager.find_target(target).name
-        if target is None or source is None:
+        source = self.manager.find_target(source)
+        target = self.manager.find_target(target)
+        if source is None:
+            self.manager.write_log(f"Could not find {source} on {self.manager.id}")
             return False
+        if target is None:
+            self.manager.write_log(f"Could not find {target} on {self.manager.id}")
+            return False
+        source = source.name
+        target = target.name
         reagent_info = transfer_info.get("volume")
         if reagent_info is None:
             reagent_info = transfer_info.get("mass")
@@ -369,6 +376,7 @@ class WebListener:
         reactor_name = stir_info.get("vessel")
         reactor = self.manager.find_target(reactor_name.lower())
         if reactor is None:
+            self.manager.write_log(f"Could not find {reactor_name} on {self.manager.id}")
             return False
         reactor_name = reactor.name
         # StopStir
@@ -405,6 +413,7 @@ class WebListener:
         reactor_name = heatchill_info.get("vessel")
         reactor = self.manager.find_target(reactor_name.lower())
         if reactor is None:
+            self.manager.write_log(f"Could not find {reactor_name} on {self.manager.id}")
             return False
         reactor_name = reactor.name
         temp = heatchill_info.get("temp")
