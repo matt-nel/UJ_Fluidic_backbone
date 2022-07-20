@@ -709,7 +709,7 @@ class FluidicBackbone(Thread):
 
         for key in self.modules.keys():
             if self.modules[key].mod_type is in target:
-                if self.modules[key].name == target:
+                if self.modules.get(target) is not None:
                    return self.modules.get(target)
                 else:
                    return self.modules.get(target.lower())
