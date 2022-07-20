@@ -706,12 +706,14 @@ class FluidicBackbone(Thread):
         Returns:
             module object (Module): The target module if found, otherwise None
         """
+
         for key in self.modules.keys():
-            found_target = self.modules[key].get(target)
-            if found_target is None:
-                found_target = self.modules[key].get(target.lower())
-            else:
-                return found_target
+            if self.modules[key].mod_type is in target:
+                if self.modules[key].name == target:
+                   return self.modules.get(target)
+                else:
+                   return self.modules.get(target.lower())
+        return None
 
     def find_reagent(self, reagent_name):
         """
