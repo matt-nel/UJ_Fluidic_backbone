@@ -7,7 +7,6 @@ commanduino. For example, a selector valve is comprised of a stepper motor devic
 Task objects are used to represent currently running tasks and to resume operations from the last known state.
 """
 
-
 import sys
 import os
 import logging
@@ -81,6 +80,7 @@ class FluidicBackbone(Thread):
     Manager runs in a separate thread that continually monitors for incoming reaction data, commands from the GUI, and 
     retrieves commands from the queue to execute using the attached modules.
     """
+
     def __init__(self, gui=None, web_enabled=False, simulation=False, stdout_log=False):
         """
         Args:
@@ -153,7 +153,7 @@ class FluidicBackbone(Thread):
         self.gui_main = None
         self.setup_modules()
         self.write_running_config("configs/running_config.json")
-        
+
         if stdout_log:
             handler = logging.StreamHandler(sys.stdout)
             handler.setLevel(logging.INFO)
@@ -277,7 +277,10 @@ class FluidicBackbone(Thread):
             # check if syringe needs to be homed
             if not syringe.stepper.check_endstop() and not self.simulation:
                 # search for waste containers looking for shortest path
-                waste_containers = [item for item in list(self.graph.nodes) if "waste" in item.lower()]
+                waste_containers = []
+                for n in list(self.graph.nodes):
+                    if "waste" in self.graph.nodes[n]["mod_type"]:
+                        waste_containers.append(n)
                 if not waste_containers:
                     message = f"No waste containers are attached. Please manually empty {syringe.name} using the GUI"
                     self.write_log(message, level=logging.WARNING)
@@ -300,16 +303,16 @@ class FluidicBackbone(Thread):
         for v in remaining_valves:
             # soft home the syringe
             path = remaining_valves[v][1:-1]
-            for n in range(0, len(path)-1):
+            for n in range(0, len(path) - 1):
                 self.add_to_queue(self.generate_cmd_dict("selector_valve", path[n], "target",
-                                                         {"target": path[n+1], "wait": True}))
-                self.add_to_queue(self.generate_cmd_dict("selector_valve", path[n+1], "target",
+                                                         {"target": path[n + 1], "wait": True}))
+                self.add_to_queue(self.generate_cmd_dict("selector_valve", path[n + 1], "target",
                                                          {"target": path[n], "wait": True}))
                 syringe = self.valves[path[n]].syringe.name
                 self.start_queue()
                 while not self.q.empty() or len(self.tasks) > 0:
                     time.sleep(0.1)
-                self.soft_home_syringe(source=syringe, next_valve=path[n+1])
+                self.soft_home_syringe(source=syringe, next_valve=path[n + 1])
             # align last syringe to the waste container
             syringe = self.valves[remaining_valves[v][-2]].syringe
             self.move_fluid(source=syringe.name, target=remaining_valves[v][-1], volume=0.1,
@@ -706,13 +709,18 @@ class FluidicBackbone(Thread):
         Returns:
             module object (Module): The target module if found, otherwise None
         """
-
-        for key in self.modules.keys():
-            if self.modules[key].mod_type is in target:
-                if self.modules.get(target) is not None:
-                   return self.modules.get(target)
-                else:
-                   return self.modules.get(target.lower())
+        feasible = None
+        for mod_type in self.modules.keys():
+            for mod in self.modules[mod_type].keys():
+                if self.modules[mod_type][mod].mod_type in target:
+                    if self.modules[mod_type].get(target) is not None:
+                        return self.modules[mod_type].get(target)
+                    elif self.modules[mod_type].get(target.lower()):
+                        return self.modules[mod_type].get(target.lower())
+                    else:
+                        feasible = self.modules[mod_type][mod]
+                if feasible is not None:
+                    return feasible
         return None
 
     def find_reagent(self, reagent_name):
@@ -786,7 +794,7 @@ class FluidicBackbone(Thread):
         if command == "send_img":
             img_num = parameters["img_num"]
             img_processing = parameters["img_processing"]
-            cmd_thread = Thread(target=self.send_image, name=name+"send_image",
+            cmd_thread = Thread(target=self.send_image, name=name + "send_image",
                                 args=(img_num, img_processing, new_task))
             self.write_log(f"Taking image {img_num}", level=logging.INFO)
         else:
@@ -796,7 +804,7 @@ class FluidicBackbone(Thread):
         cmd_thread.start()
         if parameters["wait"]:
             self.wait_until_ready()
-        return True        
+        return True
 
     def command_wait(self, name, command, parameters, command_dict):
         """
@@ -813,11 +821,11 @@ class FluidicBackbone(Thread):
         wait_reason = parameters["wait_reason"]
         if command == "wait_user":
             self.user_wait_flag = False
-            cmd_thread = Thread(target=self.wait_user, name=name+"wait_user", args=())
+            cmd_thread = Thread(target=self.wait_user, name=name + "wait_user", args=())
             self.write_log(f"Waiting for user resume, reason: {wait_reason}", level=logging.INFO)
         elif command == "wait":
             wait_time = parameters["time"]
-            cmd_thread = Thread(target=self.wait_until, name=name+"wait_until", args=(wait_time,))
+            cmd_thread = Thread(target=self.wait_until, name=name + "wait_until", args=(wait_time,))
             self.write_log(f"Waiting for {wait_time} s, reason: {wait_reason}", level=logging.INFO)
         else:
             return False
@@ -866,7 +874,7 @@ class FluidicBackbone(Thread):
         """
         with self.interrupt_lock:
             self.waiting = True
-    
+
     def wait_user(self):
         """
         Waits for user input, either via the console or GUI
@@ -886,7 +894,7 @@ class FluidicBackbone(Thread):
         start_time = time.time()
         while time.time() - start_time < wait_time:
             time.sleep(1)
-        
+
     def move_fluid(self, source, target, volume, flow_rate, init_move=False, adjust_dead_vol=True, transfer=False,
                    pipeline=True):
         """
@@ -933,8 +941,8 @@ class FluidicBackbone(Thread):
             transfer_dv = self.calc_tubing_volume(source.name, valves[0])
         if adjust_dead_vol and not init_move:
             # With each transfer we only need to push last DV + deficit
-            for i in range(len(valves)-1):
-                valves_dv = self.calc_tubing_volume(valves[i], valves[i+1])
+            for i in range(len(valves) - 1):
+                valves_dv = self.calc_tubing_volume(valves[i], valves[i + 1])
                 max_valves_dv = max(valves_dv, max_valves_dv)
             req_last_dv = self.calc_tubing_volume(valves[-1], target.name)
             dead_volume = max(transfer_dv, req_last_dv, max_valves_dv)
@@ -949,7 +957,8 @@ class FluidicBackbone(Thread):
             for i in range(0, nr_full_moves):
                 pipelined_steps += full_move
         if remaining_volume > 0.0:
-            partial_move = self.generate_moves(source, target, valves, remaining_volume, dead_volume, flow_rate, transfer,
+            partial_move = self.generate_moves(source, target, valves, remaining_volume, dead_volume, flow_rate,
+                                               transfer,
                                                init_move)
             pipelined_steps += partial_move
         if not pipeline:
@@ -999,7 +1008,7 @@ class FluidicBackbone(Thread):
                                                 {"target": "empty", "wait": True})
                 steps += self.generate_cmd_dict("syringe_pump", valve.syringe.name, "move",
                                                 {"volume": dead_volume, "flow_rate": self.default_flush_fr,
-                                                    "target": None, "direction": "A", "air": True, "wait": True})
+                                                 "target": None, "direction": "A", "air": True, "wait": True})
                 # Command to index valve to required position for outlet
                 steps += self.generate_cmd_dict("selector_valve", valve.name, "target",
                                                 {"target": source.name, "wait": True})
@@ -1067,7 +1076,7 @@ class FluidicBackbone(Thread):
         # transfer liquid along backbone
         if len(valves) > 1:
             for i in range(len(valves) - 1):
-                moves += self.generate_sp_transfer(self.valves[valves[i]], self.valves[valves[i+1]], volume,
+                moves += self.generate_sp_transfer(self.valves[valves[i]], self.valves[valves[i + 1]], volume,
                                                    dead_volume, flow_rate)
         # Move liquid from last syringe pump into target
         valve = self.valves[valves[-1]]
@@ -1116,7 +1125,7 @@ class FluidicBackbone(Thread):
         # Command to dispense/withdraw syringe
         commands += self.generate_cmd_dict("syringe_pump", name, "move",
                                            {"volume": volume, "flow_rate": flow_rate, "target": target_name,
-                                               "direction": direction, "wait": True})
+                                            "direction": direction, "wait": True})
         if dead_volume > 0 and direction == "D":
             commands += self.generate_cmd_dict("syringe_pump", name, "move",
                                                {"volume": dead_volume, "flow_rate": flow_rate, "target": None,
@@ -1218,7 +1227,7 @@ class FluidicBackbone(Thread):
         command_dict = FluidicBackbone.generate_cmd_dict("reactor", reactor_name, command, params)
         self.add_to_queue(command_dict)
 
-    def start_heating(self, reactor_name, command, temp, heat_secs, wait,  target=False):
+    def start_heating(self, reactor_name, command, temp, heat_secs, wait, target=False):
         """Adds a command to start heating the reactor to the manager queue
 
         Args:
@@ -1241,14 +1250,14 @@ class FluidicBackbone(Thread):
         elif command == "stop_heat":
             command_dict = FluidicBackbone.generate_cmd_dict("reactor", reactor_name, command, {})
             self.add_to_queue(command_dict)
-    
+
     def send_image(self, img_num, img_processing, task):
         cam = self.cameras["camera1"]
         image_metadata = {"robot_id": self.id, "robot_key": self.key, "reaction_id": self.reaction_id,
                           "img_number": img_num,
                           "reaction_name": self.reaction_name, "img_processing": img_processing, "img_roi": cam.roi}
         cam.send_image(self.listener, image_metadata, task)
-    
+
     def wait(self, wait_time, actions):
         """Adds a wait command to the queue.
 
@@ -1268,19 +1277,21 @@ class FluidicBackbone(Thread):
                 manager_wait = False
             command_dict = FluidicBackbone.generate_cmd_dict(mod_type="wait", mod_name="wait",
                                                              command="wait_user",
-                                                             parameters={"wait": manager_wait, "wait_reason": wait_reason})
+                                                             parameters={"wait": manager_wait,
+                                                                         "wait_reason": wait_reason})
             self.add_to_queue(command_dict)
         else:
             command_dict = FluidicBackbone.generate_cmd_dict(mod_type="wait", mod_name="wait",
                                                              command="wait",
                                                              parameters={"time": wait_time, "wait": True,
-                                                                 "wait_reason": wait_reason})
+                                                                         "wait_reason": wait_reason})
             self.add_to_queue(command_dict)
         if pic_info is not None:
             command_dict = FluidicBackbone.generate_cmd_dict(mod_type="camera", mod_name="camera1",
                                                              command="send_img",
                                                              parameters={"img_num": pic_info,
-                                                                 "img_processing": img_processing, "wait": True})
+                                                                         "img_processing": img_processing,
+                                                                         "wait": True})
             self.add_to_queue(command_dict)
 
     @classmethod
@@ -1328,7 +1339,7 @@ class Task:
         self.complete = False
         self.paused = False
         self.error = False
-        
+
     def add_worker(self, thread):
         self.worker = thread
 

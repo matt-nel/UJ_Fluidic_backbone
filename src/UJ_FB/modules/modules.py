@@ -35,7 +35,7 @@ class Module:
         self.stop_cmd = False
         self.ready = True
         mod_type = module_info["mod_type"]
-        if mod_type != "flask" and mod_type != "camera":
+        if mod_type not in ("flask", "waste", "camera"):
             for item in assoc_devices.keys():
                 if "stepper" in item:
                     stepper = getattr(cmduino, assoc_devices[item]["name"])
@@ -88,8 +88,8 @@ class FBFlask(Module):
             manager (UJ_FB.Manager): Manager object for this robot
         """
         super(FBFlask, self).__init__(name, module_info, cmd_mng, manager)
-        self.mod_type = "flask"
         module_config = module_info["mod_config"]
+        self.mod_type = module_info["mod_type"]
         self.contents = [module_config.get("contents"), float(module_config.get("cur_volume"))*1000]
         self.cur_vol = float(module_config["cur_volume"])*1000
         self.max_volume = float(module_config["max_volume"])*1000

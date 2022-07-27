@@ -985,6 +985,9 @@ class SetupGUI:
             node["mod_config"] = {}
             node["mod_type"] = "flask"
             tubing_length = self.read_fields(node_info, node)
+            if "waste" in node["mod_config"]["contents"].lower():
+                node["mod_type"] = "waste"
+                node["mod_config"]["contents"] = "waste"
             self.add_edge(True, node["name"], valve_info["valve_name"], found_node,
                           port=[valve_info["valve_id"], valve_info["port_no"]],
                           tubing_length=tubing_length)
